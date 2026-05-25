@@ -711,7 +711,7 @@ let allEmps = [], allAccs = [], currentEmpId = null;
 
 function sess(){try{const ss=JSON.parse(sessionStorage.getItem('miim_user')||'{}');if(ss&&ss.username)return ss;return JSON.parse(localStorage.getItem('miim_session')||'{}');}catch{return{};}}
 
-const BASE = 'http://localhost:5000';
+const BASE = '';
 
 // ── Always trust the stored role field — NEVER demote admin to account_manager ──
 function getStoredRole(){

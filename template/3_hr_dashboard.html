@@ -6831,7 +6831,7 @@ function loadEmployees(callback) {
     })
     .catch(function(err){
       // Server not running — show clear instruction toast
-      showToast('⚠️ Server not connected. Run: python app.py  then open http://localhost:5000', 'error');
+      showToast('⚠️ Server not connected. Run: python app.py  then open ', 'error');
       employees   = [];
       pendingEmps = [];
       if (callback) callback();
@@ -9552,7 +9552,7 @@ function frSubmit() {
 }
 // ── apiFetch: central fetch wrapper that attaches RBAC headers ──────────────
 function apiFetch(url, options) {
-  var _base = (window.location.port !== '5000') ? 'http://localhost:5000' : '';
+  var _base = (window.location.port !== '5000') ? '' : '';
   if (url && url.indexOf('/api/') === 0) url = _base + url;
   options = options || {};
   options.headers = options.headers || {};
@@ -17299,7 +17299,7 @@ tr.promo-pending-row td:first-child {
    - Admin: WhatsApp style left=employees, right=conversation
 ═══════════════════════════════════════════════════════ */
 (function(){
-  var BASE = 'http://localhost:5000';
+  var BASE = '';
   var _selEmpId = null;     // admin: selected employee
   var _allMsgs  = [];       // all messages (admin sees all)
   var _myMsgs   = [];       // employee's own messages
