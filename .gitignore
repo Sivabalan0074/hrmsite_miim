@@ -1,0 +1,11 @@
+.env
+*.db
+*.dbsss
+*.backup
+backup.log
+__pycache__/
+*.pyc
+backups/
+miim_storage/
+photos/Thumbs.db
+pyrightconfig.json
