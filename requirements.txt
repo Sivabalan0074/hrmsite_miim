@@ -22,3 +22,4 @@ PyYAML==6.0.3
 xlsxwriter==3.2.9
 gunicorn==21.2.0
 PyMySQL==1.1.1
+PyMySQL==1.1.1
