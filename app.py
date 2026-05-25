@@ -1174,8 +1174,7 @@ def login():
     if not username or not password:
         return jsonify({"success": False, "message": "Username and password are required"}), 400
     try:
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         # Step 1: Try login by user_id only (all users)
         emp = conn.execute(
             "SELECT * FROM employees WHERE user_id=? AND status='active'",
@@ -1257,8 +1256,7 @@ def login():
             _resp.set_cookie('miim_token', token, httponly=True, samesite='Lax', max_age=86400 * 7, path='/')
             return _resp
         # ── Guest login check ──
-        conn2 = _sqlite3.connect(_DB_PATH)
-        conn2.row_factory = _sqlite3.Row
+        conn2 = _db()
         # Support both plain name and legacy MIIM@ prefixed guest_id
         username_alt = 'MIIM@' + username if not username.upper().startswith('MIIM@') else username[5:]
         guest = conn2.execute(
@@ -2586,8 +2584,7 @@ def checkin():
         data = request.json or {}
         emp_id = data.get('emp_id')
         import datetime as _dt
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         today = str(_dt.date.today())
         now_time = _dt.datetime.now().strftime('%H:%M')
         now_str = str(_dt.datetime.now())
@@ -2610,7 +2607,7 @@ def checkout():
         data = request.json or {}
         emp_id = data.get('emp_id')
         import datetime as _dt
-        conn = _sqlite3.connect(_DB_PATH)
+        conn = _db()
         today = str(_dt.date.today())
         conn.execute("UPDATE attendance SET checkout=?,updated_at=? WHERE emp_id=? AND date=?",
                      (_dt.datetime.now().strftime('%H:%M'), str(_dt.datetime.now()), emp_id, today))
@@ -2639,8 +2636,7 @@ def get_emp_attendance(emp_id):
     try:
         from_date = request.args.get('from', '')
         to_date = request.args.get('to', '')
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         rows = conn.execute("SELECT * FROM attendance WHERE emp_id=? AND date BETWEEN ? AND ? ORDER BY date", (emp_id, from_date, to_date)).fetchall()
         conn.close()
         return jsonify([dict(r) for r in rows])
@@ -2652,8 +2648,7 @@ def get_emp_attendance(emp_id):
 @require_auth
 def get_photo(emp_id):
     try:
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         row = conn.execute("SELECT photo_url FROM employees WHERE id=?", (emp_id,)).fetchone()
         conn.close()
         if row and row['photo_url']:
@@ -2669,8 +2664,7 @@ def me_role():
     try:
         from flask import request as req
         username = req.headers.get('X-User-Id', '') or req.args.get('username', '')
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         emp = conn.execute("SELECT dept, desig FROM employees WHERE username=? OR user_id=?", (username, username)).fetchone()
         conn.close()
         if emp:
@@ -2694,8 +2688,7 @@ def get_attendance_range():
     try:
         from_date = request.args.get('from', '')
         to_date = request.args.get('to', '')
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         rows = conn.execute("SELECT a.*, e.username as emp_name, e.empid FROM attendance a JOIN employees e ON e.id=a.emp_id WHERE a.date BETWEEN ? AND ? ORDER BY a.date", (from_date, to_date)).fetchall()
         conn.close()
         return jsonify([dict(r) for r in rows])
@@ -2709,7 +2702,7 @@ def save_attendance():
     try:
         data = request.json or {}
         records = data.get('records', [data])
-        conn = _sqlite3.connect(_DB_PATH)
+        conn = _db()
         for rec in records:
             emp_id = rec.get('emp_id')
             date = rec.get('date')
@@ -2732,7 +2725,7 @@ def save_attendance():
 def correction_request():
     try:
         data = request.json or {}
-        conn = _sqlite3.connect(_DB_PATH)
+        conn = _db()
         conn.execute("INSERT INTO attendance_corrections (emp_id,emp_name,dept,date,req_checkin,req_checkout,req_status,reason,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)",
                      (data.get('emp_id'), data.get('emp_name', ''), data.get('dept', ''), data.get('date'), data.get('req_checkin', '--'), data.get('req_checkout', '--'), data.get('req_status', 'present'), data.get('reason', ''), str(datetime.datetime.now())))
         conn.commit(); conn.close()
@@ -2748,8 +2741,7 @@ def get_corrections():
     try:
         status = request.args.get('status', 'pending')
         emp_id = request.args.get('emp_id')
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         if emp_id and status == 'all':
             rows = conn.execute("SELECT * FROM attendance_corrections WHERE emp_id=? ORDER BY created_at DESC", (emp_id,)).fetchall()
         elif status == 'all':
@@ -2768,7 +2760,7 @@ def review_correction(corr_id, action):
     try:
         data = request.json or {}
         status = 'approved' if action == 'approve' else 'rejected'
-        conn = _sqlite3.connect(_DB_PATH)
+        conn = _db()
         conn.execute("UPDATE attendance_corrections SET status=?,reviewed_by=?,reviewed_by_name=?,review_note=?,reviewed_at=? WHERE id=?",
                      (status, data.get('reviewed_by', ''), data.get('reviewed_by_name', ''), data.get('review_note', ''), str(datetime.datetime.now()), corr_id))
         conn.commit(); conn.close()
@@ -2782,8 +2774,7 @@ def review_correction(corr_id, action):
 @require_auth
 def approval_history():
     try:
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         if request.method == 'POST':
             data = request.json or {}
             conn.execute("INSERT INTO approval_history (emp_id,emp_name,dept,leave_type,leave_date,action,actioned_by,actioned_by_name,reason,actioned_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -2802,7 +2793,7 @@ def approval_history():
 def apply_leave_new():
     try:
         data = request.json or {}
-        conn = _sqlite3.connect(_DB_PATH)
+        conn = _db()
         conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at) VALUES (?,?,?,?,?,?,'pending',?)",
                      (data.get('emp_id'), data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), str(datetime.datetime.now())))
         conn.commit(); conn.close()
@@ -2817,8 +2808,7 @@ def apply_leave_new():
 def get_leave_balance_by_id(emp_id):
     try:
         year = request.args.get('year', str(datetime.date.today().year))
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
         if row: return jsonify(dict(row))
@@ -2833,8 +2823,7 @@ def get_leave_new():
     try:
         status = request.args.get('status')
         emp_id = request.args.get('emp_id')
-        conn = _sqlite3.connect(_DB_PATH)
-        conn.row_factory = _sqlite3.Row
+        conn = _db()
         if emp_id and status:
             rows = conn.execute("SELECT * FROM leave_requests WHERE emp_id=? AND status=? ORDER BY id DESC", (emp_id, status)).fetchall()
         elif status:
@@ -2854,7 +2843,7 @@ def get_leave_new():
 def action_leave(leave_id, action):
     try:
         status = 'approved' if action == 'approve' else 'rejected'
-        conn = _sqlite3.connect(_DB_PATH)
+        conn = _db()
         conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, str(datetime.datetime.now()), leave_id))
         conn.commit(); conn.close()
         return jsonify({"success": True})
@@ -3514,7 +3503,7 @@ def init_db():
         print(f"[DB] {len(default_holidays)} default holidays seeded.")
 
     conn.close()
-    print(f"[DB] Initialized: {_DB_PATH}")
+    print("[DB] Initialized successfully")
 
 
 # ── AUTO-INIT DB on every startup (module level) ──
@@ -3528,10 +3517,7 @@ except Exception as _e:
 
 
 def _exp_conn():
-    import sqlite3 as _s
-    c = _s.connect(_DB_PATH)
-    c.row_factory = _s.Row
-    return c
+    return _db()
 
 
 
@@ -3886,19 +3872,21 @@ def guest_send_credentials():
 import os as _ch_os
 import datetime as _ch_dt
 
+
+
 def _chat_db():
     c = _db()
     try:
         c.execute('''CREATE TABLE IF NOT EXISTS chat_messages (
-            id        INTEGER PRIMARY KEY AUTO_INCREMENT,
-            emp_id    TEXT NOT NULL,
-            emp_name  TEXT NOT NULL,
-            dept      TEXT NOT NULL DEFAULT '',
-            role      TEXT NOT NULL DEFAULT 'member',
-            sender    TEXT NOT NULL,
-            message   TEXT NOT NULL,
-            ts        TEXT NOT NULL
-        )''')
+        id        INTEGER PRIMARY KEY AUTO_INCREMENT,
+        emp_id    TEXT NOT NULL,
+        emp_name  TEXT NOT NULL,
+        dept      TEXT NOT NULL DEFAULT '',
+        role      TEXT NOT NULL DEFAULT 'member',
+        sender    TEXT NOT NULL,
+        message   TEXT NOT NULL,
+        ts        TEXT NOT NULL
+    )''')
         c.commit()
     except Exception:
         pass
