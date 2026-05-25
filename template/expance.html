@@ -1,0 +1,1940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="data:image/jpeg;base64,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" type="image/jpeg">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIIM – Expenses</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--orange:#FF6B00;--dark:#0a0a0a;--card:#111;--border:rgba(255,107,0,0.18);--text:#e8ecf4;--muted:#8892a4}
+html,body{width:100%;height:100%;min-height:100vh;background:var(--dark);color:var(--text);font-family:'Rajdhani',sans-serif;overflow-x:hidden}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;width:100%;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 36px;height:62px;background:rgba(8,8,8,0.98);border-bottom:2px solid rgba(255,107,0,0.3);backdrop-filter:blur(12px)}
+.nav-logo{display:flex;align-items:center;gap:10px}
+.nav-logo img{height:42px;width:auto}
+.nav-back{display:flex;align-items:center;gap:8px;background:none;border:1.5px solid var(--border);border-radius:6px;padding:7px 16px;color:var(--orange);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:all .2s}
+.nav-back:hover{background:rgba(255,107,0,0.1)}
+.nav-title{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:3px;color:var(--orange);text-transform:uppercase}
+.nav-user{display:flex;align-items:center;gap:10px}
+.nav-user-avatar{width:34px;height:34px;border-radius:50%;background:rgba(255,107,0,0.15);border:2px solid rgba(255,107,0,0.4);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--orange);font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;flex-shrink:0}
+.nav-user-info{display:flex;flex-direction:column;align-items:flex-end}
+.nav-user-name{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--text);letter-spacing:1px}
+.nav-user-role{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--orange);font-weight:600}
+.nav-right{display:flex;align-items:center;gap:14px}
+
+/* MAIN - full page */
+.main{padding:82px 36px 48px;width:100%;min-height:calc(100vh - 62px)}
+
+/* TAB BAR */
+.tab-bar{display:flex;gap:4px;margin-bottom:22px;border-bottom:1.5px solid var(--border);padding-bottom:0}
+.tab-btn{background:none;border:none;padding:10px 22px;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:600;letter-spacing:1.5px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;text-transform:uppercase;transition:all .2s}
+.tab-btn.active{color:var(--orange);border-bottom-color:var(--orange)}
+.tab-btn:hover{color:var(--text)}
+
+/* STATS CARDS */
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.stat-card .label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.stat-card .value{font-family:'Barlow Condensed',sans-serif;font-size:30px;font-weight:700;color:var(--orange)}
+.stat-card .value.green{color:#22c55e}
+.stat-card .value.red{color:#ef4444}
+.stat-card .value.yellow{color:#eab308}
+
+/* TOOLBAR */
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.toolbar select,.toolbar input{background:#181c26;border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:14px;outline:none}
+.toolbar select:focus,.toolbar input:focus{border-color:var(--orange)}
+/* Date / month input fix for dark theme */
+input[type=date],input[type=month]{color:var(--text);background:#181c26;color-scheme:dark}
+input[type=date]::-webkit-calendar-picker-indicator,
+input[type=month]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(1.5);cursor:pointer;opacity:0.8}
+input[type=date]::-webkit-datetime-edit,
+input[type=month]::-webkit-datetime-edit{color:var(--text)}
+input[type=date]::-webkit-datetime-edit-fields-wrapper,
+input[type=month]::-webkit-datetime-edit-fields-wrapper{color:var(--text)}
+input[type=date]::-webkit-datetime-edit-text,
+input[type=month]::-webkit-datetime-edit-text{color:var(--muted)}
+input[type=date]::-webkit-datetime-edit-year-field,
+input[type=date]::-webkit-datetime-edit-month-field,
+input[type=date]::-webkit-datetime-edit-day-field,
+input[type=month]::-webkit-datetime-edit-year-field,
+input[type=month]::-webkit-datetime-edit-month-field{color:var(--text)}
+.btn-orange{background:var(--orange);border:none;border-radius:7px;padding:9px 20px;color:#000;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:opacity .2s}
+.btn-orange:hover{opacity:.85}
+.btn-outline{background:none;border:1.5px solid var(--border);border-radius:7px;padding:8px 16px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s}
+.btn-outline:hover{border-color:var(--orange);color:var(--orange)}
+
+/* TABLE */
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow-x:auto;width:100%}
+table{width:100%;border-collapse:collapse;table-layout:auto}
+thead th{background:#0d0f14;padding:13px 18px;text-align:left;font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--orange);font-weight:600;white-space:nowrap}
+tbody tr{border-bottom:1px solid rgba(255,107,0,0.06);transition:background .15s}
+tbody tr:hover{background:rgba(255,107,0,0.04)}
+tbody td{padding:13px 18px;font-size:14px;color:var(--text)}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.badge.pending{background:rgba(234,179,8,0.15);color:#eab308}
+.badge.approved{background:rgba(34,197,94,0.15);color:#22c55e}
+.badge.rejected{background:rgba(239,68,68,0.15);color:#ef4444}
+.act-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;transition:all .15s;margin-right:4px}
+.act-btn.approve{color:#22c55e;border-color:rgba(34,197,94,0.3)}
+.act-btn.approve:hover{background:rgba(34,197,94,0.1)}
+.act-btn.reject{color:#ef4444;border-color:rgba(239,68,68,0.3)}
+.act-btn.reject:hover{background:rgba(239,68,68,0.1)}
+.act-btn.view{color:var(--orange);border-color:var(--border)}
+.act-btn.view:hover{background:rgba(255,107,0,0.08)}
+.empty-row td{text-align:center;padding:40px;color:var(--muted);font-style:italic}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.75);align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal-box{background:#111;border:1.5px solid var(--border);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:28px 28px 24px}
+.modal-box h2{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;letter-spacing:2px;color:var(--orange);text-transform:uppercase;margin-bottom:20px}
+.form-row{margin-bottom:16px}
+.form-row label{display:block;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.form-row input,.form-row select,.form-row textarea{width:100%;background:#181c26;border:1px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:14px;outline:none;transition:border-color .2s}
+.form-row input:focus,.form-row select:focus,.form-row textarea:focus{border-color:var(--orange)}
+.form-row textarea{resize:vertical;min-height:70px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.btn-cancel{background:none;border:1px solid var(--border);border-radius:7px;padding:9px 20px;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer}
+.btn-cancel:hover{border-color:var(--muted);color:var(--text)}
+
+/* RECEIPT PREVIEW */
+.receipt-preview{margin-top:10px;max-width:100%;border-radius:8px;border:1px solid var(--border);display:none}
+.receipt-preview.show{display:block}
+
+/* UPLOAD AREA */
+.upload-area{border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative}
+.upload-area:hover,.upload-area.drag{border-color:var(--orange);background:rgba(255,107,0,0.04)}
+.upload-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-area .icon{font-size:28px;margin-bottom:8px}
+.upload-area p{font-size:13px;color:var(--muted)}
+.upload-area p span{color:var(--orange)}
+
+/* SUMMARY TABLE */
+.summary-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px}
+.summary-card h3{padding:14px 18px;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;color:var(--orange);text-transform:uppercase;background:#0d0f14;border-bottom:1px solid var(--border)}
+
+/* CATEGORY TAG */
+.cat-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:rgba(255,107,0,0.12);color:var(--orange);border:1px solid rgba(255,107,0,0.2)}
+
+/* AMOUNT */
+.amount-cell{font-family:'Share Tech Mono',monospace;font-size:14px;color:#22c55e}
+
+/* TOAST */
+#toast{position:fixed;bottom:24px;right:24px;background:#1e2330;border:1px solid var(--border);border-radius:9px;padding:12px 20px;font-size:14px;color:var(--text);z-index:9999;display:none;animation:slideUp .3s ease}
+#toast.show{display:block}
+#toast.success{border-color:#22c55e;color:#22c55e}
+#toast.error{border-color:#ef4444;color:#ef4444}
+@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* EXPAND ROW */
+tbody tr.exp-main-row{cursor:pointer}
+tbody tr.exp-main-row.reapprove-highlight{background:rgba(255,107,0,0.10)!important;box-shadow:inset 0 0 0 1.5px rgba(255,107,0,0.35);animation:reapproveGlow 2s ease-in-out infinite alternate}
+@keyframes reapproveGlow{from{background:rgba(255,107,0,0.07)!important}to{background:rgba(255,107,0,0.16)!important}}
+tbody tr.exp-main-row.approved-highlight{background:rgba(34,197,94,0.10)!important;box-shadow:inset 0 0 0 1.5px rgba(34,197,94,0.35)}
+tbody tr.exp-main-row.approved-highlight:hover{background:rgba(34,197,94,0.15)!important}
+tbody tr.exp-main-row.expanded{background:rgba(255,107,0,0.07)!important;border-bottom:none}
+tbody tr.exp-expand-row{display:none}
+tbody tr.exp-expand-row.open{display:table-row}
+.exp-expand-td{padding:0!important;border-bottom:1px solid rgba(255,107,0,0.12)!important}
+.exp-expand-inner{padding:12px 20px 12px 44px;display:flex;align-items:flex-start;gap:10px;background:rgba(255,107,0,0.03)}
+.exp-expand-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--orange);font-weight:700;white-space:nowrap;padding-top:2px}
+.exp-expand-text{font-size:14px;color:var(--text);line-height:1.6}
+.exp-chevron{font-size:9px;color:var(--muted);transition:transform .2s;display:inline-block}
+tbody tr.exp-main-row.expanded .exp-chevron{transform:rotate(90deg);color:var(--orange)}
+
+/* APPROVAL STATUS MODAL */
+#approvalStatusModal{display:none;position:fixed;inset:0;z-index:1500;background:rgba(0,0,0,0.82);align-items:center;justify-content:center;padding:16px}
+#approvalStatusModal.open{display:flex}
+.apv-box{background:#111;border:1.5px solid rgba(255,107,0,0.25);border-radius:16px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding:0;font-family:'Rajdhani',sans-serif}
+.apv-header{padding:18px 22px 12px;border-bottom:1px solid rgba(255,107,0,0.15)}
+.apv-header h2{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;letter-spacing:3px;color:var(--orange);text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.apv-header .apv-sub{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.5px}
+.apv-close{background:none;border:1px solid rgba(255,255,255,0.15);color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.apv-close:hover{border-color:var(--orange);color:var(--orange)}
+/* Pipeline steps */
+.apv-steps{padding:20px 22px 4px}
+.apv-step{display:flex;align-items:flex-start;gap:14px;margin-bottom:4px;position:relative}
+.apv-step-left{display:flex;flex-direction:column;align-items:center;width:36px;flex-shrink:0}
+.apv-step-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;border:2px solid transparent;transition:all .3s}
+.apv-step-icon.done{background:rgba(34,197,94,0.15);border-color:#22c55e}
+.apv-step-icon.active{background:rgba(255,107,0,0.12);border-color:var(--orange);animation:apvPulse 1.8s ease-in-out infinite}
+.apv-step-icon.waiting{background:rgba(136,146,164,0.1);border-color:#333}
+.apv-step-line{width:2px;flex:1;min-height:18px;margin:2px 0}
+.apv-step-line.done{background:#22c55e}
+.apv-step-line.waiting{background:#222}
+.apv-step-body{padding-top:4px;flex:1}
+.apv-step-title{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:1px;margin-bottom:2px}
+.apv-step-title.done{color:var(--text)}
+.apv-step-title.active{color:var(--orange)}
+.apv-step-title.waiting{color:#555}
+.apv-step-desc{font-size:12px;color:var(--muted);margin-bottom:6px;line-height:1.5}
+.apv-step-badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px}
+.apv-step-badge.done{background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
+.apv-step-badge.active{background:rgba(234,179,8,0.12);color:#eab308;border:1px solid rgba(234,179,8,0.3)}
+.apv-step-badge.waiting{background:rgba(136,146,164,0.08);color:#555;border:1px solid #2a2a2a}
+.apv-step-badge.rejected{background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
+/* Current status box */
+.apv-status-box{margin:4px 22px 16px;padding:16px;border-radius:10px;text-align:center}
+.apv-status-box.pending-box{background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.2)}
+.apv-status-box.approved-box{background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2)}
+.apv-status-box.rejected-box{background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2)}
+.apv-status-box .apv-emoji{font-size:28px;margin-bottom:6px}
+.apv-status-box .apv-status-title{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:1.5px}
+.apv-status-box .apv-status-desc{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5}
+/* Approval trail */
+.apv-trail{margin:0 22px 20px}
+.apv-trail-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.apv-trail-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.apv-trail-counts{display:flex;gap:6px}
+.apv-trail-count{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.5px}
+.apv-trail-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#0d0f14;border-radius:8px;margin-bottom:6px;border:1px solid rgba(255,107,0,0.08)}
+.apv-trail-avatar{width:30px;height:30px;border-radius:50%;background:rgba(255,107,0,0.15);border:1px solid rgba(255,107,0,0.3);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.apv-trail-text{flex:1;min-width:0}
+.apv-trail-action{font-size:13px;font-weight:700;color:var(--text)}
+.apv-trail-meta{font-size:11px;color:var(--muted);margin-top:1px}
+.apv-trail-num{font-size:10px;color:#333;font-weight:700;margin-left:auto;padding-left:8px;flex-shrink:0}
+@keyframes apvPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,107,0,0.25)}50%{box-shadow:0 0 0 6px rgba(255,107,0,0)}}
+
+/* RIGHT-CLICK CONTEXT MENU */
+#ctxMenu{display:none;position:fixed;z-index:9000;background:#181c26;border:1px solid rgba(239,68,68,0.4);border-radius:8px;padding:4px 0;min-width:150px;box-shadow:0 8px 28px rgba(0,0,0,0.7)}
+#ctxMenu button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:10px 16px;color:#ef4444;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.5px;transition:background .15s}
+#ctxMenu button:hover{background:rgba(239,68,68,0.1)}
+
+/* MOBILE */
+@media(max-width:900px){
+  .stats-row{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:600px){
+  nav{padding:0 14px}
+  .nav-title{font-size:14px}
+  .main{padding:74px 14px 32px}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .modal-box{padding:20px 16px}
+  table{min-width:600px}
+}
+
+/* ═══════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════ */
+
+/* Page load — fade+slide up */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(22px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes fadeIn{
+  from{opacity:0}to{opacity:1}
+}
+@keyframes slideInLeft{
+  from{opacity:0;transform:translateX(-18px)}
+  to{opacity:1;transform:translateX(0)}
+}
+@keyframes scaleIn{
+  from{opacity:0;transform:scale(0.93)}
+  to{opacity:1;transform:scale(1)}
+}
+@keyframes navSlide{
+  from{opacity:0;transform:translateY(-100%)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* Nav entrance */
+nav{animation:navSlide .45s cubic-bezier(.22,1,.36,1) both}
+
+/* Stat cards — staggered */
+.stats-row{animation:fadeUp .5s .15s both}
+.stat-card{
+  animation:scaleIn .4s both;
+  transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.stat-card:nth-child(1){animation-delay:.18s}
+.stat-card:nth-child(2){animation-delay:.26s}
+.stat-card:nth-child(3){animation-delay:.34s}
+.stat-card:nth-child(4){animation-delay:.42s}
+.stat-card:nth-child(5){animation-delay:.50s}
+
+/* Stat card hover */
+.stat-card:hover{
+  transform:translateY(-4px) scale(1.02);
+  box-shadow:0 8px 32px rgba(255,107,0,0.15);
+  border-color:rgba(255,107,0,0.4);
+}
+.stat-card:hover .value{text-shadow:0 0 20px currentColor}
+
+/* Tab bar */
+.tab-bar{animation:fadeIn .4s .4s both}
+
+/* Toolbar */
+.toolbar{animation:fadeUp .4s .45s both}
+
+/* Table wrap */
+.table-wrap{animation:fadeUp .5s .55s both}
+
+/* Table row entrance — applied via JS */
+@keyframes rowIn{
+  from{opacity:0;transform:translateX(-12px)}
+  to{opacity:1;transform:translateX(0)}
+}
+tbody tr.exp-main-row{
+  animation:rowIn .35s both;
+  transition:background .15s, box-shadow .2s;
+}
+tbody tr.exp-main-row:hover{
+  box-shadow:inset 3px 0 0 var(--orange);
+}
+
+/* Badge pulse on hover */
+.badge{transition:transform .15s, box-shadow .15s}
+.badge:hover{transform:scale(1.08);box-shadow:0 0 10px currentColor}
+
+/* Amount cell glow hover */
+.amount-cell{transition:text-shadow .2s}
+tbody tr:hover .amount-cell{text-shadow:0 0 12px rgba(34,197,94,0.6)}
+
+/* Action buttons */
+.act-btn{transition:all .15s, transform .12s}
+.act-btn:hover{transform:translateY(-1px) scale(1.04)}
+.act-btn:active{transform:scale(0.97)}
+
+/* Submit button pulse */
+@keyframes btnPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(255,107,0,0.4)}
+  50%{box-shadow:0 0 0 8px rgba(255,107,0,0)}
+}
+.btn-orange{
+  animation:btnPulse 3s ease-in-out infinite;
+  transition:opacity .2s, transform .15s;
+}
+.btn-orange:hover{transform:translateY(-1px) scale(1.03);animation:none}
+.btn-orange:active{transform:scale(0.97)}
+
+/* Nav back button */
+.nav-back{transition:all .2s, transform .15s}
+.nav-back:hover{transform:translateX(-2px)}
+
+/* Nav user avatar ring spin on hover */
+.nav-user-avatar{transition:border-color .3s, box-shadow .3s}
+.nav-user-avatar:hover{
+  box-shadow:0 0 0 3px rgba(255,107,0,0.3), 0 0 20px rgba(255,107,0,0.2);
+}
+
+/* Orange border scan line on table */
+@keyframes scanLine{
+  0%{background-position:0% 0%}
+  100%{background-position:0% 100%}
+}
+thead th{position:relative;overflow:hidden}
+
+/* Modal open animation */
+.modal-overlay.open .modal-box{
+  animation:scaleIn .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+#approvalStatusModal.open .apv-box{
+  animation:scaleIn .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+/* Toast */
+#toast{animation:slideUp .3s ease}
+
+/* Orange glow scan on nav border */
+@keyframes borderGlow{
+  0%,100%{border-bottom-color:rgba(255,107,0,0.3)}
+  50%{border-bottom-color:rgba(255,107,0,0.7)}
+}
+nav{animation:navSlide .45s cubic-bezier(.22,1,.36,1) both, borderGlow 3s 1s ease-in-out infinite}
+
+/* Stat card value count-up shimmer */
+@keyframes shimmer{
+  0%{background-position:-200% center}
+  100%{background-position:200% center}
+}
+.stat-card .value{
+  background:linear-gradient(90deg, currentColor 30%, rgba(255,255,255,0.9) 50%, currentColor 70%);
+  background-size:200% auto;
+  -webkit-background-clip:text;
+  background-clip:text;
+  animation:shimmer 2.5s linear infinite;
+  -webkit-text-fill-color:transparent;
+}
+
+/* Tab button hover underline slide */
+.tab-btn{position:relative;overflow:hidden}
+.tab-btn::after{
+  content:'';position:absolute;bottom:0;left:50%;right:50%;height:2px;
+  background:var(--orange);transition:left .2s ease,right .2s ease;
+}
+.tab-btn:hover::after{left:0;right:0}
+.tab-btn.active::after{left:0;right:0}
+
+/* Cat tag hover */
+.cat-tag{transition:background .2s, transform .15s}
+.cat-tag:hover{background:rgba(255,107,0,0.22);transform:scale(1.05)}
+
+/* Expand chevron smooth */
+.exp-chevron{transition:transform .25s cubic-bezier(.34,1.56,.64,1), color .2s}
+
+/* Toolbar inputs */
+.toolbar select,.toolbar input{transition:border-color .2s, box-shadow .2s}
+.toolbar select:hover,.toolbar input:hover{border-color:rgba(255,107,0,0.4);box-shadow:0 0 0 2px rgba(255,107,0,0.08)}
+
+/* Page background subtle animated grid */
+body::before{
+  content:'';
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,107,0,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,107,0,0.03) 1px, transparent 1px);
+  background-size:40px 40px;
+  animation:gridDrift 20s linear infinite;
+}
+@keyframes gridDrift{
+  from{background-position:0 0}
+  to{background-position:40px 40px}
+}
+.main,.table-wrap,nav{position:relative;z-index:1}
+
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <button class="nav-back" onclick="if(window.parent&&window.parent!==window){window.parent.postMessage('closeExpenseModal','*')}else{window.location.href='/dashboard'}">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      Back
+    </button>
+  </div>
+  <div class="nav-title">💸 Expenses</div>
+  <div class="nav-right">
+    <div class="nav-user" id="navUserInfo" style="display:none">
+      <div class="nav-user-info">
+        <div class="nav-user-name" id="navUserName">—</div>
+        <div class="nav-user-role" id="navUserRole">—</div>
+      </div>
+      <div class="nav-user-avatar" id="navUserAvatar">?</div>
+    </div>
+    <button class="btn-orange" onclick="openSubmitModal()">+ Submit Expense</button>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- STATS -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card"><div class="label">Total Submitted</div><div class="value" id="statTotal">₹0</div></div>
+    <div class="stat-card"><div class="label">Approved</div><div class="value green" id="statApproved">₹0</div></div>
+    <div class="stat-card"><div class="label">Pending</div><div class="value yellow" id="statPending">₹0</div></div>
+    <div class="stat-card"><div class="label">Rejected</div><div class="value red" id="statRejected">₹0</div></div>
+    <div class="stat-card"><div class="label">Count</div><div class="value" id="statCount">0</div></div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('all', this)">All Expenses</button>
+    <button class="tab-btn" onclick="switchTab('pending', this)">Pending</button>
+    <button class="tab-btn" onclick="switchTab('approved', this)">Approved</button>
+    <button class="tab-btn" onclick="switchTab('rejected', this)">Rejected</button>
+    <button class="tab-btn" onclick="switchTab('summary', this)">By Employee</button>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <select id="filterCategory" onchange="loadExpenses()">
+      <option value="">All Categories</option>
+      <option>Travel</option>
+      <option>Food</option>
+      <option>Accommodation</option>
+      <option>Office Supplies</option>
+      <option>Medical</option>
+      <option>Training</option>
+      <option>Client Entertainment</option>
+      <option>Telephone</option>
+      <option>Other</option>
+    </select>
+    <div style="position:relative;display:inline-block" id="monthPickerWrap">
+      <div id="monthPickerBtn" onclick="toggleMonthPicker()" style="background:#181c26;border:1px solid rgba(255,107,0,0.18);border-radius:7px;padding:8px 36px 8px 12px;color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:14px;cursor:pointer;min-width:170px;user-select:none;transition:border-color .2s" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="if(!document.getElementById('monthPickerPanel').style.display||document.getElementById('monthPickerPanel').style.display==='none')this.style.borderColor='rgba(255,107,0,0.18)'">
+        <span id="monthPickerLabel">📅 Filter by month</span>
+        <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted)">&#9660;</span>
+      </div>
+      <input type="hidden" id="filterMonth">
+      <!-- Calendar Panel -->
+      <div id="monthPickerPanel" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:500;background:#181c26;border:1px solid var(--orange);border-radius:10px;padding:14px;min-width:240px;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+        <!-- Year nav -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <button onclick="changePickerYear(-1)" style="background:none;border:1px solid rgba(255,107,0,0.3);border-radius:5px;color:var(--orange);width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1">&#8249;</button>
+          <span id="monthPickerYear" style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:var(--text);letter-spacing:2px"></span>
+          <button onclick="changePickerYear(1)" style="background:none;border:1px solid rgba(255,107,0,0.3);border-radius:5px;color:var(--orange);width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1">&#8250;</button>
+        </div>
+        <!-- Month grid -->
+        <div id="monthPickerGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"></div>
+        <!-- Clear -->
+        <div style="margin-top:10px;text-align:center">
+          <button onclick="clearMonthPicker()" style="background:none;border:1px solid rgba(255,107,0,0.2);border-radius:5px;padding:4px 14px;color:var(--muted);font-size:12px;cursor:pointer;font-family:'Rajdhani',sans-serif">Clear</button>
+        </div>
+      </div>
+    </div>
+    <input type="text" id="filterSearch" oninput="loadExpenses()" placeholder="Search employee..." style="min-width:160px">
+    <button class="btn-outline" onclick="clearFilters()">Clear</button>
+  </div>
+
+  <!-- TABLE / SUMMARY -->
+  <div id="tableSection">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Employee</th>
+            <th>Dept</th>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Receipt</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="expenseTbody">
+          <tr class="empty-row"><td colspan="9">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="summarySection" style="display:none">
+    <div class="summary-card">
+      <h3>Employee Expense Summary</h3>
+      <div class="table-wrap" style="border:none;border-radius:0">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Employee</th><th>Dept</th><th>Total</th><th>Approved</th><th>Pending</th><th>Rejected</th><th>Count</th></tr>
+          </thead>
+          <tbody id="summaryTbody">
+            <tr class="empty-row"><td colspan="8">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- SUBMIT EXPENSE MODAL -->
+<div class="modal-overlay" id="submitModal">
+  <div class="modal-box">
+    <h2>Submit Expense</h2>
+    <!-- Manual name/dept (shown only when not logged in via session) -->
+    <div class="form-row" id="manualNameRow">
+      <label>Employee Name *</label>
+      <input type="text" id="manualName" placeholder="Your full name..." value="">
+    </div>
+    <div class="form-row" id="manualDeptRow">
+      <label>Department</label>
+      <input type="text" id="manualDept" placeholder="Your department..." value="">
+    </div>
+    <div class="form-row">
+      <label>Category *</label>
+      <div id="catDropdownWrap" style="position:relative">
+        <div id="catDropdownBtn" onclick="toggleCatDropdown()" style="width:100%;background:#181c26;border:1px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--text);font-family:Rajdhani,sans-serif;font-size:14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;transition:border-color .2s">
+          <span id="catDropdownLabel" style="color:var(--muted)">Select category</span>
+          <span style="font-size:10px;color:var(--muted)">&#9660;</span>
+        </div>
+        <div id="catDropdownList" style="display:none;position:absolute;top:calc(100% + 4px);left:0;width:100%;background:#181c26;border:1px solid var(--orange);border-radius:7px;z-index:999;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Travel" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Travel</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Food" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Food</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Accommodation" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Accommodation</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Office Supplies" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Office Supplies</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Medical" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Medical</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Training" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Training</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Client Entertainment" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Client Entertainment</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Telephone" onchange="updateCatLabel()" style="accent-color:var(--orange);width:15px;height:15px"> Telephone</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:14px"><input type="checkbox" value="Other" onchange="updateCatLabel();toggleOtherInput()" style="accent-color:var(--orange);width:15px;height:15px"> Other</label>
+        </div>
+      </div>
+      <input type="text" id="otherCatInput" placeholder="Type your category..." style="display:none;margin-top:8px;width:100%;background:#181c26;border:1px solid var(--orange);border-radius:7px;padding:10px 12px;color:var(--text);font-family:Rajdhani,sans-serif;font-size:14px;outline:none">
+    </div>
+    <div class="form-row">
+      <label>Amount (₹) *</label>
+      <input type="number" id="expAmount" placeholder="0.00" min="0" step="0.01">
+    </div>
+    <div class="form-row">
+      <label>Description</label>
+      <textarea id="expDesc" placeholder="Brief description of the expense..."></textarea>
+    </div>
+    <div class="form-row">
+      <label>Receipt / Bill (optional)</label>
+      <div class="upload-area" id="uploadArea"
+           ondragover="this.classList.add('drag');event.preventDefault()"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleDrop(event)">
+        <input type="file" id="receiptFile" accept="image/*,application/pdf" multiple onchange="handleFileSelect(this)">
+        <div class="icon">📎</div>
+        <p>Drag & drop or <span>browse</span> to upload</p>
+        <p style="font-size:11px;margin-top:4px">JPG, PNG, PDF up to 5MB each — multiple files allowed</p>
+      </div>
+      <div id="receiptPreviewGrid" style="display:none;margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+      <p id="receiptFileName" style="font-size:12px;color:var(--muted);margin-top:6px"></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSubmitModal()">Cancel</button>
+      <button class="btn-orange" onclick="submitExpense()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEW MODAL (admin/hr approve/reject) -->
+<div class="modal-overlay" id="reviewModal">
+  <div class="modal-box">
+    <h2 id="reviewTitle">Review Expense</h2>
+    <div id="reviewDetails" style="margin-bottom:16px;font-size:14px;color:var(--muted);line-height:1.7"></div>
+    <div id="reviewReceiptWrap" style="margin-bottom:16px;display:none">
+      <label style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px">Receipt</label>
+      <div id="reviewReceiptGrid" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start"></div>
+    </div>
+    <div class="form-row">
+      <label>Review Note (optional)</label>
+      <textarea id="reviewNote" placeholder="Add a note..."></textarea>
+    </div>
+    <div class="modal-actions" id="reviewModalActions">
+      <button class="btn-cancel" onclick="closeReviewModal()">Cancel</button>
+      <button id="reviewReapproveBtn" class="act-btn" style="padding:9px 18px;font-size:13px;color:#fb923c;border-color:rgba(251,146,60,0.4);display:none" onclick="openReapproveFromReview()">🔄 Re-Approve</button>
+      <button class="act-btn reject" style="padding:9px 18px;font-size:13px" onclick="doReview('reject')">✗ Reject</button>
+      <button class="act-btn approve" style="padding:9px 18px;font-size:13px" onclick="doReview('approve')">✓ Approve</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── Session / user ──────────────────────────────────────────
+const USER = (function(){
+  try { return JSON.parse(sessionStorage.getItem('miim_user') || '{}'); } catch(e) { return {}; }
+})();
+const EMP_ID       = USER.id   || USER.emp_id  || null;
+const EMP_NAME     = USER.name || USER.username || '';
+const EMP_DEPT     = USER.dept || USER.department || '';
+const CALLER       = USER.username || USER.user_id || '';
+
+// Derive role — stored role first, then fallback from dept/desig
+(function(){
+  var _r    = (USER.role || sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || '').trim().toLowerCase();
+  var _dept = (USER.dept || USER.department || '').trim().toLowerCase();
+  var _desig= (USER.desig || USER.designation || '').trim().toLowerCase();
+  if (!_r || _r === 'member') {
+    if (_dept === 'admin' || _desig.includes('admin'))                     _r = 'admin';
+    else if (_dept === 'hr' || _desig.includes('hr'))                     _r = 'hr';
+    else if (_dept === 'account' || _dept === 'accounts' || _desig === 'account manager') _r = 'account_manager';
+  }
+  USER._derivedRole = _r || 'member';
+})();
+const ROLE = USER._derivedRole;
+
+// ── Role flags ────────────────────────────────────────────────
+// admin           : full access — all employees, all actions, final approve
+// hr              : full view all employees — NO approve/reject, but can see everything
+// account_manager : full view all employees — can do Accounts Review (Stage 3)
+// sm/pm           : see only their dept employees — can Review (first stage)
+// member          : see only own expenses — submit only
+const IS_ADMIN       = ROLE === 'admin';
+const IS_HR          = ROLE === 'hr' || ROLE === 'senior_hr';
+const IS_ACCOUNT_MGR = ROLE === 'account_manager' || ROLE === 'accounts_manager' || ROLE === 'accountmanager';
+const IS_SM          = ROLE === 'sm';
+const IS_PM          = ROLE === 'pm';
+const IS_SM_PM       = IS_SM || IS_PM;
+const CAN_VIEW_ALL   = IS_ADMIN || IS_HR || IS_SM_PM || IS_ACCOUNT_MGR;   // wide view
+const CAN_REVIEW_SM  = IS_SM_PM || IS_ADMIN;             // Stage 1: SM/PM/Admin
+const CAN_REVIEW_HR  = IS_HR || IS_ADMIN;                // Stage 2: HR/Admin
+const CAN_REVIEW_ACC = IS_ADMIN || IS_ACCOUNT_MGR;       // Stage 3: Accounts/Account Manager
+const CAN_FINAL_APV  = IS_ADMIN;                         // Stage 4: Final — Admin only
+
+/* Approval pipeline:
+   pending  →[SM/PM approve]→ sm_pm_approved
+            →[HR approve]→    hr_approved
+            →[Accounts/Admin approve]→ accounts_approved
+            →[Admin final approve]→ approved  (status=approved shown in table)
+   Any stage → reject → rejected
+*/
+
+// ── Server detection + localStorage fallback ─────────────────
+const USE_SERVER = window.location.protocol !== 'file:';
+
+// localStorage helpers (fallback when no server)
+function ls_get()        { try { return JSON.parse(localStorage.getItem('miim_expenses')||'[]'); } catch(e){ return []; } }
+function ls_save(arr)    { localStorage.setItem('miim_expenses', JSON.stringify(arr)); }
+function ls_nextId()     { var a=ls_get(); return a.length ? Math.max(...a.map(e=>e.id||0))+1 : 1; }
+
+// ── API wrappers ──────────────────────────────────────────────
+async function api_get_expenses(empId, status) {
+  if (USE_SERVER) {
+    try {
+      let url = '/api/expance?caller=' + encodeURIComponent(CALLER) + '&';
+      if (empId) url += 'emp_id=' + encodeURIComponent(empId) + '&';
+      if (status && status !== 'all') url += 'status=' + encodeURIComponent(status) + '&';
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('not ok');
+      return await res.json();
+    } catch(e) {}
+  }
+  // localStorage fallback
+  let exps = ls_get();
+  if (empId) exps = exps.filter(e => String(e.emp_id) === String(empId));
+  if (status && status !== 'all') exps = exps.filter(e => e.status === status);
+  // SM/PM: filter by dept in fallback
+  if (IS_SM_PM && EMP_DEPT) exps = exps.filter(e => (e.dept||'').toLowerCase() === EMP_DEPT.toLowerCase());
+  return { success: true, expenses: exps };
+}
+
+async function api_post_expense(payload) {
+  if (USE_SERVER) {
+    try {
+      const res = await fetch('/api/expance', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      if (!res.ok) throw new Error('not ok');
+      const data = await res.json();
+      if (data.success) return data;
+    } catch(e) {}
+  }
+  var exps = ls_get();
+  var newExp = Object.assign({}, payload, {
+    id: ls_nextId(), status: 'pending', approval_stage: 'pending',
+    receipt_url: payload.receipt_b64 || '',
+    receipt_files: payload.receipt_files || [],
+    submitted_at: new Date().toISOString()
+  });
+  exps.push(newExp); ls_save(exps);
+  return { success: true, expense: newExp };
+}
+
+async function api_put_expense(id, payload) {
+  if (USE_SERVER) {
+    try {
+      const res = await fetch('/api/expance/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(Object.assign({caller: CALLER}, payload)) });
+      if (!res.ok) throw new Error('not ok');
+      const data = await res.json();
+      if (data.success) return data;
+    } catch(e) {}
+  }
+  // localStorage fallback
+  var exps = ls_get();
+  var idx = exps.findIndex(e => e.id == id);
+  if (idx !== -1) {
+    var exp = exps[idx];
+    var action = payload.action || '';
+    var now = new Date().toISOString();
+    if (action === 'reject') {
+      exp.status = 'rejected'; exp.approval_stage = 'rejected';
+    } else if (action === 'sm_pm_approve') {
+      exp.approval_stage = 'sm_pm_approved'; exp.sm_pm_approved_by = payload.reviewed_by; exp.sm_pm_approved_at = now;
+    } else if (action === 'hr_approve') {
+      exp.approval_stage = 'hr_approved'; exp.hr_approved_by = payload.reviewed_by; exp.hr_approved_at = now;
+    } else if (action === 'accounts_approve') {
+      exp.approval_stage = 'accounts_approved'; exp.accounts_approved_by = payload.reviewed_by; exp.accounts_approved_at = now;
+    } else if (action === 'final_approve') {
+      exp.approval_stage = 'approved'; exp.status = 'approved'; exp.final_approved_by = payload.reviewed_by; exp.final_approved_at = now;
+    } else if (action === 'reapprove_reset') {
+      // Reset pipeline — approved expense goes back to pending for re-review
+      exp.status = 'pending';
+      exp.approval_stage = 'pending';
+      exp.sm_pm_approved_by = null; exp.sm_pm_approved_at = null;
+      exp.hr_approved_by = null;    exp.hr_approved_at = null;
+      exp.accounts_approved_by = null; exp.accounts_approved_at = null;
+      exp.final_approved_by = null; exp.final_approved_at = null;
+      exp.reapprove_reason = payload.reapprove_reason || '';
+      exp.reapproved_by    = payload.reapproved_by || '';
+      exp.reapproved_at    = now;
+      // Update content fields
+      if (payload.category)      exp.category      = payload.category;
+      if (payload.amount)        exp.amount        = payload.amount;
+      if (payload.description !== undefined) exp.description = payload.description;
+      if (payload.receipt_b64)   exp.receipt_url   = payload.receipt_b64;
+      if (payload.receipt_files) exp.receipt_files = payload.receipt_files;
+    } else {
+      Object.assign(exp, payload);
+    }
+    exp.review_note = payload.review_note || exp.review_note;
+    ls_save(exps);
+  }
+  return { success: true };
+}
+
+async function api_delete_expense(id) {
+  if (USE_SERVER) {
+    try {
+      const res = await fetch('/api/expance/'+id, { method:'DELETE' });
+      if (!res.ok) throw new Error('not ok');
+      const data = await res.json();
+      if (data.success) return data;
+    } catch(e) {}
+  }
+  ls_save(ls_get().filter(e => e.id != id));
+  return { success: true };
+}
+
+async function api_get_summary() {
+  if (USE_SERVER) {
+    try {
+      const url = '/api/expance/summary?caller=' + encodeURIComponent(CALLER);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('not ok');
+      const data = await res.json();
+      if (data.success) return data;
+    } catch(e) {}
+  }
+  var exps = ls_get();
+  if (IS_SM_PM && EMP_DEPT) exps = exps.filter(e => (e.dept||'').toLowerCase() === EMP_DEPT.toLowerCase());
+  var map = {};
+  exps.forEach(function(e) {
+    var k = String(e.emp_id||'') + '|' + (e.emp_name||'');
+    if (!map[k]) map[k] = { emp_id: e.emp_id, emp_name: e.emp_name||'', dept: e.dept||'', total:0, approved:0, pending_amt:0, rejected:0, count:0 };
+    map[k].total += Number(e.amount);
+    map[k].count++;
+    if (e.status==='approved') map[k].approved   += Number(e.amount);
+    if (e.status==='pending')  map[k].pending_amt += Number(e.amount);
+    if (e.status==='rejected') map[k].rejected    += Number(e.amount);
+  });
+  return { success: true, summary: Object.values(map) };
+}
+
+let currentTab    = 'all';
+let currentExpId  = null;
+let currentAction = 'sm_pm_approve'; // what action the review modal will perform
+let receiptFiles  = [];
+let allExpenses   = [];
+
+// ── Init ────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Render logged-in user info in header
+  renderNavUser();
+  // Hide Submit button for HR (they don't submit expenses on behalf of others)
+  // HR can still view everything; members submit their own
+  loadExpenses();
+  loadStats();
+});
+
+function renderNavUser() {
+  var name = EMP_NAME || CALLER || '';
+  if (!name) return;
+  var roleLabels = {
+    'admin':           '🔑 Admin',
+    'hr':              '🏢 HR',
+    'senior_hr':       '🏢 Senior HR',
+    'account_manager': '💼 Account Manager',
+    'sm':              '👔 Senior Manager',
+    'pm':              '📋 Project Manager',
+    'member':          '👤 Employee'
+  };
+  var roleLabel = roleLabels[ROLE] || ('👤 ' + ROLE);
+  var avatar    = name.charAt(0).toUpperCase();
+
+  document.getElementById('navUserName').textContent  = name;
+  document.getElementById('navUserRole').textContent  = roleLabel;
+  document.getElementById('navUserAvatar').textContent = avatar;
+  document.getElementById('navUserInfo').style.display = 'flex';
+}
+
+// ── Tab switch ──────────────────────────────────────────────
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tableSection').style.display  = tab === 'summary' ? 'none' : 'block';
+  document.getElementById('summarySection').style.display = tab === 'summary' ? 'block' : 'none';
+  if (tab === 'summary') loadSummary(); else loadExpenses();
+}
+
+// ── Load stats ──────────────────────────────────────────────
+async function loadStats() {
+  // Admin/HR see all; SM/PM see dept; member sees own
+  var empFilter = CAN_VIEW_ALL ? null : EMP_ID;
+  var data = await api_get_expenses(empFilter, null);
+  if (!data.success) return;
+  const exps = data.expenses;
+  const total    = exps.reduce((s,e)=>s+Number(e.amount),0);
+  const approved = exps.filter(e=>e.status==='approved').reduce((s,e)=>s+Number(e.amount),0);
+  const pending  = exps.filter(e=>e.status==='pending').reduce((s,e)=>s+Number(e.amount),0);
+  const rejected = exps.filter(e=>e.status==='rejected').reduce((s,e)=>s+Number(e.amount),0);
+  animateCount(document.getElementById('statTotal'),    total,    '₹', '', 900);
+  animateCount(document.getElementById('statApproved'), approved, '₹', '', 900);
+  animateCount(document.getElementById('statPending'),  pending,  '₹', '', 900);
+  animateCount(document.getElementById('statRejected'), rejected, '₹', '', 900);
+  animateCount(document.getElementById('statCount'),    exps.length, '', '', 700);
+}
+
+function fmt(n){ return '₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:2}); }
+
+// ── Count-up animation ───────────────────────────────────────
+function animateCount(el, targetNum, prefix, suffix, duration) {
+  var start = 0;
+  var startTime = null;
+  var formatted = suffix || '';
+  function step(timestamp) {
+    if (!startTime) startTime = timestamp;
+    var progress = Math.min((timestamp - startTime) / duration, 1);
+    var ease = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    var current = Math.floor(ease * targetNum);
+    el.textContent = (prefix||'') + Number(current).toLocaleString('en-IN') + formatted;
+    if (progress < 1) requestAnimationFrame(step);
+    else el.textContent = (prefix||'') + Number(targetNum).toLocaleString('en-IN',{maximumFractionDigits:2}) + formatted;
+  }
+  requestAnimationFrame(step);
+}
+
+// ── Approval stage labels ─────────────────────────────────────
+function stageLabel(stage) {
+  var map = {
+    'pending':           '⏳ Pending',
+    'sm_pm_approved':    '✅ SM/PM Approved',
+    'hr_approved':       '✅ HR Approved',
+    'accounts_approved': '✅ Accounts Approved',
+    'approved':          '✓ Approved',
+    'rejected':          '✗ Rejected'
+  };
+  return map[stage] || stage || 'Pending';
+}
+
+// ── Determine what Review action current user can perform ─────
+function getReviewAction(exp) {
+  var stage = exp.approval_stage || 'pending';
+  if (exp.status === 'rejected') return null;
+  if (exp.status === 'approved') return null;
+
+  // Also check sessionStorage role as fallback (in case USER.role not set)
+  var _role = ROLE || (sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || '').trim().toLowerCase();
+  var _isAdmin      = _role === 'admin';
+  var _isHR         = _role === 'hr' || _role === 'senior_hr';
+  var _isAccountMgr = _role === 'account_manager' || _role === 'accounts_manager';
+  var _isSmPm       = _role === 'sm' || _role === 'pm';
+
+  if (_isAdmin) {
+    if (stage === 'pending')           return 'sm_pm_approve';
+    if (stage === 'sm_pm_approved')    return 'hr_approve';
+    if (stage === 'hr_approved')       return 'accounts_approve';
+    if (stage === 'accounts_approved') return 'final_approve';
+    return null;
+  }
+  if (_isSmPm       && stage === 'pending')        return 'sm_pm_approve';
+  if (_isHR         && stage === 'sm_pm_approved') return 'hr_approve';
+  if (_isAccountMgr && stage === 'hr_approved')    return 'accounts_approve';
+  return null;
+}
+
+function reviewActionLabel(action) {
+  var map = {
+    'sm_pm_approve':    'SM / PM Review',
+    'hr_approve':       'HR Review',
+    'accounts_approve': 'Accounts Review',
+    'final_approve':    'Final Approve'
+  };
+  return map[action] || 'Review';
+}
+
+// ── Load expenses table ──────────────────────────────────────
+async function loadExpenses() {
+  const tbody = document.getElementById('expenseTbody');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Loading...</td></tr>';
+  try {
+    var empFilter    = CAN_VIEW_ALL ? null : EMP_ID;
+    var statusFilter = (currentTab !== 'all' && currentTab !== 'summary') ? currentTab : null;
+    var data = await api_get_expenses(empFilter, statusFilter);
+    if (!data.success) { tbody.innerHTML='<tr class="empty-row"><td colspan="9">Error loading</td></tr>'; return; }
+
+    let exps = data.expenses;
+
+    // Client-side filters
+    const cat    = document.getElementById('filterCategory').value;
+    const month  = document.getElementById('filterMonth').value;
+    const search = document.getElementById('filterSearch').value.toLowerCase();
+    if (cat)    exps = exps.filter(e => (e.category||'').includes(cat));
+    if (month)  exps = exps.filter(e => e.submitted_at && e.submitted_at.startsWith(month));
+    if (search) exps = exps.filter(e => (e.emp_name||'').toLowerCase().includes(search) || (e.dept||'').toLowerCase().includes(search));
+
+    allExpenses = exps;
+
+    if (!exps.length){ tbody.innerHTML='<tr class="empty-row"><td colspan="9">No expenses found</td></tr>'; return; }
+
+    tbody.innerHTML = exps.map(function(e,i) {
+      var stage = e.approval_stage || 'pending';
+
+      // Receipt button
+      var receiptBtn = (e.receipt_url || (e.receipt_files && e.receipt_files.length))
+        ? '<button class="act-btn view" onclick="event.stopPropagation();viewReceipt('+e.id+')">View</button>'
+        : '<span style="color:var(--muted);font-size:12px">None</span>';
+
+      // ── Action buttons based on role ──
+      var actionBtns = '';
+
+      // Review button — only for allowed roles and correct stage
+      var reviewAction = getReviewAction(e);
+      if (reviewAction) {
+        actionBtns += '<button class="act-btn approve" onclick="event.stopPropagation();openReview('+e.id+',\''+reviewAction+'\')" style="white-space:nowrap">'
+          + reviewActionLabel(reviewAction)+'</button>';
+      }
+
+      // SM/PM approved or beyond — Edit/Delete காட்டகூடாது (pipeline started)
+      var isPipelineStarted = (stage !== 'pending');
+
+      // Delete — own pending expense ONLY (not SM/PM approved or beyond)
+      if (e.status==='pending' && stage === 'pending' && String(e.emp_id)===String(EMP_ID)) {
+        actionBtns += '<button class="act-btn reject" onclick="event.stopPropagation();deleteExpense('+e.id+')">Delete</button>';
+      }
+      // Admin Del button — only when pipeline not started (pending stage)
+      if (IS_ADMIN && stage === 'pending') {
+        actionBtns += '<button class="act-btn reject" onclick="event.stopPropagation();deleteExpense('+e.id+')" style="margin-left:2px">🗑 Del</button>';
+      }
+
+      // Edit — ONLY for pending stage (before SM/PM approves): own expense OR admin/hr
+      // Once SM/PM approves (pipeline started), Edit button யாருக்கும் காட்டகூடாது
+      var isApproved = (e.status === 'approved' || e.approval_stage === 'approved');
+      if (!isApproved && !isPipelineStarted) {
+        if (IS_ADMIN || IS_HR || (e.status==='pending' && String(e.emp_id)===String(EMP_ID))) {
+          actionBtns += '<button class="act-btn view" onclick="event.stopPropagation();openEditModal('+e.id+')" style="color:#a78bfa;border-color:rgba(167,139,250,0.3)">✏ Edit</button>';
+        }
+      }
+
+      // Re-Approve button removed — HR approve ஆன பிறகு எந்த stage-லயும் காட்டகூடாது
+
+      // Stage badge (shows pipeline progress)
+      var stageBadge = '';
+      if (CAN_VIEW_ALL && stage !== 'pending' && stage !== 'approved' && stage !== 'rejected') {
+        stageBadge = '<span style="display:inline-block;margin-left:4px;padding:2px 7px;border-radius:99px;font-size:9px;font-weight:700;letter-spacing:.5px;background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.25);vertical-align:middle">'
+          + stageLabel(stage) + '</span>';
+      }
+
+      var desc = esc(e.description||'No description provided.');
+      var reapproveInfo = '';
+      if ((IS_ADMIN || IS_HR) && e.reapprove_reason) {
+        reapproveInfo = '<div style="margin-top:8px;display:flex;align-items:flex-start;gap:8px">'
+          + '<span style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#fb923c;font-weight:700;white-space:nowrap;padding-top:2px">Re-Approve Reason —</span>'
+          + '<span style="font-size:13px;color:#fb923c">'+esc(e.reapprove_reason)
+          + (e.reapproved_by ? ' <span style="color:var(--muted)">(by '+esc(e.reapproved_by)+')</span>' : '')+'</span></div>';
+      }
+      // Reapprove highlight — reapproved_by இருந்து, SM/PM approve ஆகல (pending stage) ஆனா glow
+      var isReapproveHighlight = (e.reapproved_by && (e.approval_stage === 'pending' || !e.approval_stage));
+      // Approved highlight — final approve ஆனா green
+      var isApprovedHighlight = (e.status === 'approved' && e.approval_stage === 'approved');
+
+      return '<tr class="exp-main-row'+(isApprovedHighlight ? ' approved-highlight' : (isReapproveHighlight ? ' reapprove-highlight' : ''))+'" id="erow-'+e.id+'" onclick="toggleExpand('+e.id+'")'+'>'
+        + '<td style="color:var(--muted);font-size:12px">'+(i+1)+'</td>'
+        + '<td><b>'+esc(e.emp_name||e.username||'')+'</b></td>'
+        + '<td style="color:var(--muted)">'+esc(e.dept||'')+'</td>'
+        + '<td><span class="cat-tag">'+esc(e.category)+'</span></td>'
+        + '<td class="amount-cell">'+fmt(e.amount)+'</td>'
+        + '<td style="color:var(--muted);font-size:12px">'+((e.submitted_at||'').slice(0,10))+'</td>'
+        + '<td><span class="badge '+e.status+'" onclick="event.stopPropagation();openApprovalStatus('+e.id+')" style="cursor:pointer;" title="View approval pipeline">'+e.status+'</span>'+stageBadge+'</td>'
+        + '<td>'+receiptBtn+'</td>'
+        + '<td>'+actionBtns+' <span class="exp-chevron">&#9654;</span></td>'
+        + '</tr>'
+        + '<tr class="exp-expand-row" id="eexpand-'+e.id+'">'
+        + '<td class="exp-expand-td" colspan="9">'
+        + '<div class="exp-expand-inner"><span class="exp-expand-label">Description &nbsp;—&nbsp;</span>'
+        + '<span class="exp-expand-text">'+desc+'</span></div>'
+        + reapproveInfo
+        + '</td></tr>';
+    }).join('');
+
+    // Stagger animation for each row
+    tbody.querySelectorAll('tr.exp-main-row').forEach(function(row, i) {
+      row.style.animationDelay = (i * 0.07) + 's';
+    });
+
+  } catch(err) { tbody.innerHTML='<tr class="empty-row"><td colspan="9">Failed: '+err.message+'</td></tr>'; }
+}
+
+// ── Load summary ─────────────────────────────────────────────
+async function loadSummary() {
+  const tbody = document.getElementById('summaryTbody');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Loading...</td></tr>';
+  var data = await api_get_summary();
+  if (!data.success) { tbody.innerHTML='<tr class="empty-row"><td colspan="8">Error</td></tr>'; return; }
+  const rows = data.summary;
+  if (!rows.length) { tbody.innerHTML='<tr class="empty-row"><td colspan="8">No data</td></tr>'; return; }
+  tbody.innerHTML = rows.map((r,i) => `
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td><b>${esc(r.emp_name)}</b></td>
+      <td style="color:var(--muted)">${esc(r.dept||'')}</td>
+      <td class="amount-cell">${fmt(r.total)}</td>
+      <td style="color:#22c55e">${fmt(r.approved)}</td>
+      <td style="color:#eab308">${fmt(r.pending_amt)}</td>
+      <td style="color:#ef4444">${fmt(r.rejected)}</td>
+      <td style="color:var(--muted)">${r.count}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Submit modal ─────────────────────────────────────────────
+var _editExpId       = null;  // null = new, number = edit mode
+var _reapproveMode   = false; // true = this edit is a reapprove-triggered edit
+var _reapproveReason = '';    // reason stored after reapprove modal confirm
+
+function openEditModal(id, fromReapprove) {
+  const exp = allExpenses.find(e => e.id == id);
+  if (!exp) return;
+  _editExpId     = id;
+  _reapproveMode = !!fromReapprove;
+
+  // Reset form first
+  receiptFiles = exp.receipt_files && exp.receipt_files.length ? exp.receipt_files.slice() : [];
+  resetCatDropdown();
+  document.getElementById('expAmount').value = exp.amount || '';
+  document.getElementById('expDesc').value   = exp.description || '';
+
+  // Pre-select categories
+  var cats = (exp.category || '').split(',').map(function(c){ return c.trim(); });
+  var checkboxes = document.querySelectorAll('#catDropdownList input[type=checkbox]');
+  checkboxes.forEach(function(cb) {
+    if (cats.indexOf(cb.value) !== -1) cb.checked = true;
+  });
+  // Handle "Other" custom category
+  var knownCats = Array.from(checkboxes).map(function(cb){ return cb.value; });
+  var customCats = cats.filter(function(c){ return knownCats.indexOf(c) === -1 && c; });
+  if (customCats.length) {
+    var otherCb = document.querySelector('#catDropdownList input[value=Other]');
+    if (otherCb) otherCb.checked = true;
+    var otherInp = document.getElementById('otherCatInput');
+    if (otherInp) { otherInp.value = customCats.join(', '); otherInp.style.display = 'block'; }
+  }
+  updateCatLabel();
+
+  // Show existing receipts in preview grid
+  var grid = document.getElementById('receiptPreviewGrid');
+  if (grid) { renderReceiptPreviews(); }
+  document.getElementById('receiptFileName').textContent = receiptFiles.length ? '📎 ' + receiptFiles.length + ' file(s)' : '';
+  document.getElementById('receiptFile').value = '';
+
+  // Modal title & button — reapprove mode-la different label
+  if (_reapproveMode) {
+    document.querySelector('#submitModal h2').textContent = '✏ Edit & Re-Submit';
+    var submitBtn = document.querySelector('#submitModal .btn-orange');
+    if (submitBtn) submitBtn.textContent = '🔄 Re-Submit';
+    // Show reapprove reason banner inside modal
+    var banner = document.getElementById('reapproveBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'reapproveBanner';
+      banner.style.cssText = 'margin-bottom:14px;padding:10px 14px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.3);border-radius:8px;font-size:13px;color:#fb923c;line-height:1.5';
+      var modalBox = document.querySelector('#submitModal .modal-box');
+      if (modalBox) modalBox.insertBefore(banner, modalBox.querySelector('.form-row'));
+    }
+    banner.style.display = 'block';
+    banner.innerHTML = '🔄 <b>Re-Approve Edit</b><br><span style="color:var(--muted);font-size:12px">Reason: ' + esc(_reapproveReason) + '</span><br>'
+      + '<span style="color:var(--muted);font-size:11px">After saving, the approval pipeline will restart from Stage 1 (Pending).</span>';
+  } else {
+    document.querySelector('#submitModal h2').textContent = 'Edit Expense';
+    var submitBtn = document.querySelector('#submitModal .btn-orange');
+    if (submitBtn) submitBtn.textContent = 'Update';
+    var banner = document.getElementById('reapproveBanner');
+    if (banner) banner.style.display = 'none';
+  }
+
+  var nameRow = document.getElementById('manualNameRow');
+  var deptRow = document.getElementById('manualDeptRow');
+  if (nameRow) nameRow.style.display = 'none';
+  if (deptRow) deptRow.style.display = 'none';
+
+  document.getElementById('submitModal').classList.add('open');
+}
+
+function openSubmitModal() {
+  _editExpId = null;
+  receiptFiles = [];
+  resetCatDropdown();
+  document.getElementById('expAmount').value = '';
+  document.getElementById('expDesc').value   = '';
+  var grid = document.getElementById('receiptPreviewGrid');
+  if (grid) { grid.innerHTML = ''; grid.style.display = 'none'; }
+  document.getElementById('receiptFileName').textContent = '';
+  document.getElementById('receiptFile').value = '';
+  document.querySelector('#submitModal h2').textContent = 'Submit Expense';
+  var submitBtn = document.querySelector('#submitModal .btn-orange');
+  if (submitBtn) submitBtn.textContent = 'Submit';
+  var nameRow = document.getElementById('manualNameRow');
+  var deptRow = document.getElementById('manualDeptRow');
+  if (nameRow) nameRow.style.display = EMP_ID ? 'none' : 'block';
+  if (deptRow) deptRow.style.display = EMP_ID ? 'none' : 'block';
+  document.getElementById('submitModal').classList.add('open');
+}
+function resetCatDropdown() {
+  var list = document.getElementById('catDropdownList');
+  var inp  = document.getElementById('otherCatInput');
+  var lbl  = document.getElementById('catDropdownLabel');
+  var btn  = document.getElementById('catDropdownBtn');
+  if (list) { list.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.checked = false; }); list.style.display = 'none'; list.classList.remove('open'); }
+  if (lbl)  { lbl.textContent = 'Select category'; lbl.style.color = 'var(--muted)'; }
+  if (inp)  { inp.style.display = 'none'; inp.value = ''; }
+  if (btn)  { btn.style.borderColor = 'rgba(255,107,0,0.18)'; }
+}
+function closeSubmitModal() { document.getElementById('submitModal').classList.remove('open'); resetCatDropdown(); }
+
+// ── File handling ─────────────────────────────────────────────
+function handleFileSelect(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  files.forEach(function(file) { processFile(file); });
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadArea').classList.remove('drag');
+  const files = Array.from(e.dataTransfer.files);
+  files.forEach(function(file) { processFile(file); });
+}
+function processFile(file) {
+  if (file.size > 5 * 1024 * 1024) { showToast('File too large (max 5MB): ' + file.name, 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    var b64 = ev.target.result;
+    receiptFiles.push({ name: file.name, b64: b64, type: file.type });
+    renderReceiptPreviews();
+  };
+  reader.readAsDataURL(file);
+}
+function renderReceiptPreviews() {
+  var grid = document.getElementById('receiptPreviewGrid');
+  if (!grid) return;
+  grid.style.display = receiptFiles.length ? 'flex' : 'none';
+  grid.innerHTML = receiptFiles.map(function(f, i) {
+    var thumb = f.type.startsWith('image/')
+      ? '<img src="'+f.b64+'" style="width:70px;height:70px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,107,0,0.3)">'
+      : '<div style="width:70px;height:70px;display:flex;align-items:center;justify-content:center;background:#181c26;border-radius:6px;border:1px solid rgba(255,107,0,0.3);font-size:22px">📄</div>';
+    return '<div style="position:relative">'
+      + thumb
+      + '<button onclick="removeReceipt('+i+')" style="position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;line-height:1;padding:0">✕</button>'
+      + '<div style="font-size:10px;color:var(--muted);text-align:center;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f.name+'</div>'
+      + '</div>';
+  }).join('');
+  document.getElementById('receiptFileName').textContent = receiptFiles.length ? '📎 ' + receiptFiles.length + ' file(s) selected' : '';
+}
+function removeReceipt(idx) {
+  receiptFiles.splice(idx, 1);
+  renderReceiptPreviews();
+}
+
+// ── Submit expense ────────────────────────────────────────────
+function toggleCatDropdown() {
+  var list = document.getElementById('catDropdownList');
+  var btn  = document.getElementById('catDropdownBtn');
+  var isOpen = list.style.display !== 'none';
+  list.style.display = isOpen ? 'none' : 'block';
+  list.classList.toggle('open', !isOpen);
+  btn.style.borderColor = isOpen ? 'rgba(255,107,0,0.18)' : 'var(--orange)';
+}
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('catDropdownWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('catDropdownList').style.display = 'none';
+    document.getElementById('catDropdownList').classList.remove('open');
+    document.getElementById('catDropdownBtn').style.borderColor = 'rgba(255,107,0,0.18)';
+  }
+});
+function updateCatLabel() {
+  var checks = document.querySelectorAll('#catDropdownList input[type=checkbox]:checked');
+  var vals = Array.from(checks).map(function(c){ return c.value; }).filter(function(v){ return v !== 'Other'; });
+  var otherChecked = Array.from(checks).some(function(c){ return c.value === 'Other'; });
+  var otherVal = document.getElementById('otherCatInput').value.trim();
+  if (otherChecked && otherVal) vals.push(otherVal);
+  var label = document.getElementById('catDropdownLabel');
+  if (vals.length === 0 && !otherChecked) {
+    label.textContent = 'Select category';
+    label.style.color = 'var(--muted)';
+  } else {
+    var display = vals.length > 0 ? vals.join(', ') : (otherChecked ? 'Other' : 'Select category');
+    label.textContent = display;
+    label.style.color = 'var(--text)';
+  }
+}
+function toggleOtherInput() {
+  var otherChecked = document.querySelector('#catDropdownList input[value=Other]').checked;
+  var inp = document.getElementById('otherCatInput');
+  inp.style.display = otherChecked ? 'block' : 'none';
+  if (otherChecked) {
+    var list = document.getElementById('catDropdownList');
+    var btn  = document.getElementById('catDropdownBtn');
+    if (list) { list.style.display = 'none'; list.classList.remove('open'); }
+    if (btn)  { btn.style.borderColor = 'rgba(255,107,0,0.18)'; }
+    setTimeout(function(){ inp.focus(); }, 50);
+  } else {
+    inp.value = '';
+    updateCatLabel();
+  }
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var otherInp = document.getElementById('otherCatInput');
+  if (otherInp) otherInp.addEventListener('input', updateCatLabel);
+});
+function getSelectedCategories() {
+  var checks = document.querySelectorAll('#catDropdownList input[type=checkbox]:checked');
+  var vals = Array.from(checks).map(function(c){ return c.value; }).filter(function(v){ return v !== 'Other'; });
+  var otherChecked = Array.from(checks).some(function(c){ return c.value === 'Other'; });
+  if (otherChecked) {
+    var otherVal = document.getElementById('otherCatInput').value.trim();
+    if (otherVal) vals.push(otherVal);
+  }
+  return vals;
+}
+
+async function submitExpense() {
+  var cats = getSelectedCategories();
+  var category = cats.join(', ');
+  const amount = parseFloat(document.getElementById('expAmount').value);
+  const desc   = document.getElementById('expDesc').value.trim();
+
+  var ni = document.getElementById('manualName');
+  var di = document.getElementById('manualDept');
+  var submitName  = EMP_NAME || (ni ? ni.value.trim() : '');
+  var submitDept  = EMP_DEPT || (di ? di.value.trim() : '');
+  var submitEmpId = EMP_ID  || submitName || 'guest';
+
+  if (!category)              { showToast('Please select a category', 'error'); return; }
+  if (!amount || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+
+  var submitBtn = document.querySelector('#submitModal .btn-orange');
+  if (submitBtn) { submitBtn.textContent = _editExpId ? (_reapproveMode ? 'Re-Submitting...' : 'Updating...') : 'Submitting...'; submitBtn.disabled = true; }
+
+  try {
+    if (_editExpId) {
+      // ── EDIT / REAPPROVE MODE: PUT ──
+      var payload = {
+        category, amount, description: desc,
+        receipt_b64:   receiptFiles.length ? receiptFiles[0].b64 : '',
+        receipt_files: receiptFiles.map(function(f){ return {name:f.name, b64:f.b64, type:f.type}; })
+      };
+
+      // If reapprove mode — reset pipeline to pending with reason
+      if (_reapproveMode) {
+        payload.action           = 'reapprove_reset';
+        payload.reapprove_reason = _reapproveReason;
+        payload.reapproved_by    = EMP_NAME || CALLER;
+        payload.caller           = CALLER;
+      }
+
+      const data = await api_put_expense(_editExpId, payload);
+      if (data.success) {
+        closeSubmitModal();
+        _reapproveMode   = false;
+        _reapproveReason = '';
+        showToast(_reapproveMode ? '🔄 Re-submitted for approval ✓' : 'Expense updated! ✓', 'success');
+        await loadExpenses(); await loadStats();
+      } else { showToast(data.error || 'Update failed', 'error'); }
+    } else {
+      // ── NEW SUBMIT: POST ──
+      if (!submitName) { showToast('Please enter your name', 'error'); return; }
+      const payload = { emp_id: submitEmpId, emp_name: submitName, dept: submitDept, category, amount, description: desc, receipt_b64: receiptFiles.length ? receiptFiles[0].b64 : '', receipt_files: receiptFiles.map(function(f){ return {name:f.name, b64:f.b64, type:f.type}; }) };
+      const data = await api_post_expense(payload);
+      if (data.success) {
+        closeSubmitModal();
+        showToast('Expense submitted! ✓', 'success');
+        await loadExpenses(); await loadStats();
+      } else { showToast(data.error || 'Submit failed', 'error'); }
+    }
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    if (submitBtn) { submitBtn.textContent = _editExpId ? 'Update' : 'Submit'; submitBtn.disabled = false; }
+  }
+}
+
+// ── Re-Approve triggered FROM Review modal ─────────────────────
+function openReapproveFromReview() {
+  closeReviewModal();
+  openReapprove(currentExpId);
+}
+
+// ── Reapprove flow ────────────────────────────────────────────
+// Admin / HR clicks "Re-Approve" → reason modal → confirm → openEditModal(id, true)
+function openReapprove(id) {
+  var exp = allExpenses.find(function(e){ return e.id == id; });
+  if (!exp) return;
+  // Show the reapprove reason modal
+  document.getElementById('reapproveExpName').textContent = exp.emp_name || '';
+  document.getElementById('reapproveExpAmt').textContent  = fmt(exp.amount);
+  document.getElementById('reapproveExpCat').textContent  = exp.category || '';
+  document.getElementById('reapproveReasonInput').value   = '';
+  document.getElementById('reapproveExpId').value         = id;
+  document.getElementById('reapproveModal').classList.add('open');
+}
+
+function closeReapproveModal() {
+  document.getElementById('reapproveModal').classList.remove('open');
+}
+
+function confirmReapprove() {
+  var reason = document.getElementById('reapproveReasonInput').value.trim();
+  var id     = parseInt(document.getElementById('reapproveExpId').value);
+  if (!reason) {
+    document.getElementById('reapproveReasonInput').style.borderColor = '#ef4444';
+    document.getElementById('reapproveReasonInput').focus();
+    return;
+  }
+  _reapproveReason = reason;
+  closeReapproveModal();
+  // Open edit modal in reapprove mode — only this person sees Edit
+  openEditModal(id, true);
+}
+
+// ── Review modal ──────────────────────────────────────────────
+function openReview(id, action) {
+  currentExpId  = id;
+  currentAction = action || 'sm_pm_approve';
+  const exp = allExpenses.find(e => e.id === id || e.id == id);
+  if (!exp) return;
+
+  var stage = exp.approval_stage || 'pending';
+
+  // Build approval pipeline progress bar
+  var stages = [
+    { key: 'pending',           label: 'Submitted' },
+    { key: 'sm_pm_approved',    label: 'SM/PM' },
+    { key: 'hr_approved',       label: 'HR' },
+    { key: 'accounts_approved', label: 'Accounts' },
+    { key: 'approved',          label: 'Final' }
+  ];
+  var stageOrder = stages.map(function(s){ return s.key; });
+  var curIdx     = stageOrder.indexOf(stage);
+  var pipelineHTML = '<div style="display:flex;align-items:center;gap:0;margin-bottom:16px;overflow-x:auto">'
+    + stages.map(function(s, i) {
+        var done    = i < curIdx || stage === 'approved';
+        var current = i === curIdx;
+        var col     = done ? '#22c55e' : (current ? '#f97316' : '#444');
+        var dot     = '<div style="width:10px;height:10px;border-radius:50%;background:'+col+';flex-shrink:0"></div>';
+        var line    = i < stages.length-1 ? '<div style="flex:1;height:2px;min-width:18px;background:'+(done?'#22c55e':'#333')+'"></div>' : '';
+        return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:54px">'
+          + dot
+          + '<span style="font-size:9px;color:'+col+';letter-spacing:.5px;white-space:nowrap">'+s.label+'</span>'
+          + '</div>'
+          + (i < stages.length-1 ? '<div style="flex:1;height:2px;background:'+(i < curIdx ? '#22c55e':'#333')+';min-width:16px;margin-bottom:12px"></div>' : '');
+      }).join('')
+    + '</div>';
+
+  document.getElementById('reviewTitle').textContent = reviewActionLabel(currentAction) + ' — ' + (exp.emp_name || '');
+  document.getElementById('reviewDetails').innerHTML = pipelineHTML
+    + '<b>Category:</b> ' + esc(exp.category) + '<br>'
+    + '<b>Amount:</b> <span style="color:#22c55e">' + fmt(exp.amount) + '</span><br>'
+    + '<b>Description:</b> ' + esc(exp.description||'—') + '<br>'
+    + '<b>Submitted:</b> ' + (exp.submitted_at||'').slice(0,16) + '<br>'
+    + (exp.sm_pm_approved_by ? '<b>SM/PM:</b> <span style="color:#22c55e">✓ ' + esc(exp.sm_pm_approved_by) + '</span><br>' : '')
+    + (exp.hr_approved_by    ? '<b>HR:</b> <span style="color:#22c55e">✓ ' + esc(exp.hr_approved_by) + '</span><br>' : '')
+    + (exp.accounts_approved_by ? '<b>Accounts:</b> <span style="color:#22c55e">✓ ' + esc(exp.accounts_approved_by) + '</span><br>' : '');
+
+  // Approve button label
+  var apvBtn = document.querySelector('#reviewModal .act-btn.approve');
+  if (apvBtn) apvBtn.textContent = currentAction === 'final_approve' ? '✓ Final Approve' : '✓ Approve';
+
+  // Re-Approve button — show for HR/Admin when reviewing sm_pm_approved stage (before HR approve)
+  var reapproveBtn = document.getElementById('reviewReapproveBtn');
+  if (reapproveBtn) {
+    var showReapprove = (IS_ADMIN || IS_HR) && (currentAction === 'hr_approve' || currentAction === 'sm_pm_approve' || currentAction === 'accounts_approve');
+    reapproveBtn.style.display = showReapprove ? 'inline-block' : 'none';
+  }
+
+  document.getElementById('reviewNote').value = '';
+  const rw   = document.getElementById('reviewReceiptWrap');
+  const grid = document.getElementById('reviewReceiptGrid');
+
+  var files = [];
+  if (exp.receipt_files && exp.receipt_files.length) {
+    files = exp.receipt_files;
+  } else if (exp.receipt_url) {
+    files = [{ name: 'Receipt', b64: exp.receipt_url, type: exp.receipt_url.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg' }];
+  }
+
+  if (files.length) {
+    grid.innerHTML = files.map(function(f) {
+      var b64  = f.b64 || f;
+      var name = f.name || 'Receipt';
+      var type = f.type || (b64.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg');
+      if (type.startsWith('image/') || b64.startsWith('data:image')) {
+        return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'
+          + '<img src="'+b64+'" style="width:160px;height:140px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,107,0,0.3);cursor:pointer" onclick="window.open(\''+b64+'\',\'_blank\')" title="Click to open full size">'
+          + '<span style="font-size:10px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</span>'
+          + '</div>';
+      } else {
+        return '<div style="width:160px;height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:#1e2229;border-radius:8px;border:1px solid rgba(255,107,0,0.2)">'
+          + '<span style="font-size:32px">📄</span>'
+          + '<span style="font-size:10px;color:var(--muted)">'+name+'</span>'
+          + '</div>';
+      }
+    }).join('');
+    rw.style.display = 'block';
+  } else {
+    rw.style.display = 'none';
+  }
+  document.getElementById('reviewModal').classList.add('open');
+}
+
+function closeReviewModal() { document.getElementById('reviewModal').classList.remove('open'); }
+
+async function doReview(verdict) {
+  // verdict = 'approve' or 'reject'
+  if (!currentExpId) return;
+  const note = document.getElementById('reviewNote').value.trim();
+
+  var payload = {
+    action:      verdict === 'approve' ? currentAction : 'reject',
+    review_note: note,
+    reviewed_by: EMP_NAME || CALLER,
+    caller:      CALLER
+  };
+
+  const data = await api_put_expense(currentExpId, payload);
+  if (data.success) {
+    closeReviewModal();
+    var msg = verdict === 'approve'
+      ? (currentAction === 'final_approve' ? '✓ Expense Finally Approved!' : '✓ Approved — forwarded to next stage')
+      : '✗ Expense Rejected';
+    showToast(msg, verdict === 'approve' ? 'success' : 'error');
+    loadExpenses(); loadStats();
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────
+async function deleteExpense(id) {
+  if (!confirm('Delete this expense?')) return;
+  const data = await api_delete_expense(id);
+  if (data.success) { showToast('Deleted', 'success'); loadExpenses(); loadStats(); }
+  else showToast('Failed', 'error');
+}
+
+// ── View receipt ──────────────────────────────────────────────
+function viewReceipt(id) {
+  const exp = allExpenses.find(e => e.id == id);
+  if (!exp) return;
+
+  // Collect all files — prefer receipt_files array, fallback to single receipt_url
+  var files = [];
+  if (exp.receipt_files && exp.receipt_files.length) {
+    files = exp.receipt_files;
+  } else if (exp.receipt_url) {
+    files = [{ name: 'Receipt', b64: exp.receipt_url, type: exp.receipt_url.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg' }];
+  }
+  if (!files.length) return;
+
+  var content = document.getElementById('receiptViewContent');
+  content.innerHTML = files.map(function(f, i) {
+    var b64 = f.b64 || f;
+    var type = f.type || (b64.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg');
+    var name = f.name || ('File ' + (i+1));
+    if (type.startsWith('image/') || b64.startsWith('data:image')) {
+      return '<div style="width:220px;height:220px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px">'
+        + '<img src="'+b64+'" style="width:220px;height:200px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,107,0,0.3);cursor:pointer;display:block" onclick="window.open(\''+b64+'\',\'_blank\')" title="Click to open full size">'
+        + '<p style="font-size:11px;color:var(--muted);text-align:center;width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</p></div>';
+    } else if (type === 'application/pdf' || b64.startsWith('data:application/pdf')) {
+      return '<div style="width:220px;height:220px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px">'
+        + '<embed src="'+b64+'" width="220" height="200" type="application/pdf" style="border-radius:8px;border:1px solid rgba(255,107,0,0.3)">'
+        + '<p style="font-size:11px;color:var(--muted);text-align:center">'+name+'</p></div>';
+    } else {
+      return '<div style="width:220px;height:220px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#1e2229;border-radius:8px;border:1px solid rgba(255,107,0,0.2)">'
+        + '<div style="font-size:40px">📄</div>'
+        + '<p style="color:var(--muted);font-size:12px;text-align:center">'+name+'</p>'
+        + '<a href="'+b64+'" download="'+name+'" style="color:var(--orange);font-size:13px">⬇ Download</a></div>';
+    }
+  }).join('');
+
+  var modal = document.getElementById('receiptViewModal');
+  modal.style.display = 'flex';
+}
+function closeReceiptModal() {
+  document.getElementById('receiptViewModal').style.display = 'none';
+  document.getElementById('receiptViewContent').innerHTML = '';
+}
+
+// ── Row expand / collapse ─────────────────────────────────────
+function toggleExpand(id) {
+  var mainRow   = document.getElementById('erow-' + id);
+  var expandRow = document.getElementById('eexpand-' + id);
+  if (!mainRow || !expandRow) return;
+  var isOpen = expandRow.classList.contains('open');
+  document.querySelectorAll('.exp-expand-row.open').forEach(function(r){ r.classList.remove('open'); });
+  document.querySelectorAll('.exp-main-row.expanded').forEach(function(r){ r.classList.remove('expanded'); });
+  if (!isOpen) {
+    expandRow.classList.add('open');
+    mainRow.classList.add('expanded');
+  }
+}
+
+// ── Custom Month Picker ──────────────────────────────────────
+var _pickerYear = new Date().getFullYear();
+var _pickerSelected = ''; // 'YYYY-MM'
+var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function toggleMonthPicker() {
+  var panel = document.getElementById('monthPickerPanel');
+  var btn   = document.getElementById('monthPickerBtn');
+  var isOpen = panel.style.display === 'block';
+  panel.style.display = isOpen ? 'none' : 'block';
+  btn.style.borderColor = isOpen ? 'rgba(255,107,0,0.18)' : 'var(--orange)';
+  if (!isOpen) renderPickerGrid();
+}
+
+function changePickerYear(dir) {
+  _pickerYear += dir;
+  renderPickerGrid();
+}
+
+function renderPickerGrid() {
+  document.getElementById('monthPickerYear').textContent = _pickerYear;
+  var grid = document.getElementById('monthPickerGrid');
+  grid.innerHTML = MONTH_NAMES.map(function(name, i) {
+    var val = _pickerYear + '-' + String(i+1).padStart(2,'0');
+    var isSelected = val === _pickerSelected;
+    return '<button onclick="selectMonth(\'' + val + '\')" style="'
+      + 'padding:7px 4px;border-radius:7px;font-family:\'Rajdhani\',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;'
+      + (isSelected
+          ? 'background:var(--orange);color:#000;border:1px solid var(--orange);'
+          : 'background:transparent;color:var(--text);border:1px solid rgba(255,107,0,0.15);')
+      + '">' + name + '</button>';
+  }).join('');
+}
+
+function selectMonth(val) {
+  _pickerSelected = val;
+  document.getElementById('filterMonth').value = val;
+  // Format label: "Apr 2026"
+  var parts = val.split('-');
+  var lbl = MONTH_NAMES[parseInt(parts[1])-1] + ' ' + parts[0];
+  document.getElementById('monthPickerLabel').textContent = '📅 ' + lbl;
+  document.getElementById('monthPickerLabel').style.color = 'var(--text)';
+  document.getElementById('monthPickerPanel').style.display = 'none';
+  document.getElementById('monthPickerBtn').style.borderColor = 'rgba(255,107,0,0.18)';
+  loadExpenses();
+}
+
+function clearMonthPicker() {
+  _pickerSelected = '';
+  document.getElementById('filterMonth').value = '';
+  document.getElementById('monthPickerLabel').textContent = '📅 Filter by month';
+  document.getElementById('monthPickerLabel').style.color = 'var(--muted)';
+  document.getElementById('monthPickerPanel').style.display = 'none';
+  document.getElementById('monthPickerBtn').style.borderColor = 'rgba(255,107,0,0.18)';
+  renderPickerGrid();
+  loadExpenses();
+}
+
+// Close picker on outside click
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('monthPickerWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    var panel = document.getElementById('monthPickerPanel');
+    var btn   = document.getElementById('monthPickerBtn');
+    if (panel) panel.style.display = 'none';
+    if (btn && !_pickerSelected) btn.style.borderColor = 'rgba(255,107,0,0.18)';
+  }
+});
+
+// ── Helpers ───────────────────────────────────────────────────
+function clearFilters() {
+  document.getElementById('filterCategory').value = '';
+  document.getElementById('filterSearch').value   = '';
+  clearMonthPicker();
+}
+
+function esc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'show ' + type;
+  setTimeout(() => t.className = '', 3000);
+}
+
+// Close modals on overlay click
+document.getElementById('submitModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeSubmitModal(); });
+document.getElementById('reviewModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeReviewModal(); });
+document.addEventListener('DOMContentLoaded', function() {
+  var rvm = document.getElementById('receiptViewModal');
+  if (rvm) rvm.addEventListener('click', function(e) { if (e.target===e.currentTarget) closeReceiptModal(); });
+  var rpm = document.getElementById('reapproveModal');
+  if (rpm) rpm.addEventListener('click', function(e) { if (e.target===e.currentTarget) closeReapproveModal(); });
+});
+</script>
+<!-- Admin Right-Click Context Menu -->
+<div id="ctxMenu">
+  <button onclick="ctxDeleteExpense()">🗑 Delete Expense</button>
+</div>
+<script>
+var _ctxExpId = null;
+
+// Attach contextmenu to tbody rows — Admin only
+document.addEventListener('contextmenu', function(e) {
+  document.getElementById('ctxMenu').style.display = 'none';
+  if (!IS_ADMIN) return;
+  var row = e.target.closest('tr.exp-main-row');
+  if (!row) return;
+  e.preventDefault();
+  var id = row.id.replace('erow-','');
+  _ctxExpId = id;
+  var menu = document.getElementById('ctxMenu');
+  menu.style.display = 'block';
+  var x = e.clientX, y = e.clientY;
+  // Keep menu inside viewport
+  if (x + menu.offsetWidth > window.innerWidth) x = window.innerWidth - menu.offsetWidth - 8;
+  if (y + menu.offsetHeight > window.innerHeight) y = window.innerHeight - menu.offsetHeight - 8;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+});
+
+document.addEventListener('click', function() {
+  document.getElementById('ctxMenu').style.display = 'none';
+});
+document.addEventListener('scroll', function() {
+  document.getElementById('ctxMenu').style.display = 'none';
+}, true);
+
+function ctxDeleteExpense() {
+  document.getElementById('ctxMenu').style.display = 'none';
+  if (_ctxExpId) deleteExpense(_ctxExpId);
+}
+</script>
+
+<!-- Receipt Viewer Modal -->
+<div id="receiptViewModal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;padding:20px">
+  <div style="background:#181c26;border:1px solid rgba(255,107,0,0.3);border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;padding:24px;position:relative">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="color:var(--orange);font-family:Rajdhani,sans-serif;font-size:18px;letter-spacing:1px;text-transform:uppercase">📎 Receipt / Bill</h3>
+      <button onclick="closeReceiptModal()" style="background:transparent;border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:14px">✕ Close</button>
+    </div>
+    <div id="receiptViewContent" style="display:flex;flex-wrap:wrap;gap:16px;justify-content:flex-start;align-items:flex-start"></div>
+    <div id="receiptViewNav" style="display:flex;justify-content:center;gap:8px;margin-top:16px;flex-wrap:wrap"></div>
+  </div>
+</div>
+
+<!-- Reapprove Reason Modal -->
+<div class="modal-overlay" id="reapproveModal">
+  <div class="modal-box" style="max-width:460px">
+    <h2 style="color:#fb923c">🔄 Re-Approve Expense</h2>
+    <input type="hidden" id="reapproveExpId">
+    <div style="margin-bottom:16px;padding:12px 14px;background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:8px;font-size:13px;line-height:1.7">
+      <div><span style="color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase">Employee</span><br><b id="reapproveExpName" style="font-size:15px"></b></div>
+      <div style="margin-top:8px;display:flex;gap:24px">
+        <div><span style="color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase">Amount</span><br><b id="reapproveExpAmt" style="color:#22c55e"></b></div>
+        <div><span style="color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase">Category</span><br><b id="reapproveExpCat" style="color:#fb923c"></b></div>
+      </div>
+    </div>
+    <div style="margin-bottom:6px;padding:10px 14px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.2);border-radius:8px;font-size:12px;color:#eab308">
+      ⚠️ Re-Approving this expense will reset the approval pipeline back to Stage 1 (Pending). The employee will be able to edit and re-submit.
+    </div>
+    <div class="form-row" style="margin-top:14px">
+      <label>Reason for Re-Approval *</label>
+      <textarea id="reapproveReasonInput" placeholder="Enter reason for re-approval... (e.g. Wrong amount, Missing receipt, Category mismatch)" style="min-height:90px" oninput="this.style.borderColor='var(--border)'"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeReapproveModal()">Cancel</button>
+      <button class="btn-orange" onclick="confirmReapprove()" style="background:#fb923c">🔄 Confirm & Edit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Approval Status Timeline Modal -->
+<div id="approvalStatusModal">
+  <div class="apv-box">
+    <div class="apv-header">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <div>
+          <h2>⚡ Expense Approval</h2>
+          <div class="apv-sub" id="apvSub"></div>
+        </div>
+        <button class="apv-close" onclick="closeApprovalStatus()">✕</button>
+      </div>
+    </div>
+    <div class="apv-steps" id="apvSteps"></div>
+    <div id="apvStatusBox"></div>
+    <div class="apv-trail" id="apvTrailSection" style="display:none">
+      <div class="apv-trail-header">
+        <span class="apv-trail-label">Approval Trail</span>
+        <div class="apv-trail-counts" id="apvTrailCounts"></div>
+      </div>
+      <div id="apvTrailItems"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openApprovalStatus(id) {
+  var exp = allExpenses.find(function(e){ return e.id == id; });
+  if (!exp) return;
+
+  var stage  = exp.approval_stage || 'pending';
+  var status = exp.status || 'pending';
+
+  // Sub-header
+  document.getElementById('apvSub').textContent =
+    (exp.emp_name || '') + ' · ' + ((exp.submitted_at||'').slice(0,10)) + ' · Net: ' + fmt(exp.amount);
+
+  // ── Pipeline steps definition ──
+  var STEPS = [
+    {
+      key:   'submitted',
+      label: 'Submitted',
+      desc:  'Expense entry created and submitted for review.',
+      doneDesc: 'Expense submitted successfully.',
+      icon:  '📝',
+      by:    null
+    },
+    {
+      key:   'sm_pm_approved',
+      label: 'SM / PM Approval',
+      desc:  'Waiting for Sales Manager or Project Manager sign-off.',
+      doneDesc: 'Approved by SM/PM.',
+      icon:  '👤',
+      by:    exp.sm_pm_approved_by || null
+    },
+    {
+      key:   'hr_approved',
+      label: 'HR Department',
+      desc:  'Waiting for HR review and approval.',
+      doneDesc: 'Approved by HR.',
+      icon:  '🏢',
+      by:    exp.hr_approved_by || null
+    },
+    {
+      key:   'accounts_approved',
+      label: 'Accounts Department',
+      desc:  'Waiting for Accounts team to verify and approve.',
+      doneDesc: 'Approved by Accounts.',
+      icon:  '💼',
+      by:    exp.accounts_approved_by || null
+    },
+    {
+      key:   'approved',
+      label: 'Management Final Approval',
+      desc:  'Account Dept approved. Waiting for Management final sign-off.',
+      doneDesc: 'Final approval granted. Expense fully approved.',
+      icon:  '🏆',
+      by:    exp.final_approved_by || null
+    }
+  ];
+
+  // Stage order map for comparison
+  var ORDER = { submitted:0, sm_pm_approved:1, hr_approved:2, accounts_approved:3, approved:4, rejected:99 };
+
+  // Determine current index
+  var curKey = (status === 'approved') ? 'approved' : (status === 'rejected' ? 'rejected' : stage);
+  var curIdx = ORDER[curKey] !== undefined ? ORDER[curKey] : 0;
+
+  // Build pipeline steps HTML
+  var stepsHTML = '';
+  STEPS.forEach(function(step, i) {
+    var stepOrder = ORDER[step.key] !== undefined ? ORDER[step.key] : i;
+
+    var isDone    = (status === 'approved') || (stepOrder < curIdx) || (step.key === 'submitted') || (step.key === stage && stage !== 'pending' && stage !== 'rejected');
+    var isActive  = !isDone && (stepOrder === curIdx) && status !== 'rejected';
+    var isRejected = status === 'rejected' && step.key !== 'submitted' && stepOrder >= curIdx;
+
+    var iconState  = isDone ? 'done' : (isActive ? 'active' : 'waiting');
+    var titleState = isDone ? 'done' : (isActive ? 'active' : 'waiting');
+    var lineState  = isDone ? 'done' : 'waiting';
+
+    var iconContent = isDone ? '✓' : (isActive ? step.icon : (isRejected ? '✗' : step.icon));
+    var badgeLabel, badgeClass;
+    if (status === 'rejected' && stepOrder >= curIdx && step.key !== 'submitted') {
+      badgeLabel = '✗ Rejected'; badgeClass = 'rejected';
+    } else if (isDone) {
+      badgeLabel = step.by ? ('✓ Approved by ' + step.by) : '✓ Complete';
+      badgeClass = 'done';
+    } else if (isActive) {
+      badgeLabel = '⏳ Awaiting ' + step.label.split(' ')[0];
+      badgeClass = 'active';
+    } else {
+      badgeLabel = '— Not Started';
+      badgeClass = 'waiting';
+    }
+
+    var isLast = i === STEPS.length - 1;
+    stepsHTML += '<div class="apv-step">'
+      + '<div class="apv-step-left">'
+      + '<div class="apv-step-icon '+iconState+'">'+iconContent+'</div>'
+      + (!isLast ? '<div class="apv-step-line '+lineState+'" style="min-height:28px"></div>' : '')
+      + '</div>'
+      + '<div class="apv-step-body">'
+      + '<div class="apv-step-title '+titleState+'">'+step.label+'</div>'
+      + '<div class="apv-step-desc">'+(isDone && step.by ? 'Approved by <b style="color:var(--text)">'+esc(step.by)+'</b>' : (isDone ? step.doneDesc : step.desc))+'</div>'
+      + '<span class="apv-step-badge '+badgeClass+'">'+badgeLabel+'</span>'
+      + '</div></div>';
+  });
+  document.getElementById('apvSteps').innerHTML = stepsHTML;
+
+  // ── Current status box ──
+  var boxHTML = '';
+  if (status === 'approved') {
+    boxHTML = '<div class="apv-status-box approved-box">'
+      + '<div class="apv-emoji">🎉</div>'
+      + '<div class="apv-status-title" style="color:#22c55e">Fully Approved</div>'
+      + '<div class="apv-status-desc">This expense has been approved at all stages and is ready for processing.</div>'
+      + '</div>';
+  } else if (status === 'rejected') {
+    var rejNote = exp.review_note || exp.reject_reason || '';
+    boxHTML = '<div class="apv-status-box rejected-box">'
+      + '<div class="apv-emoji">❌</div>'
+      + '<div class="apv-status-title" style="color:#ef4444">Expense Rejected</div>'
+      + '<div class="apv-status-desc">'+(rejNote ? 'Reason: '+esc(rejNote) : 'This expense was rejected during review.')+'</div>'
+      + '</div>';
+  } else {
+    // Find next step label
+    var nextStep = STEPS.find(function(s){ return (ORDER[s.key]||0) >= curIdx && s.key !== 'submitted' && !((status==='approved')||(ORDER[s.key]||0) < curIdx); });
+    var waitLabel = nextStep ? ('Waiting for ' + nextStep.label) : 'In Review';
+    var waitDesc  = nextStep ? nextStep.desc : 'This expense is currently under review.';
+    boxHTML = '<div class="apv-status-box pending-box">'
+      + '<div class="apv-emoji">⏳</div>'
+      + '<div class="apv-status-title" style="color:#eab308">'+waitLabel+'</div>'
+      + '<div class="apv-status-desc">'+waitDesc+'</div>'
+      + '</div>';
+  }
+  document.getElementById('apvStatusBox').innerHTML = boxHTML;
+
+  // ── Approval Trail ──
+  var trail = [];
+  if (exp.sm_pm_approved_by)    trail.push({ action: 'SM/PM Approved',    by: exp.sm_pm_approved_by,    color: '#22c55e', icon: '👤' });
+  if (exp.hr_approved_by)       trail.push({ action: 'HR Approved',       by: exp.hr_approved_by,       color: '#22c55e', icon: '🏢' });
+  if (exp.accounts_approved_by) trail.push({ action: 'Accounts Approved', by: exp.accounts_approved_by, color: '#22c55e', icon: '💼' });
+  if (exp.final_approved_by)    trail.push({ action: 'Final Approved',    by: exp.final_approved_by,    color: '#22c55e', icon: '✅' });
+  if (exp.rejected_by || (status==='rejected' && exp.reviewed_by)) {
+    trail.push({ action: 'Rejected', by: exp.rejected_by||exp.reviewed_by||'', color: '#ef4444', icon: '❌' });
+  }
+  // Count badges
+  var acctCount = trail.filter(function(t){ return t.action.toLowerCase().includes('account') || t.action.toLowerCase().includes('hr') || t.action.toLowerCase().includes('sm'); }).length;
+  var mgmtCount = trail.filter(function(t){ return t.action.toLowerCase().includes('final') || t.action.toLowerCase().includes('mgmt'); }).length;
+
+  var trailSection = document.getElementById('apvTrailSection');
+  if (trail.length) {
+    trailSection.style.display = 'block';
+    document.getElementById('apvTrailCounts').innerHTML =
+      '<span class="apv-trail-count" style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.25)">👥 Acct +'+acctCount+'</span>'
+      + '<span class="apv-trail-count" style="background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">⚡ Mgmt +'+(mgmtCount||0)+'</span>';
+    document.getElementById('apvTrailItems').innerHTML = trail.map(function(t, i){
+      return '<div class="apv-trail-item">'
+        + '<div class="apv-trail-avatar">'+t.icon+'</div>'
+        + '<div class="apv-trail-text">'
+        + '<div class="apv-trail-action" style="color:'+t.color+'">'+t.action+'</div>'
+        + '<div class="apv-trail-meta">by <b style="color:var(--text)">'+esc(t.by)+'</b>'+(exp.submitted_at ? ' · '+((exp.submitted_at||'').slice(0,16).replace('T',' ')) : '')+'</div>'
+        + '</div>'
+        + '<span class="apv-trail-num">#'+(i+1)+'</span>'
+        + '</div>';
+    }).join('');
+  } else {
+    trailSection.style.display = 'none';
+  }
+
+  document.getElementById('approvalStatusModal').classList.add('open');
+}
+
+function closeApprovalStatus() {
+  document.getElementById('approvalStatusModal').classList.remove('open');
+}
+
+document.getElementById('approvalStatusModal').addEventListener('click', function(e) {
+  if (e.target === e.currentTarget) closeApprovalStatus();
+});
+</script>
+
+</body>
+</html>
