@@ -3803,11 +3803,12 @@ def guest_send_credentials():
         if not email:
             return jsonify({"success": False, "error": "Email address is required."}), 400
 
-        # ── HOSTINGER SMTP CONFIG (from environment via security.py) ──
+        # ── GUEST SMTP — claude.ai@miim.co.in ──
+        import os as _guest_os
         SMTP_HOST = 'smtp.hostinger.com'
         SMTP_PORT = 465
-        SMTP_USER = _CHAT_SMTP_USER
-        SMTP_PASS = _CHAT_SMTP_PASS
+        SMTP_USER = _guest_os.environ.get('MIIM_GUEST_SMTP_USER', _CHAT_SMTP_USER)
+        SMTP_PASS = _guest_os.environ.get('MIIM_GUEST_SMTP_PASS', _CHAT_SMTP_PASS)
 
         send_opt = data.get('send_opt', 1)
         is_temp = (send_opt == 1)
