@@ -8113,14 +8113,25 @@ function sendPasswordToEmployee() {
   })
   .then(function(r){ return r.json(); })
   .then(function(data){
-    sendBtn.innerHTML = '✅ Password Saved!';
-    showToast('✅ Password copied! Share it with ' + (emp ? emp.username : 'employee') + ' manually.');
-    setTimeout(function(){ closeResetPasswordPanel(); }, 2000);
+    if (data.success) {
+      sendBtn.innerHTML = '✅ Password Saved!';
+      showToast('✅ Password sent to ' + (emp ? emp.company_email || emp.username : 'employee') + ' successfully.');
+      setTimeout(function(){ closeResetPasswordPanel(); }, 2000);
+    } else {
+      // Email sending failed — show actual error to admin
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = '📧 Send to Employee';
+      var errMsg = data.error || 'Email sending failed';
+      showToast('⚠️ Email not sent: ' + errMsg, 'error');
+      console.error('[send-password error]', errMsg);
+    }
   })
-  .catch(function(){
-    sendBtn.innerHTML = '✅ Password Copied!';
-    showToast('✅ Password copied to clipboard! Share manually with the employee.');
-    setTimeout(function(){ closeResetPasswordPanel(); }, 2000);
+  .catch(function(err){
+    // Network/server error
+    sendBtn.disabled = false;
+    sendBtn.innerHTML = '📧 Send to Employee';
+    showToast('⚠️ Server error. Password copied to clipboard — share manually with employee.', 'error');
+    console.error('[send-password network error]', err);
   });
 }
 

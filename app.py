@@ -2206,19 +2206,27 @@ def send_password_email(emp_id):
             "email": email
         })
 
-    except smtplib.SMTPAuthenticationError:
+    except smtplib.SMTPAuthenticationError as ex:
+        import traceback
+        traceback.print_exc()
+        print(f"[ERROR send_password_email] SMTPAuthenticationError: {ex}")
         return jsonify({
             "success": False,
-            "error": "SMTP Authentication failed. Check your Hostinger email and password."
+            "error": "SMTP Authentication failed. Check SMTP_USER and SMTP_PASS environment variables."
         }), 500
     except smtplib.SMTPException as smtp_err:
+        import traceback
+        traceback.print_exc()
+        print(f"[ERROR send_password_email] SMTPException: {smtp_err}")
         return jsonify({
             "success": False,
             "error": f"SMTP error: {str(smtp_err)}"
         }), 500
     except Exception as ex:
-        print(f"[ERROR] {ex}")
-        return jsonify({"success": False, "error": "Internal server error"}), 500
+        import traceback
+        traceback.print_exc()
+        print(f"[ERROR send_password_email] Unexpected: {type(ex).__name__}: {ex}")
+        return jsonify({"success": False, "error": f"{type(ex).__name__}: {str(ex)}"}), 500
 
 
 @app.route('/api/employees/approve/<int:emp_id>', methods=['POST'])
