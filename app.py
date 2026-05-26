@@ -2044,15 +2044,13 @@ def generate_password(emp_id):
 @app.route('/api/employees/<int:emp_id>/send-password', methods=['POST'])
 @require_auth
 def send_password_email(emp_id):
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
+    import os as _os
+    import json as _json
     try:
         data = request.json or {}
         sender_role = data.get('sender_role', 'Admin')
 
         conn = _db()
-        # Get employee + their current temp password
         row = conn.execute(
             "SELECT username, company_email, password_hash FROM employees WHERE id=?",
             (emp_id,)
@@ -2071,16 +2069,10 @@ def send_password_email(emp_id):
         if not email or '@' not in email:
             return jsonify({"success": False, "error": "Employee has no valid email address"}), 400
 
-        # ── HOSTINGER SMTP CONFIG (from environment via security.py) ──
-        SMTP_HOST = 'smtp.hostinger.com'
-        SMTP_PORT = 465
-        SMTP_USER = _CHAT_SMTP_USER
-        SMTP_PASS = _CHAT_SMTP_PASS
-
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = 'MIIM — Your Login Password Has Been Reset'
-        msg['From'] = f'MIIM HR System <{SMTP_USER}>'
-        msg['To'] = email
+        # ── RESEND API CONFIG ──
+        RESEND_API_KEY = _os.environ.get('RESEND_API_KEY', '')
+        if not RESEND_API_KEY:
+            return jsonify({"success": False, "error": "RESEND_API_KEY not set in environment"}), 500
 
         html_body = f"""
         <html>
@@ -2110,7 +2102,6 @@ def send_password_email(emp_id):
                     <h2 style="color:#f97316;font-size:20px;margin:0 0 16px;">
                       🔑 Password Reset Notification
                     </h2>
-
                     <p style="color:#ccc;font-size:14px;line-height:1.7;margin:0 0 12px;">
                       Hi <strong style="color:#fff;">{username}</strong>,
                     </p>
@@ -2191,14 +2182,31 @@ def send_password_email(emp_id):
         </html>
         """
 
-        plain = f'Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR'
-        msg.attach(MIMEText(plain, 'plain'))
-        msg.attach(MIMEText(html_body, 'html'))
+        # ── RESEND HTTP API (works on Render free tier) ──
+        import urllib.request as _urllib_req
+        import urllib.error as _urllib_err
 
-        import ssl as _ssl
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=_ssl.create_default_context(), timeout=30) as server:
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, [email], msg.as_string())
+        payload = _json.dumps({
+            "from": "MIIM HR System <onboarding@resend.dev>",
+            "to": [email],
+            "subject": "MIIM — Your Login Password Has Been Reset",
+            "html": html_body,
+            "text": f"Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR"
+        }).encode('utf-8')
+
+        req = _urllib_req.Request(
+            'https://api.resend.com/emails',
+            data=payload,
+            headers={
+                'Authorization': f'Bearer {RESEND_API_KEY}',
+                'Content-Type': 'application/json'
+            },
+            method='POST'
+        )
+
+        with _urllib_req.urlopen(req, timeout=30) as resp:
+            resp_body = _json.loads(resp.read().decode('utf-8'))
+            print(f"[INFO send_password_email] Resend response: {resp_body}")
 
         return jsonify({
             "success": True,
@@ -2206,26 +2214,10 @@ def send_password_email(emp_id):
             "email": email
         })
 
-    except smtplib.SMTPAuthenticationError as ex:
-        import traceback
-        traceback.print_exc()
-        print(f"[ERROR send_password_email] SMTPAuthenticationError: {ex}")
-        return jsonify({
-            "success": False,
-            "error": "SMTP Authentication failed. Check SMTP_USER and SMTP_PASS environment variables."
-        }), 500
-    except smtplib.SMTPException as smtp_err:
-        import traceback
-        traceback.print_exc()
-        print(f"[ERROR send_password_email] SMTPException: {smtp_err}")
-        return jsonify({
-            "success": False,
-            "error": f"SMTP error: {str(smtp_err)}"
-        }), 500
     except Exception as ex:
         import traceback
         traceback.print_exc()
-        print(f"[ERROR send_password_email] Unexpected: {type(ex).__name__}: {ex}")
+        print(f"[ERROR send_password_email] {type(ex).__name__}: {ex}")
         return jsonify({"success": False, "error": f"{type(ex).__name__}: {str(ex)}"}), 500
 
 
