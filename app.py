@@ -2031,7 +2031,11 @@ def generate_password(emp_id):
         new_pw = ''.join(_sec.choice(alphabet) for _ in range(12))
         hashed_pw = hash_password(new_pw)
         conn = _db()
-        conn.execute("UPDATE employees SET password_hash=?, force_reset=1 WHERE id=?", (hashed_pw, emp_id))
+        # Store plain password temporarily for email sending
+        try:
+            conn.execute("UPDATE employees SET password_hash=%s, force_reset=1, temp_plain_pw=%s WHERE id=%s", (hashed_pw, new_pw, emp_id))
+        except Exception:
+            conn.execute("UPDATE employees SET password_hash=?, force_reset=1 WHERE id=?", (hashed_pw, emp_id))
         conn.commit()
         row = conn.execute("SELECT username, company_email FROM employees WHERE id=?", (emp_id,)).fetchone()
         conn.close()
@@ -2064,7 +2068,18 @@ def send_password_email(emp_id):
 
         username = row['username']
         email = row['company_email']
-        password = row['password_hash']   # the temp password set by generate-password
+        # Get plain password from request (sent by frontend after generate-password)
+        password = data.get('password', '') or data.get('temp_password', '')
+        if not password:
+            # Fallback: try temp_plain_pw column
+            try:
+                row2 = _db().execute("SELECT temp_plain_pw FROM employees WHERE id=%s", (emp_id,)).fetchone()
+                if row2:
+                    password = row2['temp_plain_pw'] or ''
+            except Exception:
+                pass
+        if not password:
+            password = '(Check with HR)'  # fallback
 
         if not email or '@' not in email:
             return jsonify({"success": False, "error": "Employee has no valid email address"}), 400
