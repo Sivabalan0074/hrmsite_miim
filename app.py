@@ -807,7 +807,7 @@ def add_holiday():
     try:
         data = request.json or {}
         conn = _db()
-        conn.execute("INSERT INTO holidays (date,name,type,emoji,desc) VALUES (?,?,?,?,?)",
+        conn.execute("INSERT INTO holidays (date,name,type,emoji,`desc`) VALUES (?,?,?,?,?)",
                      (data.get('date'), data.get('name'), data.get('type', 'National'), data.get('emoji', '🎉'), data.get('desc', '')))
         conn.commit(); conn.close()
         return jsonify({"success": True}), 201
@@ -3354,7 +3354,7 @@ def init_db():
     conn.execute("""CREATE TABLE IF NOT EXISTS holidays (
         id INTEGER PRIMARY KEY AUTO_INCREMENT,
         date TEXT, name TEXT, type TEXT DEFAULT 'National',
-        emoji TEXT DEFAULT '🎉', desc TEXT DEFAULT ''
+        emoji TEXT DEFAULT '🎉', `desc` TEXT DEFAULT ''
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS guests (
         id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -3396,7 +3396,7 @@ def init_db():
     except Exception:
         pass
     conn.execute("""CREATE TABLE IF NOT EXISTS tracker_data (
-        key TEXT PRIMARY KEY, value TEXT, updated_at TEXT
+        `key` TEXT PRIMARY KEY, `value` TEXT, updated_at TEXT
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS notifications (
         id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -3498,7 +3498,7 @@ def init_db():
         ]
         for h in default_holidays:
             conn.execute(
-                "INSERT INTO holidays (date, name, type, emoji, desc) VALUES (?,?,?,?,?)",
+                "INSERT INTO holidays (date, name, type, emoji, `desc`) VALUES (?,?,?,?,?)",
                 (h[0], h[1], h[2], h[3], '')
             )
         conn.commit()
