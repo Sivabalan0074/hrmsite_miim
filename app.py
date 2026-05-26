@@ -951,7 +951,7 @@ def mark_guest_sent(gid):
 def get_tracker(key):
     try:
         conn = _db()
-        row = conn.execute("SELECT * FROM tracker_data WHERE key=?", (key,)).fetchone()
+        row = conn.execute("SELECT * FROM tracker_data WHERE `key`=?", (key,)).fetchone()
         conn.close()
         if not row: return jsonify({"key": key, "value": None})
         return jsonify(dict(row))
@@ -966,7 +966,7 @@ def set_tracker(key):
         data = request.json or {}
         value = data.get('value', '')
         conn = _db()
-        conn.execute("INSERT INTO tracker_data (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=?,updated_at=?",
+        conn.execute("INSERT INTO tracker_data (`key`,`value`,updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `value`=?,updated_at=?",
                      (key, value, str(datetime.datetime.now()), value, str(datetime.datetime.now())))
         conn.commit(); conn.close()
         return jsonify({"success": True})
@@ -986,17 +986,17 @@ def bulk_get_tracker():
         result = {}
         if prefix is not None:
             if prefix == '':
-                rows = conn.execute("SELECT key, value FROM tracker_data").fetchall()
+                rows = conn.execute("SELECT `key`, `value` FROM tracker_data").fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT key, value FROM tracker_data WHERE key=? OR key LIKE ?",
+                    "SELECT `key`, `value` FROM tracker_data WHERE key=? OR key LIKE ?",
                     (prefix, prefix + '_%')
                 ).fetchall()
             for r in rows:
                 result[r['key']] = r['value']
         for k in keys:
             if k not in result:
-                row = conn.execute("SELECT value FROM tracker_data WHERE key=?", (k,)).fetchone()
+                row = conn.execute("SELECT `value` FROM tracker_data WHERE `key`=?", (k,)).fetchone()
                 if row:
                     result[k] = row['value']
         conn.close()
@@ -1017,8 +1017,8 @@ def bulk_set_tracker():
         now = str(datetime.datetime.now())
         for k, v in items.items():
             conn.execute(
-                "INSERT INTO tracker_data (key,value,updated_at) VALUES (?,?,?) "
-                "ON CONFLICT(key) DO UPDATE SET value=?,updated_at=?",
+                "INSERT INTO tracker_data (`key`,`value`,updated_at) VALUES (?,?,?) "
+                "ON DUPLICATE KEY UPDATE `value`=?,updated_at=?",
                 (k, v, now, v, now)
             )
         conn.commit(); conn.close()
@@ -1312,7 +1312,7 @@ def login():
                 guest_project = (g.get('project') or '').strip()
                 if guest_project:
                     _proj_row = conn2.execute(
-                        "SELECT value FROM tracker_data WHERE key='miim_projects'"
+                        "SELECT `value` FROM tracker_data WHERE `key`='miim_projects'"
                     ).fetchone()
                     if _proj_row:
                         _projects = _json_gl.loads(_proj_row['value'] or '[]')
@@ -3455,7 +3455,7 @@ def init_db():
         print("[DB] Default admin created: username=admin  password=miim@123")
 
     # Seed default miim_projects in tracker_data if not present
-    existing = conn.execute("SELECT key FROM tracker_data WHERE key='miim_projects'").fetchone()
+    existing = conn.execute("SELECT `key` FROM tracker_data WHERE `key`='miim_projects'").fetchone()
     if not existing:
         import json as _json, datetime as _dt2
         default_projects = [
@@ -3466,7 +3466,7 @@ def init_db():
             {"id": "PRJ005", "name": "Internal Training Program", "status": "Active", "manager": "Suresh Babu", "deadline": "2026-05-31"},
         ]
         conn.execute(
-            "INSERT INTO tracker_data (key, value, updated_at) VALUES (?, ?, ?)",
+            "INSERT INTO tracker_data (`key`, `value`, updated_at) VALUES (?, ?, ?)",
             ('miim_projects', _json.dumps(default_projects), _dt2.datetime.now().isoformat())
         )
         conn.commit()
