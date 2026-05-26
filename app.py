@@ -2064,7 +2064,9 @@ def send_password_email(emp_id):
 
         username = row['username']
         email = row['company_email']
-        password = row['password_hash']   # the temp password set by generate-password
+        password = data.get('password', '') or data.get('temp_password', '')
+        if not password:
+            password = '(Contact HR for password)'
 
         if not email or '@' not in email:
             return jsonify({"success": False, "error": "Employee has no valid email address"}), 400
@@ -4226,7 +4228,7 @@ def _email_poll_loop():
 # hrm.miim.co.in/dbadmin → admin login மட்டும் access
 # ══════════════════════════════════════════════════════════════════
 
-import sqlite3 as _dba_sqlite
+import sqlite3 as _dba_sqlite  # dbadmin needs direct sqlite
 import os as _dba_os
 
 _DBA_BASE = _dba_os.path.dirname(_dba_os.path.abspath(__file__))
