@@ -391,7 +391,7 @@ def delete_employee(emp_id):
 # ── PROMOTION: SM/PM request -> Admin approve ──
 def _ensure_pending_promotions_table(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS pending_promotions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id INTEGER NOT NULL,
         old_desig TEXT, new_desig TEXT,
         effective_date TEXT, remarks TEXT,
@@ -1438,7 +1438,7 @@ def api_salary_structures():
         conn = _db()
         # Ensure table exists
         conn.execute("""CREATE TABLE IF NOT EXISTS salary_structures (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             emp_id INTEGER, period TEXT, department TEXT, designation TEXT,
             employee_type TEXT, basic REAL DEFAULT 0, hra REAL DEFAULT 0,
             dearness_allowance REAL DEFAULT 0, medical_allowance REAL DEFAULT 0,
@@ -1858,7 +1858,7 @@ def api_salary_structure_detail(ss_id):  # type: ignore
             # If table doesn't exist yet, valid_cols will be empty — create table first
             if not valid_cols:
                 conn.execute("""CREATE TABLE IF NOT EXISTS salary_structures (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
                     emp_id INTEGER, period TEXT, department TEXT, designation TEXT,
                     employee_type TEXT, basic REAL DEFAULT 0, hra REAL DEFAULT 0,
                     dearness_allowance REAL DEFAULT 0, medical_allowance REAL DEFAULT 0,
@@ -2031,11 +2031,7 @@ def generate_password(emp_id):
         new_pw = ''.join(_sec.choice(alphabet) for _ in range(12))
         hashed_pw = hash_password(new_pw)
         conn = _db()
-        # Store plain password temporarily for email sending
-        try:
-            conn.execute("UPDATE employees SET password_hash=%s, force_reset=1, temp_plain_pw=%s WHERE id=%s", (hashed_pw, new_pw, emp_id))
-        except Exception:
-            conn.execute("UPDATE employees SET password_hash=?, force_reset=1 WHERE id=?", (hashed_pw, emp_id))
+        conn.execute("UPDATE employees SET password_hash=?, force_reset=1 WHERE id=?", (hashed_pw, emp_id))
         conn.commit()
         row = conn.execute("SELECT username, company_email FROM employees WHERE id=?", (emp_id,)).fetchone()
         conn.close()
@@ -2068,18 +2064,7 @@ def send_password_email(emp_id):
 
         username = row['username']
         email = row['company_email']
-        # Get plain password from request (sent by frontend after generate-password)
-        password = data.get('password', '') or data.get('temp_password', '')
-        if not password:
-            # Fallback: try temp_plain_pw column
-            try:
-                row2 = _db().execute("SELECT temp_plain_pw FROM employees WHERE id=%s", (emp_id,)).fetchone()
-                if row2:
-                    password = row2['temp_plain_pw'] or ''
-            except Exception:
-                pass
-        if not password:
-            password = '(Check with HR)'  # fallback
+        password = row['password_hash']   # the temp password set by generate-password
 
         if not email or '@' not in email:
             return jsonify({"success": False, "error": "Employee has no valid email address"}), 400
@@ -3120,7 +3105,7 @@ def init_db():
     """Create all required tables if they don't exist."""
     conn = _db()
     conn.execute("""CREATE TABLE IF NOT EXISTS employees (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         username TEXT, user_id TEXT, empid TEXT,
         dept TEXT, desig TEXT, manager TEXT,
         joindate TEXT, type TEXT DEFAULT 'Regular',
@@ -3195,7 +3180,7 @@ def init_db():
         pass
     # ── Pending Promotions table ──
     conn.execute("""CREATE TABLE IF NOT EXISTS pending_promotions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id INTEGER NOT NULL,
         old_desig TEXT,
         new_desig TEXT,
@@ -3224,7 +3209,7 @@ def init_db():
         except Exception:
             pass
     conn.execute("""CREATE TABLE IF NOT EXISTS pending_employees (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         username TEXT, user_id TEXT, empid TEXT,
         dept TEXT, desig TEXT, manager TEXT,
         joindate TEXT, type TEXT DEFAULT 'Regular',
@@ -3235,7 +3220,7 @@ def init_db():
         created_at TEXT
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS salary_structures (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id INTEGER, period TEXT, department TEXT, designation TEXT,
         employee_type TEXT, basic REAL DEFAULT 0, hra REAL DEFAULT 0,
         dearness_allowance REAL DEFAULT 0, medical_allowance REAL DEFAULT 0,
@@ -3265,7 +3250,7 @@ def init_db():
         except Exception:
             pass
     conn.execute("""CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id INTEGER,
         account_type TEXT DEFAULT 'Salary',
         bank_name TEXT DEFAULT '',
@@ -3303,14 +3288,14 @@ def init_db():
         except Exception:
             pass  # column already exists
     conn.execute("""CREATE TABLE IF NOT EXISTS leave_requests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id TEXT, leave_type TEXT, from_date TEXT,
         to_date TEXT, days INTEGER DEFAULT 1,
         reason TEXT, status TEXT DEFAULT 'pending',
         applied_at TEXT, reviewed_at TEXT
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS leave_balances (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id INTEGER, year TEXT,
         annual INTEGER DEFAULT 18, sick INTEGER DEFAULT 10,
         casual INTEGER DEFAULT 6, earned INTEGER DEFAULT 0,
@@ -3318,7 +3303,7 @@ def init_db():
         used_casual INTEGER DEFAULT 0
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS attendance_corrections (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id TEXT, emp_name TEXT, dept TEXT, date TEXT,
         req_checkin TEXT, req_checkout TEXT, req_status TEXT,
         reason TEXT, status TEXT DEFAULT 'pending',
@@ -3326,7 +3311,7 @@ def init_db():
         review_note TEXT, reviewed_at TEXT, created_at TEXT
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS approval_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id TEXT, emp_name TEXT, dept TEXT,
         leave_type TEXT, leave_date TEXT, action TEXT,
         actioned_by TEXT, actioned_by_name TEXT,
@@ -3335,7 +3320,7 @@ def init_db():
     conn.commit()
     # Employee status change history
     conn.execute("""CREATE TABLE IF NOT EXISTS emp_status_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id INTEGER NOT NULL,
         field TEXT, from_val TEXT, to_val TEXT,
         changed_date TEXT, created_at TEXT
@@ -3350,7 +3335,7 @@ def init_db():
         conn.execute("SELECT 1 FROM emp_status_history LIMIT 1")
     except Exception:
         conn.execute("""CREATE TABLE emp_status_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             emp_id INTEGER NOT NULL,
             field TEXT, from_val TEXT, to_val TEXT,
             changed_date TEXT, created_at TEXT
@@ -3359,18 +3344,18 @@ def init_db():
 
     # ── Additional tables ──
     conn.execute("""CREATE TABLE IF NOT EXISTS attendance (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id INTEGER, date TEXT, checkin TEXT, checkout TEXT,
         status TEXT DEFAULT 'present', marked_by TEXT,
         hours REAL DEFAULT 0
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS holidays (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         date TEXT, name TEXT, type TEXT DEFAULT 'National',
         emoji TEXT DEFAULT '🎉', desc TEXT DEFAULT ''
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS guests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         name TEXT, email TEXT, project TEXT, access_date TEXT,
         guest_id TEXT, password TEXT, sent_opt INTEGER DEFAULT 0,
         new_guest_id TEXT, new_password TEXT,
@@ -3380,7 +3365,7 @@ def init_db():
         perm_enabled INTEGER DEFAULT 1
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS archived_slips (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id TEXT,
         archive_uid TEXT UNIQUE,
         period TEXT,
@@ -3412,17 +3397,17 @@ def init_db():
         key TEXT PRIMARY KEY, value TEXT, updated_at TEXT
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id TEXT, message TEXT, type TEXT DEFAULT 'info',
         is_read INTEGER DEFAULT 0, created_at TEXT
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS projects (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         name TEXT, description TEXT, status TEXT DEFAULT 'active',
         created_at TEXT
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
         emp_id TEXT, emp_name TEXT, dept TEXT,
         category TEXT, amount REAL DEFAULT 0,
         description TEXT, receipt_url TEXT, receipt_files TEXT,
