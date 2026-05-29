@@ -1060,8 +1060,13 @@ const API = {
       const tok = this.getToken();
       if (tok) headers['Authorization'] = 'Bearer ' + tok;
       const r = await fetch(path, { method:'POST', headers, body:JSON.stringify(body) });
-      return await r.json();
-    } catch { return null; }
+      if (!r.ok && r.status === 404) {
+        console.warn('[API] 404 for', path, '- route not found on server');
+        return null;
+      }
+      const json = await r.json();
+      return json;
+    } catch(e) { console.error('[API] post error:', e); return null; }
   }
 };
 
@@ -1493,7 +1498,8 @@ async function submitChangePw() {
   let data = await API.post('/api/set-password', { 
     username: username, 
     new_password: newPw,
-    force_reset: true
+    force_reset: true,
+    token: API.getToken()
   });
   
   // Fallback for offline mode

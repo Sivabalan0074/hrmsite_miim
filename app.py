@@ -1113,7 +1113,6 @@ def profile_update():
 
 
 @app.route('/api/set-password', methods=['POST'])
-@require_auth
 def set_password():
     try:
         data = request.json or {}
@@ -1121,6 +1120,11 @@ def set_password():
         new_pw = data.get('new_password') or data.get('password', '')
         force_reset = data.get('force_reset', False)
         current_pw = data.get('current_password', '')
+
+        # Accept token from body as fallback (force-reset flow sends it)
+        body_token = data.get('token', '')
+        if body_token and not request.headers.get('Authorization'):
+            request.environ['HTTP_AUTHORIZATION'] = 'Bearer ' + body_token
 
         if not username or not new_pw:
             return jsonify({"success": False, "error": "Username and new password required"}), 400
