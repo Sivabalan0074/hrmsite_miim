@@ -2075,19 +2075,11 @@ def send_password_email(emp_id):
         if not email or '@' not in email:
             return jsonify({"success": False, "error": "Employee has no valid email address"}), 400
 
-        # ── HOSTINGER SMTP (same as other mail routes) ──
-        import smtplib as _smtp
-        import ssl as _ssl
-        from email.mime.multipart import MIMEMultipart as _MIMEMulti
-        from email.mime.text import MIMEText as _MIMEText
-
-        SMTP_HOST = 'smtp.hostinger.com'
-        SMTP_PORT = 465
-        SMTP_USER = _os.environ.get('SMTP_USER', _CHAT_SMTP_USER)
-        SMTP_PASS = _os.environ.get('SMTP_PASS', _CHAT_SMTP_PASS)
-
-        if not SMTP_USER or not SMTP_PASS:
-            return jsonify({"success": False, "error": "SMTP credentials not configured"}), 500
+        # ── RESEND API ──
+        import requests as _requests
+        RESEND_API_KEY = _os.environ.get('RESEND_API_KEY', '')
+        if not RESEND_API_KEY:
+            return jsonify({"success": False, "error": "RESEND_API_KEY not configured"}), 500
 
         html_body = f"""
         <html>
@@ -2197,17 +2189,24 @@ def send_password_email(emp_id):
         </html>
         """
 
-        msg = _MIMEMulti('alternative')
-        msg['Subject'] = 'MIIM — Your Login Password Has Been Reset'
-        msg['From'] = f'MIIM HR System <{SMTP_USER}>'
-        msg['To'] = email
-        msg.attach(_MIMEText(f"Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR", 'plain'))
-        msg.attach(_MIMEText(html_body, 'html'))
-
-        with _smtp.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=_ssl.create_default_context(), timeout=30) as server:
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, [email], msg.as_string())
-            print(f"[INFO send_password_email] Mail sent to {email} via Hostinger SMTP")
+        resp = _requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": "MIIM HR System <noreply@miim.co.in>",
+                "to": [email],
+                "subject": "MIIM — Your Login Password Has Been Reset",
+                "text": f"Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR",
+                "html": html_body
+            },
+            timeout=15
+        )
+        if resp.status_code not in (200, 201):
+            raise Exception(f"Resend API error {resp.status_code}: {resp.text}")
+        print(f"[INFO send_password_email] Mail sent to {email} via Resend API")
 
         return jsonify({
             "success": True,
@@ -3806,12 +3805,10 @@ def guest_send_credentials():
         if not email:
             return jsonify({"success": False, "error": "Email address is required."}), 400
 
-        # ── GUEST SMTP — claude.ai@miim.co.in ──
+        # ── RESEND API ──
         import os as _guest_os
-        SMTP_HOST = 'smtp.hostinger.com'
-        SMTP_PORT = 465
-        SMTP_USER = _guest_os.environ.get('MIIM_GUEST_SMTP_USER', _CHAT_SMTP_USER)
-        SMTP_PASS = _guest_os.environ.get('MIIM_GUEST_SMTP_PASS', _CHAT_SMTP_PASS)
+        import requests as _greq
+        RESEND_API_KEY = _guest_os.environ.get('RESEND_API_KEY', '')
 
         send_opt = data.get('send_opt', 1)
         is_temp = (send_opt == 1)
@@ -3846,26 +3843,28 @@ def guest_send_credentials():
         </div>
         """
 
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'MIIM — Guest Access Credentials ({project})'
-        msg['From'] = f'MIIM HR System <{SMTP_USER}>'
-        msg['To'] = email
-        msg.attach(MIMEText(html_body, 'html'))
-
-        import ssl as _ssl
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=_ssl.create_default_context(), timeout=30) as server:
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, [email], msg.as_string())
+        gresp = _greq.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": "MIIM HR System <noreply@miim.co.in>",
+                "to": [email],
+                "subject": f"MIIM — Guest Access Credentials ({project})",
+                "html": html_body
+            },
+            timeout=15
+        )
+        if gresp.status_code not in (200, 201):
+            raise Exception(f"Resend API error {gresp.status_code}: {gresp.text}")
 
         return jsonify({"success": True, "message": f"Credentials sent to {email}"})
 
-    except smtplib.SMTPAuthenticationError:
-        return jsonify({"success": False, "error": "SMTP Authentication failed. Check your Hostinger email and password."}), 500
-    except smtplib.SMTPException as smtp_err:
-        return jsonify({"success": False, "error": f"SMTP error: {str(smtp_err)}"}), 500
     except Exception as ex:
         print(f"[ERROR] {ex}")
-        return jsonify({"success": False, "error": "Internal server error"}), 500
+        return jsonify({"success": False, "error": str(ex)}), 500
 
 
 # ══════════════════════════════════════════════════
