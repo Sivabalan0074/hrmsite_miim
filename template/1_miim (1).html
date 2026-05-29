@@ -1050,10 +1050,16 @@ function localChangePw(u, newPw) {
 /* ── API helper ── */
 const API = {
   isOnline: window.location.protocol !== 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
+  getToken() {
+    try { return localStorage.getItem('miim_auth_token') || sessionStorage.getItem('miim_auth_token') || ''; } catch(e) { return ''; }
+  },
   async post(path, body) {
     if (!this.isOnline) return null;
     try {
-      const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      const headers = {'Content-Type':'application/json'};
+      const tok = this.getToken();
+      if (tok) headers['Authorization'] = 'Bearer ' + tok;
+      const r = await fetch(path, { method:'POST', headers, body:JSON.stringify(body) });
       return await r.json();
     } catch { return null; }
   }
@@ -1394,7 +1400,8 @@ submitBtn.addEventListener('click', async() => {
     // localStorage — also no photo in session key
     try { localStorage.setItem('miim_session', JSON.stringify(_sessionObjNoPhoto)); } catch(e) {}
     try { localStorage.setItem('userRole',      _role); } catch(e) {}
-    try { localStorage.setItem('userDept',      _dept); } catch(e) {}
+    try { localStorage.setItem('miim_auth_token', data.token || ''); } catch(e) {}
+    try { sessionStorage.setItem('miim_auth_token', data.token || ''); } catch(e) {}    try { localStorage.setItem('userDept',      _dept); } catch(e) {}
 
     // Photo saved separately under its own key — fetched on demand
     try {
@@ -1408,6 +1415,9 @@ submitBtn.addEventListener('click', async() => {
     
     // ✅ Check if force_reset is true (SQLite returns 1 as integer, not boolean true)
     if (data.force_reset || (data.user && data.user.force_reset)) {
+      // Store token so /api/set-password call is authenticated
+      try { localStorage.setItem('miim_auth_token', data.token || ''); } catch(e) {}
+      try { sessionStorage.setItem('miim_auth_token', data.token || ''); } catch(e) {}
       // Show the change password screen
       document.getElementById('changePwDesc').textContent = 'Your password was reset by HR. Please choose a new permanent password to continue.';
       window._forceResetUsername = user;
