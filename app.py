@@ -3,6 +3,12 @@ MIIM HR Dashboard — Flask Backend
 All routes, DB helpers, and background services in one file.
 """
 from flask import Flask, jsonify, request
+import os as _dotenv_os
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+except ImportError:
+    pass
 import threading, datetime
 
 app = Flask(__name__)
@@ -2187,7 +2193,7 @@ def send_password_email(emp_id):
         import urllib.error as _urllib_err
 
         payload = _json.dumps({
-            "from": "MIIM HR System <onboarding@resend.dev>",
+            "from": "MIIM HR System <noreply@miim.co.in>",
             "to": [email],
             "subject": "MIIM — Your Login Password Has Been Reset",
             "html": html_body,
