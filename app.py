@@ -556,11 +556,11 @@ def _excel_watcher():
 # =============================================================================
 @app.route("/")
 def index():
-    return send_from_directory(BASE_DIR, "1_miim.html")
+    return send_from_directory(os.path.join(BASE_DIR, "template"), "1_miim (1).html")
 
 @app.route("/hr")
 def hr_dashboard():
-    return send_from_directory(BASE_DIR, "3_hr_dashboard.html")
+    return send_from_directory(os.path.join(BASE_DIR, "template"), "3_hr_dashboard.html")
 
 @app.route("/set-password")
 def set_password():
