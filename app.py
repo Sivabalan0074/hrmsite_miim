@@ -2075,10 +2075,19 @@ def send_password_email(emp_id):
         if not email or '@' not in email:
             return jsonify({"success": False, "error": "Employee has no valid email address"}), 400
 
-        # ── RESEND API CONFIG ──
-        RESEND_API_KEY = _os.environ.get('RESEND_API_KEY', '')
-        if not RESEND_API_KEY:
-            return jsonify({"success": False, "error": "RESEND_API_KEY not set in environment"}), 500
+        # ── HOSTINGER SMTP (same as other mail routes) ──
+        import smtplib as _smtp
+        import ssl as _ssl
+        from email.mime.multipart import MIMEMultipart as _MIMEMulti
+        from email.mime.text import MIMEText as _MIMEText
+
+        SMTP_HOST = 'smtp.hostinger.com'
+        SMTP_PORT = 465
+        SMTP_USER = _os.environ.get('SMTP_USER', _CHAT_SMTP_USER)
+        SMTP_PASS = _os.environ.get('SMTP_PASS', _CHAT_SMTP_PASS)
+
+        if not SMTP_USER or not SMTP_PASS:
+            return jsonify({"success": False, "error": "SMTP credentials not configured"}), 500
 
         html_body = f"""
         <html>
@@ -2188,31 +2197,17 @@ def send_password_email(emp_id):
         </html>
         """
 
-        # ── RESEND HTTP API (works on Render free tier) ──
-        import urllib.request as _urllib_req
-        import urllib.error as _urllib_err
+        msg = _MIMEMulti('alternative')
+        msg['Subject'] = 'MIIM — Your Login Password Has Been Reset'
+        msg['From'] = f'MIIM HR System <{SMTP_USER}>'
+        msg['To'] = email
+        msg.attach(_MIMEText(f"Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR", 'plain'))
+        msg.attach(_MIMEText(html_body, 'html'))
 
-        payload = _json.dumps({
-            "from": "MIIM HR System <noreply@miim.co.in>",
-            "to": [email],
-            "subject": "MIIM — Your Login Password Has Been Reset",
-            "html": html_body,
-            "text": f"Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR"
-        }).encode('utf-8')
-
-        req = _urllib_req.Request(
-            'https://api.resend.com/emails',
-            data=payload,
-            headers={
-                'Authorization': f'Bearer {RESEND_API_KEY}',
-                'Content-Type': 'application/json'
-            },
-            method='POST'
-        )
-
-        with _urllib_req.urlopen(req, timeout=30) as resp:
-            resp_body = _json.loads(resp.read().decode('utf-8'))
-            print(f"[INFO send_password_email] Resend response: {resp_body}")
+        with _smtp.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=_ssl.create_default_context(), timeout=30) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, [email], msg.as_string())
+            print(f"[INFO send_password_email] Mail sent to {email} via Hostinger SMTP")
 
         return jsonify({
             "success": True,
