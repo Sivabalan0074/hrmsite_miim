@@ -1142,7 +1142,7 @@ def set_password():
 
         conn = _db()
         row = conn.execute(
-            "SELECT id, password FROM users WHERE username=?", (username,)
+            "SELECT id, password_hash FROM employees WHERE username=?", (username,)
         ).fetchone()
         if not row:
             conn.close()
@@ -1150,14 +1150,14 @@ def set_password():
 
         # Verify current password if not a forced reset
         if not force_reset and current_pw:
-            if hash_password(current_pw) != row["password"]:
+            if not verify_password(current_pw, row["password_hash"]):
                 conn.close()
                 return jsonify({"success": False, "error": "Current password is incorrect"}), 400
 
         # Hash new password before storing
         hashed_new_pw = hash_password(new_pw)
         conn.execute(
-            "UPDATE users SET password=?, password_change_required=0 WHERE username=?",
+            "UPDATE employees SET password_hash=?, force_reset=0 WHERE username=?",
             (hashed_new_pw, username)
         )
         conn.commit(); conn.close()
@@ -3516,6 +3516,32 @@ def init_db():
             )
         conn.commit()
         print(f"[DB] {len(default_holidays)} default holidays seeded.")
+
+    # ── users table (for landing page login) ──
+    conn.execute("""CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        name VARCHAR(200),
+        role VARCHAR(100),
+        department VARCHAR(100),
+        email VARCHAR(200),
+        phone VARCHAR(50),
+        address TEXT,
+        photo TEXT,
+        access VARCHAR(100) DEFAULT 'Employee',
+        status VARCHAR(50) DEFAULT 'Active',
+        approval_status VARCHAR(50) DEFAULT 'approved',
+        manager VARCHAR(100) DEFAULT '',
+        empid VARCHAR(50) DEFAULT '',
+        joindate VARCHAR(50) DEFAULT '',
+        emp_type VARCHAR(50) DEFAULT 'Regular',
+        password_change_required INT DEFAULT 0,
+        reset_token TEXT,
+        reset_token_expiry TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.commit()
 
     conn.close()
     print("[DB] Initialized successfully")
