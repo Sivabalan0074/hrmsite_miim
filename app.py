@@ -1142,22 +1142,20 @@ def set_password():
 
         conn = _db()
         row = conn.execute(
-            "SELECT id, password_hash FROM employees WHERE username=?", (username,)
+            "SELECT id, password FROM users WHERE username=?", (username,)
         ).fetchone()
         if not row:
             conn.close()
             return jsonify({"success": False, "error": "User not found"}), 404
 
-        # Verify current password if not a forced reset
         if not force_reset and current_pw:
-            if not verify_password(current_pw, row["password_hash"]):
+            if hash_password(current_pw) != row["password"]:
                 conn.close()
                 return jsonify({"success": False, "error": "Current password is incorrect"}), 400
 
-        # Hash new password before storing
         hashed_new_pw = hash_password(new_pw)
         conn.execute(
-            "UPDATE employees SET password_hash=?, force_reset=0 WHERE username=?",
+            "UPDATE users SET password=?, password_change_required=0 WHERE username=?",
             (hashed_new_pw, username)
         )
         conn.commit(); conn.close()
