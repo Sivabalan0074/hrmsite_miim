@@ -2096,6 +2096,7 @@ def send_password_email(emp_id):
         RESEND_API_KEY = _os.environ.get('RESEND_API_KEY', '')
         if not RESEND_API_KEY:
             return jsonify({"success": False, "error": "RESEND_API_KEY not configured"}), 500
+        _FROM_EMAIL = _os.environ.get('MIIM_FROM_EMAIL', 'noreply@miim.co.in')
 
         html_body = f"""
         <html>
@@ -2212,7 +2213,7 @@ def send_password_email(emp_id):
                 "Content-Type": "application/json"
             },
             json={
-                "from": "MIIM HR System <noreply@miim.co.in>",
+                "from": f"MIIM HR System <{_FROM_EMAIL}>",
                 "to": [email],
                 "subject": "MIIM — Your Login Password Has Been Reset",
                 "text": f"Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR",
@@ -3851,6 +3852,7 @@ def guest_send_credentials():
         import os as _guest_os
         import requests as _greq
         RESEND_API_KEY = _guest_os.environ.get('RESEND_API_KEY', '')
+        _FROM_EMAIL = _guest_os.environ.get('MIIM_FROM_EMAIL', 'noreply@miim.co.in')
 
         send_opt = data.get('send_opt', 1)
         is_temp = (send_opt == 1)
@@ -3892,7 +3894,7 @@ def guest_send_credentials():
                 "Content-Type": "application/json"
             },
             json={
-                "from": "MIIM HR System <noreply@miim.co.in>",
+                "from": f"MIIM HR System <{_FROM_EMAIL}>",
                 "to": [email],
                 "subject": f"MIIM — Guest Access Credentials ({project})",
                 "html": html_body
