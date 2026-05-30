@@ -1141,9 +1141,14 @@ def set_password():
             return jsonify({"success": False, "error": "Password must be at least 6 characters"}), 400
 
         conn = _db()
+        # Search by username first, then by user_id (login sends user_id)
         row = conn.execute(
-            "SELECT id, password_hash FROM employees WHERE username=? AND status='active'", (username,)
+            "SELECT id, username, password_hash FROM employees WHERE username=? AND status='active'", (username,)
         ).fetchone()
+        if not row:
+            row = conn.execute(
+                "SELECT id, username, password_hash FROM employees WHERE user_id=? AND status='active'", (username,)
+            ).fetchone()
         if not row:
             conn.close()
             return jsonify({"success": False, "error": "User not found"}), 404
@@ -1155,8 +1160,8 @@ def set_password():
 
         hashed_new_pw = hash_password(new_pw)
         conn.execute(
-            "UPDATE employees SET password_hash=?, force_reset=0 WHERE username=?",
-            (hashed_new_pw, username)
+            "UPDATE employees SET password_hash=?, force_reset=0 WHERE id=?",
+            (hashed_new_pw, row["id"])
         )
         conn.commit(); conn.close()
         return jsonify({"success": True})
