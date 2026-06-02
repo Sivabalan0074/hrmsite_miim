@@ -361,7 +361,7 @@ def get_emp_history(emp_id):
     try:
         conn = _db()
         rows = conn.execute(
-            "SELECT field, from_val as [from], to_val as [to], changed_date as date FROM emp_status_history WHERE emp_id=? ORDER BY id ASC",
+            "SELECT field, from_val as `from`, to_val as `to`, changed_date as `date` FROM emp_status_history WHERE emp_id=? ORDER BY id ASC",
             (emp_id,)
         ).fetchall()
         conn.close()
