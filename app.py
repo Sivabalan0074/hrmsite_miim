@@ -5462,6 +5462,21 @@ def dbadmin_backup_download():
     )
 
 
+# ── Self-ping: prevent Render free tier sleep ──
+import requests as _ping_requests
+import time as _ping_time
+
+def _self_ping_loop():
+    _ping_time.sleep(60)  # wait for app to fully start
+    _url = _dotenv_os.environ.get('SELF_PING_URL', 'https://hrm.miim.co.in')
+    while True:
+        try:
+            _ping_requests.get(_url, timeout=10)
+        except Exception:
+            pass
+        _ping_time.sleep(240)  # ping every 4 minutes
+
+
 if __name__ == '__main__':
     # Start email reply poller in background
     _poller_thread = threading.Thread(target=_email_poll_loop, daemon=True)
@@ -5470,6 +5485,10 @@ if __name__ == '__main__':
     # Start daily backup in background
     _backup_thread = threading.Thread(target=_backup_loop, daemon=True)
     _backup_thread.start()
+
+    # Start self-ping to prevent Render free tier sleep
+    _ping_thread = threading.Thread(target=_self_ping_loop, daemon=True)
+    _ping_thread.start()
 
     import os as _run_os
     port = int(_run_os.environ.get('PORT', 5000))
