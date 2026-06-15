@@ -124,7 +124,17 @@ def index():
 
 
 # ── DB helper — MySQL (production) / SQLite (local) ──
-from db_layer import _db
+from db_layer import _db, USE_MYSQL
+
+
+def _table_columns(conn, table):
+    """Return a set of column names for `table`, working on both MySQL and SQLite."""
+    if USE_MYSQL:
+        rows = conn.execute(f"SHOW COLUMNS FROM {table}").fetchall()
+        return {r['Field'] for r in rows}
+    else:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        return {r['name'] for r in rows}
 
 # Stats
 
@@ -1502,8 +1512,7 @@ def api_salary_structures():
         data = request.json or {}
         emp_id = data.get('emp_id')
         # Get valid columns from DB schema
-        col_rows = conn.execute("PRAGMA table_info(salary_structures)").fetchall()
-        valid_cols = {r['name'] for r in col_rows}
+        valid_cols = _table_columns(conn, 'salary_structures')
         # Filter payload to only valid columns (exclude approval tracking — managed by /approve endpoint)
         approval_cols = {'acct_approved_by', 'acct_approved_at', 'acct_approval_count', 'mgmt_approved_by', 'mgmt_approved_at', 'mgmt_approval_count'}
         clean_data = {k: v for k, v in data.items() if k in valid_cols and k not in approval_cols}
@@ -1875,8 +1884,7 @@ def api_salary_structure_detail(ss_id):  # type: ignore
         if request.method == 'PUT':
             data = request.json or {}
             # Get actual column names from DB to avoid unknown column errors
-            col_rows = conn.execute("PRAGMA table_info(salary_structures)").fetchall()
-            valid_cols = {r['name'] for r in col_rows}
+            valid_cols = _table_columns(conn, 'salary_structures')
             # If table doesn't exist yet, valid_cols will be empty — create table first
             if not valid_cols:
                 conn.execute("""CREATE TABLE IF NOT EXISTS salary_structures (
@@ -1897,8 +1905,7 @@ def api_salary_structure_detail(ss_id):  # type: ignore
                     mgmt_approved_by TEXT, mgmt_approved_at TEXT, mgmt_approval_count INTEGER DEFAULT 0
                 )""")
                 conn.commit()
-                col_rows = conn.execute("PRAGMA table_info(salary_structures)").fetchall()
-                valid_cols = {r['name'] for r in col_rows}
+                valid_cols = _table_columns(conn, 'salary_structures')
             fields = [k for k in data.keys() if k != 'id' and k in valid_cols]
             if fields:
                 set_clause = ', '.join(f"{k}=?" for k in fields)
