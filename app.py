@@ -1530,9 +1530,9 @@ def api_salary_structures():
             return jsonify({"success": True, "id": existing['id']})
         cols = ', '.join(clean_data.keys())
         placeholders = ', '.join('?' for _ in clean_data)
-        conn.execute(f"INSERT INTO salary_structures ({cols}) VALUES ({placeholders})", list(clean_data.values()))
+        cur = conn.execute(f"INSERT INTO salary_structures ({cols}) VALUES ({placeholders})", list(clean_data.values()))
         conn.commit()
-        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        new_id = getattr(cur, 'lastrowid', None) or getattr(conn, 'lastrowid', None)
         conn.close()
         return jsonify({"success": True, "id": new_id}), 201
     except Exception as ex:
@@ -2317,7 +2317,7 @@ def api_accounts():
         if existing:
             conn.close()
             return jsonify({"success": False, "error": "Employee already has an account", "existing_id": existing["id"]}), 400
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO accounts (emp_id,account_type,bank_name,account_number,ifsc_code,branch,upi_id,status,notes,mode_of_payment,pay_date,days_worked) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (emp_id, data.get('account_type', 'Salary'), data.get('bank_name', 'Bank'),
              data.get('account_number', ''), data.get('ifsc_code', ''),
@@ -2327,7 +2327,7 @@ def api_accounts():
              data.get('days_worked', 0))
         )
         conn.commit()
-        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        new_id = getattr(cur, 'lastrowid', None) or getattr(conn, 'lastrowid', None)
         conn.close()
         return jsonify({"success": True, "account": {"id": new_id}}), 201
     except Exception as ex:
@@ -3653,7 +3653,7 @@ def exp_post():
         data = request.json or {}
         now = _dt.datetime.now().isoformat()
         c = _exp_conn()
-        c.execute("""INSERT INTO expenses
+        cur = c.execute("""INSERT INTO expenses
             (emp_id, emp_name, dept, category, amount, description,
              receipt_url, receipt_files, status, approval_stage, submitted_at, updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -3662,7 +3662,7 @@ def exp_post():
                    data.get('receipt_b64', ''), _j.dumps(data.get('receipt_files', [])),
                    'pending', 'pending', now, now))
         c.commit()
-        new_id = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        new_id = getattr(cur, 'lastrowid', None) or getattr(c, 'lastrowid', None)
         row = c.execute("SELECT * FROM expenses WHERE id=?", (new_id,)).fetchone()
         c.close()
         return jsonify({'success': True, 'expense': _exp_row(row)})
