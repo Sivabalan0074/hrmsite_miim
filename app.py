@@ -5484,6 +5484,113 @@ def _self_ping_loop():
         _ping_time.sleep(240)  # ping every 4 minutes
 
 
+# ── PUBLIC SALARY API (for OFF application) ──────────────────
+# No login required — protected by secret key only
+_OFF_SECRET_KEY = 'MIIM_OFF_2026'
+
+@app.route('/api/public/salary-summary', methods=['GET'])
+def public_salary_summary():
+    """
+    Public endpoint for OFF application to fetch salary data.
+    Protected by secret key — no session required.
+    Query params:
+      key    — secret key (required)
+      period — e.g. 2026-07-01 (optional, defaults to latest)
+    """
+    if request.args.get('key', '') != _OFF_SECRET_KEY:
+        return jsonify({'error': 'unauthorized'}), 401
+
+    period = request.args.get('period', '')
+    try:
+        conn = _db()
+        # Join salary_structures with employees
+        query = """
+            SELECT
+                s.id AS sal_id,
+                s.emp_id,
+                s.period,
+                s.basic,
+                s.hra,
+                s.dearness_allowance,
+                s.medical_allowance,
+                s.lta,
+                s.special_allowance,
+                s.city_compensatory_allowance,
+                s.professional_tax,
+                s.tds,
+                s.other_deductions,
+                s.total_earnings,
+                s.total_deductions,
+                s.net_pay,
+                s.days_worked,
+                s.mode_of_payment,
+                s.approval_status,
+                s.salary_ctc,
+                e.username,
+                e.user_id,
+                e.dept,
+                e.desig,
+                e.type AS emp_type
+            FROM salary_structures s
+            JOIN employees e ON s.emp_id = e.id
+            WHERE e.status = 'active'
+        """
+        params = []
+        if period:
+            query += " AND s.period = ?"
+            params.append(period)
+        query += " ORDER BY e.dept, e.username"
+
+        rows = conn.execute(query, params).fetchall()
+
+        # Also get employees WITHOUT salary for this period
+        emp_query = """
+            SELECT e.id, e.username, e.user_id, e.dept, e.desig, e.type AS emp_type
+            FROM employees e
+            WHERE e.status = 'active'
+        """
+        if period:
+            emp_query += " AND e.id NOT IN (SELECT emp_id FROM salary_structures WHERE period = ?)"
+            all_emps = conn.execute(emp_query, [period]).fetchall()
+        else:
+            all_emps = []
+
+        conn.close()
+
+        salary_list = [dict(r) for r in rows]
+        no_salary_list = [dict(e) for e in all_emps]
+
+        return jsonify({
+            'success': True,
+            'period': period,
+            'salary_data': salary_list,
+            'no_salary': no_salary_list,
+            'total_with_salary': len(salary_list),
+            'total_without_salary': len(no_salary_list)
+        })
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/public/salary-periods', methods=['GET'])
+def public_salary_periods():
+    """Return distinct periods (months) available — for OFF app month dropdown."""
+    if request.args.get('key', '') != _OFF_SECRET_KEY:
+        return jsonify({'error': 'unauthorized'}), 401
+    try:
+        conn = _db()
+        rows = conn.execute(
+            "SELECT DISTINCT period FROM salary_structures WHERE period IS NOT NULL AND period != '' ORDER BY period DESC"
+        ).fetchall()
+        conn.close()
+        periods = [r['period'][:7] for r in rows if r['period']]  # "2026-07"
+        return jsonify({'success': True, 'periods': periods})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     # Start email reply poller in background
     _poller_thread = threading.Thread(target=_email_poll_loop, daemon=True)
