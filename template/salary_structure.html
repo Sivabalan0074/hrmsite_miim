@@ -1272,13 +1272,11 @@ function renderSSTable(){
 
     byDept[deptName].forEach(emp=>{
       const key = `${emp.id}__${month}`;
+      // Strict: only show the salary structure saved for THIS exact selected period.
+      // No fallback to "most recent" — every month is independent. If April is saved
+      // and approved, switching to May must show blank/"Not Set" until a new May
+      // record is explicitly added (saved separately in the DB under period=May).
       let s = ssMap[key] || null;
-      // If no match for the selected month, show the most recent structure for this employee
-      // (still strictly scoped to this employee's own DB id — no empid fallback)
-      if(!s){
-        const empStructs = allSalaryStructures.filter(x=> String(x.emp_id)===String(emp.id));
-        if(empStructs.length) s = empStructs.slice().sort((a,b)=>(b.period||'').localeCompare(a.period||''))[0];
-      }
       const fmtN = v => v!=null&&v!==''&&v!==0 ? Number(v).toLocaleString('en-IN') : '—';
 
 
@@ -1496,8 +1494,12 @@ function openSSEntry(empId, period){
           const idx = allSalaryStructures.findIndex(x=>x.id===fresh.id);
           if(idx>=0) allSalaryStructures[idx]=fresh; else allSalaryStructures.push(fresh);
         });
-        const ss = freshList.slice().sort((a,b)=>(b.period||'').localeCompare(a.period||'')).find(s=>(s.period||'').slice(0,7)===ym)
-                || freshList.slice().sort((a,b)=>(b.period||'').localeCompare(a.period||''))[0];
+        // Strict: only treat this as "Edit" if a record exists for the exact
+        // selected period (ym). No fallback to "most recent" — each month must be
+        // independently addable. Without this, opening a new month with no saved
+        // record yet would silently load and pre-fill another month's data in
+        // edit mode, blocking a genuinely new "Add" for that month.
+        const ss = freshList.find(s=>(s.period||'').slice(0,7)===ym);
         if(ss){
           _sseEditId=ss.id;
           document.getElementById('sseTitle').textContent='Edit Salary Structure';
