@@ -1964,13 +1964,22 @@ def api_archived_slips():  # type: ignore
             period = (data.get('period', '') or '')[:7]
             archived_at = data.get('_archived_at', '')
             slip_json = _json.dumps(data)
-            conn.execute("""
-                INSERT INTO archived_slips (emp_id, archive_uid, period, archived_at, slip_data)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(archive_uid) DO UPDATE SET
-                    slip_data=excluded.slip_data,
-                    archived_at=excluded.archived_at
-            """, (emp_id, archive_uid, period, archived_at, slip_json))
+            if USE_MYSQL:
+                conn.execute("""
+                    INSERT INTO archived_slips (emp_id, archive_uid, period, archived_at, slip_data)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        slip_data=VALUES(slip_data),
+                        archived_at=VALUES(archived_at)
+                """, (emp_id, archive_uid, period, archived_at, slip_json))
+            else:
+                conn.execute("""
+                    INSERT INTO archived_slips (emp_id, archive_uid, period, archived_at, slip_data)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(archive_uid) DO UPDATE SET
+                        slip_data=excluded.slip_data,
+                        archived_at=excluded.archived_at
+                """, (emp_id, archive_uid, period, archived_at, slip_json))
             conn.commit()
             conn.close()
             return jsonify({"success": True})
