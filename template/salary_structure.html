@@ -2782,9 +2782,10 @@ function openApvModal(ssId, empId, empName, period){
     }
 
   } else {
-    if(!isManagement && ['account_manager','hr','admin','senior_hr'].includes(role)){
+    var _isAdmin = (role === 'admin');
+    if(_isAdmin || (!isManagement && ['account_manager','hr','admin','senior_hr'].includes(role))){
       actionHtml = `<div class="apv-action-box">
-        <div class="apv-action-label">As <b style="color:#3b82f6">Account Department</b>, review and approve this salary structure. After your approval, Management will give final sign-off to unlock printing.</div>
+        <div class="apv-action-label">As <b style="color:#3b82f6">${_isAdmin ? 'Admin' : 'Account Department'}</b>, review and approve this salary structure. After your approval, Management will give final sign-off to unlock printing.</div>
         <div class="apv-btns">
           <button class="btn-apv-acct" onclick="submitApproval('Acct Approved')">✓ Approve (Account Dept)</button>
           <button class="btn-apv-rej" onclick="submitApproval('Rejected')">✕ Reject</button>
