@@ -1217,6 +1217,15 @@ function renderSSTable(){
     if(dept && e.dept!==dept) return false;
     if(etype && e.type!==etype) return false;
     if(search && !(e.username||'').toLowerCase().includes(search) && !(e.user_id||'').toLowerCase().includes(search) && !String(e.empid||'').includes(search)) return false;
+
+    // Joindate filter: for non-Admin depts, only show if selected period >= employee's joining month
+    // Admin dept always shows all employees
+    const isAdminDept = (e.dept||'').toLowerCase() === 'admin';
+    if(!isAdminDept && month && e.joindate) {
+      const joinMonth = e.joindate.slice(0,7); // "YYYY-MM"
+      if(month < joinMonth) return false;      // period is before joining month → hide
+    }
+
     return true;
   });
 
