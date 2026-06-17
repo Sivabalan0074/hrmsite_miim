@@ -6467,11 +6467,9 @@ function populateDesig(deptSelectId, desigSelectId) {
 }
 
 // ── Manager auto-populate based on designation ────────────────────────────
-// NOTE: 'SIVABALAN_USERNAME' is a literal username marker (not a designation).
-// populateManager() below resolves it directly to the real sivabalan.m employee
-// record so the manager field always points to one specific person, never a
-// generic shared label like "Admin" or "Sivabalan" that two different people
-// could end up matching identically.
+// 'sivabalan.m' is the real employee username, always offered as an extra
+// selectable option in the manager dropdown regardless of department/designation,
+// in addition to the normal designation-based manager auto-select below.
 var SIVABALAN_USERNAME = 'sivabalan.m';
 
 var DESIG_MANAGER_MAP = {
@@ -6482,7 +6480,7 @@ var DESIG_MANAGER_MAP = {
   'Design Engineer':                 'Design-Project Manager',
   'Team Leader (Design dept)':       'Design-Project Manager',
   'Design-Project Manager':          'Design-Senior Manager',
-  'Design-Senior Manager':           'SIVABALAN_USERNAME',
+  'Design-Senior Manager':           '',
   // Simulation Department
   'Junior Simulation Engineer Trainee': 'Simulation-Project Manager',
   'Junior Simulation Engineer':         'Simulation-Project Manager',
@@ -6490,14 +6488,12 @@ var DESIG_MANAGER_MAP = {
   'Simulation Engineer':                'Simulation-Project Manager',
   'Team Leader (Simulation dept)':      'Simulation-Project Manager',
   'Simulation-Project Manager':         'Simulation-Senior Manager',
-  'Simulation-Senior Manager':          'SIVABALAN_USERNAME',
-  // Admin / HR — all report directly to the real sivabalan.m employee, not a
-  // generic "Admin" label (previously two different Admin-dept people could
-  // both end up tagged with the same non-specific "Admin" manager value)
-  'Admin': 'SIVABALAN_USERNAME',
-  'Senior HR': 'SIVABALAN_USERNAME',
-  'HR': 'SIVABALAN_USERNAME',
-  'Project Manufacture Manager': 'SIVABALAN_USERNAME'
+  'Simulation-Senior Manager':          '',
+  // Admin / HR
+  'Admin': '',
+  'Senior HR': 'Admin',
+  'HR': 'Admin',
+  'Project Manufacture Manager': 'Admin'
 };
 
 function populateManager(desigSelectId, mgrSelectId, dept) {
@@ -6525,30 +6521,35 @@ function populateManager(desigSelectId, mgrSelectId, dept) {
 
   sel.innerHTML = '<option value="">Select Manager</option>';
 
-  if (mgrDesig === 'SIVABALAN_USERNAME') {
-    // Resolve to the real sivabalan.m employee record by username, not a generic label
-    var sivaEmp = allEmps.find(function(e) { return e.username === SIVABALAN_USERNAME; });
-    var displayText = sivaEmp ? sivaEmp.username : SIVABALAN_USERNAME;
-    var optVal      = SIVABALAN_USERNAME;
+  var autoSelectedUsername = '';
+
+  if (mgrDesig) {
+    // Find employee name whose designation matches mgrDesig (e.g. "Design-Project Manager")
+    var mgrEmp = allEmps.find(function(e) { return e.desig === mgrDesig; });
+
+    // "Username — Design-Project Manager" or fallback to designation only
+    var displayText = mgrEmp ? mgrEmp.username + ' — ' + mgrDesig : mgrDesig;
+    var optVal       = mgrEmp ? mgrEmp.username : mgrDesig;
 
     var o = document.createElement('option');
     o.value = optVal;
     o.textContent = displayText;
     o.selected = true;
     sel.appendChild(o);
-  } else if (mgrDesig) {
-    // Find employee name whose designation matches mgrDesig
-    var mgrEmp = allEmps.find(function(e) { return e.desig === mgrDesig; });
+    autoSelectedUsername = optVal;
+  }
 
-    // "Username — Design-Project Manager" or fallback to designation only
-    var displayText2 = mgrEmp ? mgrEmp.username + ' — ' + mgrDesig : mgrDesig;
-    var optVal2       = mgrEmp ? mgrEmp.username : mgrDesig;
-
-    var o2 = document.createElement('option');
-    o2.value = optVal2;
-    o2.textContent = displayText2;
-    o2.selected = true;
-    sel.appendChild(o2);
+  // Always offer sivabalan.m as an extra selectable option (not auto-selected unless
+  // the designation-based logic above had nothing to auto-select), so admins can
+  // manually pick him for any department/designation.
+  if (autoSelectedUsername !== SIVABALAN_USERNAME) {
+    var sivaEmp = allEmps.find(function(e) { return e.username === SIVABALAN_USERNAME; });
+    var sivaDisplay = sivaEmp ? sivaEmp.username : SIVABALAN_USERNAME;
+    var so = document.createElement('option');
+    so.value = SIVABALAN_USERNAME;
+    so.textContent = sivaDisplay;
+    if (!autoSelectedUsername) so.selected = true; // no designation-based manager → default to sivabalan.m
+    sel.appendChild(so);
   }
 }
 function initAdminBadge() {
