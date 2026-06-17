@@ -6467,6 +6467,13 @@ function populateDesig(deptSelectId, desigSelectId) {
 }
 
 // ── Manager auto-populate based on designation ────────────────────────────
+// NOTE: 'SIVABALAN_USERNAME' is a literal username marker (not a designation).
+// populateManager() below resolves it directly to the real sivabalan.m employee
+// record so the manager field always points to one specific person, never a
+// generic shared label like "Admin" or "Sivabalan" that two different people
+// could end up matching identically.
+var SIVABALAN_USERNAME = 'sivabalan.m';
+
 var DESIG_MANAGER_MAP = {
   // Design Department
   'Junior Design Engineer Trainee':  'Design-Project Manager',
@@ -6475,7 +6482,7 @@ var DESIG_MANAGER_MAP = {
   'Design Engineer':                 'Design-Project Manager',
   'Team Leader (Design dept)':       'Design-Project Manager',
   'Design-Project Manager':          'Design-Senior Manager',
-  'Design-Senior Manager':           'Sivabalan',
+  'Design-Senior Manager':           'SIVABALAN_USERNAME',
   // Simulation Department
   'Junior Simulation Engineer Trainee': 'Simulation-Project Manager',
   'Junior Simulation Engineer':         'Simulation-Project Manager',
@@ -6483,12 +6490,14 @@ var DESIG_MANAGER_MAP = {
   'Simulation Engineer':                'Simulation-Project Manager',
   'Team Leader (Simulation dept)':      'Simulation-Project Manager',
   'Simulation-Project Manager':         'Simulation-Senior Manager',
-  'Simulation-Senior Manager':          'Sivabalan',
-  // Admin / HR
-  'Admin': '',
-  'Senior HR': 'Admin',
-  'HR': 'Admin',
-  'Project Manufacture Manager': 'Admin'
+  'Simulation-Senior Manager':          'SIVABALAN_USERNAME',
+  // Admin / HR — all report directly to the real sivabalan.m employee, not a
+  // generic "Admin" label (previously two different Admin-dept people could
+  // both end up tagged with the same non-specific "Admin" manager value)
+  'Admin': 'SIVABALAN_USERNAME',
+  'Senior HR': 'SIVABALAN_USERNAME',
+  'HR': 'SIVABALAN_USERNAME',
+  'Project Manufacture Manager': 'SIVABALAN_USERNAME'
 };
 
 function populateManager(desigSelectId, mgrSelectId, dept) {
@@ -6501,13 +6510,10 @@ function populateManager(desigSelectId, mgrSelectId, dept) {
     mgrDesig = DESIG_MANAGER_MAP[desig] || '';
   }
 
-  // If Admin designation — show "Admin" as fixed text input
-  if (desig === 'Admin') {
-    sel.outerHTML = '<input type="text" id="' + mgrSelectId + '" aria-label="Manager" value="Admin" readonly style="background:rgba(249,115,22,0.05);border:1px solid rgba(249,115,22,0.3);border-radius:7px;color:#f97316;font-size:.85rem;padding:8px 12px;width:100%;cursor:default;">';
-    return;
-  }
+  var allEmps = (typeof employees !== 'undefined' ? employees : [])
+                .concat(typeof pendingEmps !== 'undefined' ? pendingEmps : []);
 
-  // Always re-fetch after possible outerHTML replace (stale reference fix)
+  // Always re-fetch in case a previous call swapped this element out (stale reference fix)
   sel = document.getElementById(mgrSelectId);
   if (!sel) return;
   if (sel.tagName === 'INPUT') {
@@ -6519,21 +6525,30 @@ function populateManager(desigSelectId, mgrSelectId, dept) {
 
   sel.innerHTML = '<option value="">Select Manager</option>';
 
-  if (mgrDesig) {
-    // Find employee name whose designation matches mgrDesig
-    var allEmps = (typeof employees !== 'undefined' ? employees : [])
-                  .concat(typeof pendingEmps !== 'undefined' ? pendingEmps : []);
-    var mgrEmp = allEmps.find(function(e) { return e.desig === mgrDesig; });
-
-    // "Sivabalan — Design-Project Manager" or fallback to designation only
-    var displayText = mgrEmp ? mgrEmp.username + ' — ' + mgrDesig : mgrDesig;
-    var optVal      = mgrEmp ? mgrEmp.username : mgrDesig;
+  if (mgrDesig === 'SIVABALAN_USERNAME') {
+    // Resolve to the real sivabalan.m employee record by username, not a generic label
+    var sivaEmp = allEmps.find(function(e) { return e.username === SIVABALAN_USERNAME; });
+    var displayText = sivaEmp ? sivaEmp.username : SIVABALAN_USERNAME;
+    var optVal      = SIVABALAN_USERNAME;
 
     var o = document.createElement('option');
     o.value = optVal;
     o.textContent = displayText;
     o.selected = true;
     sel.appendChild(o);
+  } else if (mgrDesig) {
+    // Find employee name whose designation matches mgrDesig
+    var mgrEmp = allEmps.find(function(e) { return e.desig === mgrDesig; });
+
+    // "Username — Design-Project Manager" or fallback to designation only
+    var displayText2 = mgrEmp ? mgrEmp.username + ' — ' + mgrDesig : mgrDesig;
+    var optVal2       = mgrEmp ? mgrEmp.username : mgrDesig;
+
+    var o2 = document.createElement('option');
+    o2.value = optVal2;
+    o2.textContent = displayText2;
+    o2.selected = true;
+    sel.appendChild(o2);
   }
 }
 function initAdminBadge() {
@@ -7130,9 +7145,12 @@ function empRender(){
           // Add emp.dept if not in list
           if (depts.indexOf(emp.dept) === -1 && emp.dept) deptOpts += '<option value="'+emp.dept+'" selected>'+emp.dept+'</option>';
           var typeOpts = types.map(function(t){ return '<option'+(emp.type===t?' selected':'')+'>'+t+'</option>'; }).join('');
-          var mgrOpts = '<option value="">Select Manager</option>' + employees.map(function(e){ return '<option value="'+e.username+'"'+(emp.manager===e.username?' selected':'')+'>'+e.username+'</option>'; }).join('');
-          if (emp.manager && !employees.find(function(e){ return e.username===emp.manager; })) {
-            mgrOpts += '<option value="'+emp.manager+'" selected>'+emp.manager+'</option>';
+          // Default to the real sivabalan.m employee when no manager is set yet (not a generic
+          // shared label like "Admin"), unless this row IS sivabalan.m himself.
+          var _effMgr = emp.manager || ((emp.username !== SIVABALAN_USERNAME) ? SIVABALAN_USERNAME : '');
+          var mgrOpts = '<option value=""'+(!_effMgr?' selected':'')+'>Select Manager</option>' + employees.map(function(e){ return '<option value="'+e.username+'"'+(_effMgr===e.username?' selected':'')+'>'+e.username+'</option>'; }).join('');
+          if (_effMgr && !employees.find(function(e){ return e.username===_effMgr; })) {
+            mgrOpts += '<option value="'+_effMgr+'" selected>'+_effMgr+'</option>';
           }
           _eh += '<tr class="dr"><td colspan="7">';
           _eh += '<div style="background:#1a1a2e;border:1.5px solid #f97316;border-radius:10px;padding:20px;margin:8px;">';
@@ -7846,7 +7864,7 @@ function addEmployee(){
 
   var probPeriod = document.getElementById('i-prob-period') ? document.getElementById('i-prob-period').value : '';
   var payload = { username: u, empid: ei, dept: d, desig: de,
-    manager: mg||'Sivabalan', joindate: jd, type: tp, company_email: em,
+    manager: mg||SIVABALAN_USERNAME, joindate: jd, type: tp, company_email: em,
     probation_period: tp === 'Probationary' ? (probPeriod || '') : '',
     intern_period: tp === 'Intern' ? '3m' : '' };
   if (tp === 'Probationary' && !probPeriod) {

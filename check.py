@@ -1,14 +1,15 @@
-import sqlite3
+import pymysql
 
-conn = sqlite3.connect('miim_hr.db')
-rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-print("Tables:", [r[0] for r in rows])
-
-# Check expenses table has data or not
-try:
-    count = conn.execute("SELECT COUNT(*) FROM expenses").fetchone()[0]
-    print("Expenses count:", count)
-except Exception as e:
-    print("Expenses table error:", e)
-
+conn = pymysql.connect(
+    host='srv1870.hstgr.io',
+    user='u597435008_miim_hrm',
+    password='Miim@2026#',
+    database='u597435008_miim_hrm',
+    charset='utf8mb4'
+)
+cur = conn.cursor()
+cur.execute("SELECT username, status, force_reset FROM employees WHERE username='gokulraj.b'")
+row = cur.fetchone()
+print(row if row else 'NOT FOUND')
+cur.close()
 conn.close()

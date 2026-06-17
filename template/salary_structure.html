@@ -1136,14 +1136,11 @@ function updateSSStats(){
   // If no structures match the selected month, show all (so counts aren't misleadingly zero)
   if(validStructs.length === 0 && selMonth) validStructs = allSalaryStructures.slice();
 
-  // Build employee set from valid records only
+  // Build employee set from valid records only — strict match by DB id, never empid
+  // (see renderSSTable note above for why mixing id/empid causes false matches)
   const empIdSet = new Set();
-  validStructs.forEach(s=>{
-    empIdSet.add(String(s.emp_id));
-    const emp_ = allEmps.find(e=> String(e.id)===String(s.emp_id) || String(e.empid)===String(s.emp_id));
-    if(emp_){ empIdSet.add(String(emp_.id)); if(emp_.empid) empIdSet.add(String(emp_.empid)); }
-  });
-  const withCount = allEmps.filter(e=> empIdSet.has(String(e.id)) || (e.empid && empIdSet.has(String(e.empid)))).length;
+  validStructs.forEach(s=>{ empIdSet.add(String(s.emp_id)); });
+  const withCount = allEmps.filter(e=> empIdSet.has(String(e.id))).length;
 
   const totalEarn = validStructs.reduce((s,x)=>s+(x.total_earnings||0),0);
   const totalDed  = validStructs.reduce((s,x)=>s+(x.total_deductions||0),0);
@@ -1239,19 +1236,16 @@ function renderSSTable(){
   emps.forEach(e=>(byDept[e.dept]=byDept[e.dept]||[]).push(e));
 
   // Build structure lookup: emp_id+period → structure
-  // Store under multiple possible ID formats to handle DB id vs empid mismatches
+  // STRICT match by employee DB id only. The backend always saves emp_id as the
+  // employee's numeric DB id (see /api/salary-structures POST), so matching here
+  // must never fall back to emp.empid — that caused two different employees to
+  // share the same salary record whenever one person's empid string happened to
+  // equal another person's numeric DB id (e.g. mithun.r's empid being "2" while
+  // sivabalan.m's DB id is also 2 — both would then show the same saved salary).
   const ssMap = {};
   allSalaryStructures.forEach(s=>{
     const key = `${s.emp_id}__${(s.period||'').slice(0,7)}`;
     ssMap[key] = s;
-    // Also store under the employee's empid if the emp record has it
-    const emp_ = allEmps.find(e=> String(e.id)===String(s.emp_id) || String(e.empid)===String(s.emp_id));
-    if(emp_){
-      const keyById  = `${emp_.id}__${(s.period||'').slice(0,7)}`;
-      const keyByEmpid = emp_.empid ? `${emp_.empid}__${(s.period||'').slice(0,7)}` : null;
-      ssMap[keyById] = s;
-      if(keyByEmpid) ssMap[keyByEmpid] = s;
-    }
   });
 
   let html = '';
@@ -1278,15 +1272,15 @@ function renderSSTable(){
 
     byDept[deptName].forEach(emp=>{
       const key = `${emp.id}__${month}`;
-      // Fallback: also try emp.empid in case the salary structure stores empid instead of DB id
-      const keyAlt = emp.empid && String(emp.empid) !== String(emp.id) ? `${emp.empid}__${month}` : null;
-      let s = ssMap[key] || (keyAlt ? ssMap[keyAlt] : null) || null;
+      let s = ssMap[key] || null;
       // If no match for the selected month, show the most recent structure for this employee
+      // (still strictly scoped to this employee's own DB id — no empid fallback)
       if(!s){
-        const empStructs = allSalaryStructures.filter(x=> String(x.emp_id)===String(emp.id) || (emp.empid && String(x.emp_id)===String(emp.empid)));
+        const empStructs = allSalaryStructures.filter(x=> String(x.emp_id)===String(emp.id));
         if(empStructs.length) s = empStructs.slice().sort((a,b)=>(b.period||'').localeCompare(a.period||''))[0];
       }
       const fmtN = v => v!=null&&v!==''&&v!==0 ? Number(v).toLocaleString('en-IN') : '—';
+
 
       if(s){
         const rowId  = `ss_det_${emp.id}`;
