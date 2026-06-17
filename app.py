@@ -5488,7 +5488,7 @@ def _self_ping_loop():
 # No login required — protected by secret key only
 _OFF_SECRET_KEY = 'MIIM_OFF_2026'
 
-@app.route('/api/public/salary-summary', methods=['GET'])
+@app.route('/api/public/salary-summary', methods=['GET', 'OPTIONS'])
 def public_salary_summary():
     """
     Public endpoint for OFF application to fetch salary data.
@@ -5499,6 +5499,13 @@ def public_salary_summary():
     """
     if request.args.get('key', '') != _OFF_SECRET_KEY:
         return jsonify({'error': 'unauthorized'}), 401
+
+    if request.method == 'OPTIONS':
+        from flask import make_response as _mr
+        r = _mr('', 204)
+        r.headers['Access-Control-Allow-Origin'] = '*'
+        r.headers['Access-Control-Allow-Methods'] = 'GET'
+        return r
 
     period = request.args.get('period', '')
     try:
@@ -5567,7 +5574,7 @@ def public_salary_summary():
             'no_salary': no_salary_list,
             'total_with_salary': len(salary_list),
             'total_without_salary': len(no_salary_list)
-        })
+        }), 200, {'Access-Control-Allow-Origin': '*'}
 
     except Exception as e:
         import traceback; traceback.print_exc()
