@@ -1082,16 +1082,25 @@ function closeSalaryStructure(){
 }
 
 // ── Load from Python API ──
-async function loadSalaryStructures(){
+function _delay(ms){return new Promise(function(r){setTimeout(r,ms);});}
+async function loadSalaryStructures(retries){
+  retries = retries || 0;
   try{
     const r = await fetch(`${BASE}/api/salary-structures`, {headers: hdrs()});
+    if(r.status === 429){
+      if(retries < 3){
+        await new Promise(function(res){setTimeout(res, 1500 * (retries+1));});
+        return loadSalaryStructures(retries+1);
+      }
+      throw new Error('Rate limited (429)');
+    }
     if(!r.ok) throw new Error('HTTP '+r.status);
     const d = await r.json();
     allSalaryStructures = Array.isArray(d) ? d
       : (d.data || d.salary_structures || d.structures || []);
   }catch(e){
     console.error('loadSalaryStructures error:', e);
-    allSalaryStructures = [];
+    if(!allSalaryStructures) allSalaryStructures = [];
   }
 }
 
@@ -1595,7 +1604,7 @@ async function cancelAndClearDeductions() {
           var putData = await putRes.json();
           if (putData.success || putData.id || putData.data) {
             toast('✅ Deductions cleared from salary structure.');
-            await loadSalaryStructures();
+            await _delay(800); await loadSalaryStructures();
           } else {
             toast('⚠ Could not clear deductions: ' + (putData.error || 'Unknown error'), 'error');
           }
@@ -1884,7 +1893,7 @@ async function saveSSEntry(){
       var _preservedId     = _sseEditId;
       toast(isEdit?'Salary structure updated ✓':'Salary structure saved ✓');
       closeSSEntry();
-      await loadSalaryStructures();
+      await _delay(800); await loadSalaryStructures();
       // Force-patch local record so server reset doesn't overwrite our status
       if(isEdit && _preservedStatus && _preservedId){
         var _rec = allSalaryStructures.find(function(s){ return s.id === _preservedId; });
@@ -1958,7 +1967,7 @@ async function deleteSSEntry(ssId,empId){
   try{
     const r=await fetch(`${BASE}/api/salary-structures/${ssId}`,{method:'DELETE',headers:hdrs()});
     const d=await r.json();
-    if(d.success){toast('Deleted & Archived ✓ — Employees can still view this slip in history');await loadSalaryStructures();updateSSStats();renderSSTable();}
+    if(d.success){toast('Deleted & Archived ✓ — Employees can still view this slip in history');await _delay(800);await loadSalaryStructures();updateSSStats();renderSSTable();}
     else toast(d.error||'Delete failed','error');
   }catch{
     // Fallback local delete still preserves archive
@@ -3244,7 +3253,7 @@ async function submitCorrectionRequest(){
     _doAfter();
     // Reload from DB to confirm saved state, then re-render
     if(typeof loadSalaryStructures === 'function'){
-      await loadSalaryStructures();
+      await _delay(800); await loadSalaryStructures();
       // After reload, force-patch in-memory record in case DB lagged
       var _patched = allSalaryStructures.find(function(x){ return x.id === ssId; });
       if(_patched){
@@ -3409,7 +3418,7 @@ async function ilSave(empId, period){
     const d = await r.json();
     if(d.success||d.id||d.data){
       toast('Salary structure saved ✓');
-      await loadSalaryStructures();
+      await _delay(800); await loadSalaryStructures();
       updateSSStats();
       renderSSTable();
     } else toast(d.error||'Save failed','error');
@@ -3489,7 +3498,7 @@ document.addEventListener('DOMContentLoaded', async function(){
   }
 
   try {
-    await loadSalaryStructures();
+    await _delay(800); await loadSalaryStructures();
   } catch(e) {
     console.error('loadSalaryStructures failed:', e);
   }

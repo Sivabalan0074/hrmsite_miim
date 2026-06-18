@@ -47,7 +47,9 @@ import threading as _threading
 
 _pool_lock = _threading.Lock()
 _pool: list = []          # idle connections waiting to be reused
-_POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', 5))   # override via env if needed
+_POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', 10))  # increased from 5 to 10
+_active_count = 0         # track active connections
+_MAX_ACTIVE   = int(os.environ.get('DB_MAX_ACTIVE', 20))  # hard ceiling
 
 
 def _create_raw_mysql_conn() -> Any:
@@ -66,25 +68,38 @@ def _create_raw_mysql_conn() -> Any:
 
 
 def _get_pool_conn() -> Any:
-    """Get a live connection from the pool, or create one if pool is empty."""
-    with _pool_lock:
-        while _pool:
-            conn = _pool.pop()
-            try:
-                conn.ping(reconnect=True)   # drop stale connections
-                return conn
-            except Exception:
-                pass   # stale — discard and try next
+    """Get a live connection from pool, or create one. Retries briefly if pool busy."""
+    import time as _time
+    global _active_count
+    for attempt in range(6):          # retry up to ~3 seconds
+        with _pool_lock:
+            while _pool:
+                conn = _pool.pop()
+                try:
+                    conn.ping(reconnect=True)
+                    _active_count += 1
+                    return conn
+                except Exception:
+                    pass              # stale — discard
+            if _active_count < _MAX_ACTIVE:
+                _active_count += 1
+                break                 # will create new connection below
+        # pool empty and at ceiling — wait a bit then retry
+        _time.sleep(0.5)
     return _create_raw_mysql_conn()
 
 
 def _return_pool_conn(conn: Any) -> None:
-    """Return a connection to the pool (only if pool has room)."""
+    """Return a connection to the pool."""
+    global _active_count
     try:
-        conn.rollback()   # clean any uncommitted state
+        conn.rollback()
     except Exception:
-        return            # broken connection — discard
+        with _pool_lock:
+            _active_count = max(0, _active_count - 1)
+        return
     with _pool_lock:
+        _active_count = max(0, _active_count - 1)
         if len(_pool) < _POOL_SIZE:
             _pool.append(conn)
         else:
