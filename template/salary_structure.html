@@ -3534,14 +3534,12 @@ document.addEventListener('DOMContentLoaded', async function(){
     try{
       var all=JSON.parse(localStorage.getItem('miim_archived_slips')||'[]');
       if(!all.length) return;
-      all.forEach(function(slip){
-        if(!slip._archive_uid) return;
-        fetch('/api/archived-slips',{
-          method:'POST', credentials:'same-origin',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(slip)
-        }).catch(function(){});
-      });
+      // Batch POST — one request instead of N requests (avoids rate limit)
+      fetch('/api/archived-slips',{
+        method:'POST', credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({slips: all})
+      }).catch(function(){});
     }catch(e){}
   })();
 });
