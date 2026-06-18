@@ -5343,9 +5343,11 @@ function getCurrentRole() {
     var s = JSON.parse(sessionStorage.getItem('miim_user') || localStorage.getItem('miim_session') || '{}');
     if (s && s.role) return s.role.trim().toLowerCase();
     var dept = (s.dept || '').trim().toLowerCase();
+    var desig = (s.desig || '').trim().toLowerCase();
     if (dept === 'admin')                          return 'admin';
     if (dept === 'account' || dept === 'accounts') return 'account_manager';
     if (dept === 'hr')                             return 'hr';
+    if (desig === 'senior developer')              return 'senior_developer';
     if (s.username)                                return 'member';
   } catch(e) {}
   return 'member'; // no session = lowest privilege
@@ -5355,7 +5357,7 @@ function getCurrentDept() {
 }
 function isFullAccess() {
   const r = getCurrentRole();
-  return r === 'admin' || r === 'hr';
+  return r === 'admin' || r === 'hr' || r === 'senior_developer';
 }
 function isDeptManager() {
   const r = getCurrentRole();
@@ -6416,6 +6418,11 @@ function applySidebarUser(user) {
 }
 var DEPT_DESIG_MAP = {
   Admin: ['Admin'],
+  IT: [
+    'Senior Developer',
+    'Junior Developer',
+    'Intern'
+  ],
   Design: [
     'Design-Senior Manager',
     'Design-Project Manager',
@@ -6473,6 +6480,10 @@ function populateDesig(deptSelectId, desigSelectId) {
 var SIVABALAN_USERNAME = 'sivabalan.m';
 
 var DESIG_MANAGER_MAP = {
+  // IT Department
+  'Intern':           'Senior Developer',
+  'Junior Developer': 'Senior Developer',
+  'Senior Developer': '',
   // Design Department
   'Junior Design Engineer Trainee':  'Design-Project Manager',
   'Junior Design Engineer':          'Design-Project Manager',
@@ -6544,7 +6555,7 @@ function populateManager(desigSelectId, mgrSelectId, dept) {
   // manually pick him for any department/designation.
   if (autoSelectedUsername !== SIVABALAN_USERNAME) {
     var sivaEmp = allEmps.find(function(e) { return e.username === SIVABALAN_USERNAME; });
-    var sivaDisplay = sivaEmp ? sivaEmp.username : SIVABALAN_USERNAME;
+    var sivaDisplay = sivaEmp ? (sivaEmp.username + ' — Admin') : (SIVABALAN_USERNAME + ' — Admin');
     var so = document.createElement('option');
     so.value = SIVABALAN_USERNAME;
     so.textContent = sivaDisplay;
@@ -6669,6 +6680,7 @@ function initAdminBadge() {
       if (d === 'account' || d === 'accounts')  return 'account_manager';
       if (d === 'hr' && g.indexOf('senior hr') !== -1) return 'senior_hr';
       if (d === 'hr')                           return 'hr';
+      if (g === 'senior developer')             return 'senior_developer';
       if (g.indexOf('senior manager')  !== -1)  return 'sm';
       if (g.indexOf('project manager') !== -1)  return 'pm';
       return 'member';
@@ -9744,7 +9756,7 @@ window.addEventListener('message', function(e) {
                       text-transform:uppercase;color:#f97316;margin-bottom:8px;">
           💼 Designation Name
         </label>
-        <input id="adm-desig" type="text" placeholder="e.g. Senior Engineer, Team Lead…"
+        <input id="adm-desig" type="text" placeholder="e.g. Senior Developer, Junior Developer, Intern"
           autocomplete="off"
           onkeydown="if(event.key==='Enter')saveNewDeptDesig()"
           style="width:100%;background:#111827;border:1.5px solid #2a2f3a;border-radius:8px;
@@ -9752,6 +9764,7 @@ window.addEventListener('message', function(e) {
                  padding:11px 14px;outline:none;transition:border-color .2s,box-shadow .2s;"
           onfocus="this.style.borderColor='#f97316';this.style.boxShadow='0 0 0 3px rgba(249,115,22,0.12)'"
           onblur="this.style.borderColor='#2a2f3a';this.style.boxShadow='none'" aria-label="e.g. Senior Engineer, Team Lead…">
+        <div style="font-size:.75rem;color:#6b7280;margin-top:5px;">💡 Use comma to add multiple designations at once (e.g. Senior Developer, Junior Developer, Intern)</div>
       </div>
 
       <!-- Error msg -->
@@ -9843,10 +9856,13 @@ function saveNewDeptDesig() {
     }
   });
 
-  // ── Register designation in DEPT_DESIG_MAP ──
+  // ── Register designation in DEPT_DESIG_MAP (supports comma-separated) ──
   if (typeof DEPT_DESIG_MAP !== 'undefined') {
     if (!DEPT_DESIG_MAP[dept]) DEPT_DESIG_MAP[dept] = [];
-    if (!DEPT_DESIG_MAP[dept].includes(desig)) DEPT_DESIG_MAP[dept].push(desig);
+    var desigList = desig.split(',').map(function(d){ return d.trim(); }).filter(function(d){ return d !== ''; });
+    desigList.forEach(function(d) {
+      if (!DEPT_DESIG_MAP[dept].includes(d)) DEPT_DESIG_MAP[dept].push(d);
+    });
   }
 
   // ── Auto-select the new dept and populate its designations ──
@@ -9854,19 +9870,20 @@ function saveNewDeptDesig() {
   if (deptSel) {
     deptSel.value = dept;
     if (typeof populateDesig === 'function') populateDesig('i-dept', 'i-desig');
-    // Also auto-select the new designation
+    // Also auto-select the first designation from comma-split list
+    var firstDesig = desig.split(',')[0].trim();
     var desigSel = document.getElementById('i-desig');
     if (desigSel) {
       setTimeout(function(){
         for (var i = 0; i < desigSel.options.length; i++) {
-          if (desigSel.options[i].value === desig) { desigSel.value = desig; break; }
+          if (desigSel.options[i].value === firstDesig) { desigSel.value = firstDesig; break; }
         }
       }, 50);
     }
   }
 
   closeAddDeptModal();
-  showToast('✅  Department "' + dept + '" · Designation "' + desig + '" added!');
+  showToast('✅  Department "' + dept + '" · ' + desig.split(',').length + ' designation(s) added!');
   // Re-render employee table so new department section appears
   if (typeof empRender === 'function') empRender();
 }
