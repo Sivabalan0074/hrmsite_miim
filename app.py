@@ -652,7 +652,7 @@ def get_ex_employees():
                 (emp['id'],)
             ).fetchall()
             emp['history'] = [dict(h) for h in hist_rows]
-            approved_sal = [s for s in emp['salary_history'] if (s.get('approval_status') or '').lower() == 'approved']
+            approved_sal = [s for s in emp['salary_history'] if (s.get('approval_status') or '').strip().lower() == 'fully approved']
 
             if approved_sal:
                 # Preferred: use actual approved payroll records
