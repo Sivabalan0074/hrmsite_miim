@@ -151,8 +151,10 @@ def _table_columns(conn, table):
 def get_stats():
     try:
         conn = _db()
-        total = conn.execute("SELECT COUNT(*) FROM employees WHERE status='active'").fetchone()[0]
-        pending_lv = conn.execute("SELECT COUNT(*) FROM leave_requests WHERE status='pending'").fetchone()[0]
+        total_row = conn.execute("SELECT COUNT(*) FROM employees WHERE status='active'").fetchone()
+        total = total_row[0] if total_row else 0
+        pending_row = conn.execute("SELECT COUNT(*) FROM leave_requests WHERE status='pending'").fetchone()
+        pending_lv = pending_row[0] if pending_row else 0
         conn.close()
         return jsonify({"total_employees": total, "present_today": 0, "pending_leaves": pending_lv, "total_income": 0, "total_expense": 0, "net_balance": 0, "guests_today": 0})
     except Exception as ex:
