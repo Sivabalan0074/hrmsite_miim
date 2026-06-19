@@ -651,8 +651,37 @@ def get_ex_employees():
             ).fetchall()
             emp['history'] = [dict(h) for h in hist_rows]
             approved_sal = [s for s in emp['salary_history'] if (s.get('approval_status') or '').lower() == 'approved']
-            emp['total_salary_received'] = sum(s.get('net_pay', 0) or 0 for s in approved_sal)
-            emp['months_worked'] = len(approved_sal)
+
+            if approved_sal:
+                # Preferred: use actual approved payroll records
+                emp['total_salary_received'] = sum(s.get('net_pay', 0) or 0 for s in approved_sal)
+                emp['months_worked'] = len(approved_sal)
+            else:
+                # Fallback: no approved salary records found — estimate
+                # months worked from joindate -> relieve_date, and total
+                # salary from monthly CTC so the UI doesn't show "—" / ₹0.
+                months = 0
+                try:
+                    jd = (emp.get('joindate') or '').strip()
+                    rd = (emp.get('relieve_date') or '').strip()
+                    if jd and rd:
+                        jd_dt = datetime.datetime.strptime(jd[:10], '%Y-%m-%d')
+                        rd_dt = datetime.datetime.strptime(rd[:10], '%Y-%m-%d')
+                        months = (rd_dt.year - jd_dt.year) * 12 + (rd_dt.month - jd_dt.month)
+                        if rd_dt.day >= jd_dt.day:
+                            months += 1
+                        months = max(months, 0)
+                except Exception:
+                    months = 0
+
+                monthly_ctc = 0
+                try:
+                    monthly_ctc = float(emp.get('ctc') or emp.get('salary') or 0)
+                except Exception:
+                    monthly_ctc = 0
+
+                emp['months_worked'] = months
+                emp['total_salary_received'] = round(monthly_ctc * months) if months else 0
         conn.close()
         return jsonify({"success": True, "ex_employees": ex_emps, "count": len(ex_emps)})
     except Exception as ex:
