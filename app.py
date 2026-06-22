@@ -2782,18 +2782,37 @@ def get_attendance_range():
 def save_attendance():
     try:
         data = request.json or {}
+        date = data.get('date', str(datetime.date.today()))
         records = data.get('records', [data])
         conn = _db()
+        now = str(datetime.datetime.now())
+
+        # Group records by emp_id — each emp may have multiple session rows
+        from collections import defaultdict
+        emp_sessions = defaultdict(list)
         for rec in records:
             emp_id = rec.get('emp_id')
-            date = rec.get('date')
-            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=?", (emp_id, date)).fetchone()
-            if existing:
-                conn.execute("UPDATE attendance SET checkin=?,checkout=?,status=?,note=?,marked_by=?,updated_at=? WHERE emp_id=? AND date=?",
-                             (rec.get('checkin', '--'), rec.get('checkout', '--'), rec.get('status', 'present'), rec.get('note', ''), rec.get('marked_by', 'admin'), str(datetime.datetime.now()), emp_id, date))
-            else:
-                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                             (emp_id, date, rec.get('checkin', '--'), rec.get('checkout', '--'), rec.get('status', 'present'), rec.get('note', ''), rec.get('marked_by', 'admin'), str(datetime.datetime.now())))
+            rec_date = rec.get('date', date)
+            if emp_id:
+                emp_sessions[(emp_id, rec_date)].append(rec)
+
+        for (emp_id, rec_date), sessions in emp_sessions.items():
+            # Delete all non-ESSL rows for this emp+date (manual/admin saved rows)
+            conn.execute(
+                "DELETE FROM attendance WHERE emp_id=? AND date=? AND (marked_by IS NULL OR marked_by != 'ESSL_AUTO')",
+                (emp_id, rec_date)
+            )
+            # Re-insert each session as its own row
+            for rec in sessions:
+                conn.execute(
+                    "INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (emp_id, rec_date,
+                     rec.get('checkin', '--'), rec.get('checkout', '--'),
+                     rec.get('status', 'present'),
+                     rec.get('note', rec.get('remarks', '')),
+                     rec.get('marked_by', 'admin'), now)
+                )
+
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:

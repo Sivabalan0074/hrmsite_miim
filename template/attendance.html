@@ -2176,13 +2176,29 @@ async function fetchAtt(dKey){
     const res=await fetchWithTimeout(`/api/attendance?date=${dKey}`,{headers:getHeaders()},5000);
     const data=await res.json();
     const map={};
-    employees.forEach(e=>{map[e.id]={status:'',checkin:'',checkout:''};});
+    employees.forEach(e=>{map[e.id]={status:'',checkin:'',checkout:'',entries:[]};});
     const empidToId={};
     employees.forEach(e=>{ if(e.empid) empidToId[String(e.empid)]=e.id; });
+    // ── Multi-session fix: group multiple DB rows per employee into entries[] ──
     (data.records||data||[]).forEach(r=>{
       const byEmpid=empidToId[String(r.e_emp_id||'')];
       const targetId=byEmpid||r.emp_id;
-      if(targetId) map[targetId]=_parseAttRec(r);
+      if(!targetId) return;
+      const parsed=_parseAttRec(r);
+      if(!map[targetId]) map[targetId]={status:'',checkin:'',checkout:'',entries:[]};
+      // Status: set from first record that has one
+      if(!map[targetId].status && parsed.status) map[targetId].status=parsed.status;
+      // Push each DB row as a separate session entry
+      const entry={in:parsed.checkin||'', out:parsed.checkout||''};
+      if(entry.in||entry.out) map[targetId].entries.push(entry);
+      // Legacy fields: first checkin, last checkout (for backward compat)
+      if(map[targetId].entries.length===1) map[targetId].checkin=entry.in;
+      if(entry.out) map[targetId].checkout=entry.out;
+    });
+    // Ensure every employee has at least one empty entry slot
+    employees.forEach(e=>{
+      if(!map[e.id].entries||map[e.id].entries.length===0)
+        map[e.id].entries=[{in:'',out:''}];
     });
     // Merge with any localStorage data (localStorage wins for status)
     try{
@@ -2193,10 +2209,12 @@ async function fetchAtt(dKey){
         Object.keys(lsDay).forEach(eid=>{
           const lsRec=lsDay[eid];
           if(lsRec&&lsRec.status){
-            map[eid]=map[eid]||{status:'',checkin:'',checkout:''};
+            map[eid]=map[eid]||{status:'',checkin:'',checkout:'',entries:[{in:'',out:''}]};
             map[eid].status=lsRec.status;
             if(lsRec.checkin)  map[eid].checkin=lsRec.checkin;
             if(lsRec.checkout) map[eid].checkout=lsRec.checkout;
+            // Merge localStorage entries if present
+            if(lsRec.entries&&lsRec.entries.length>0) map[eid].entries=lsRec.entries;
           }
         });
       }
@@ -2274,12 +2292,19 @@ async function fetchAttRange(days){
       );
       if(!res.ok)throw new Error('HTTP '+res.status);
       const data=await res.json();
-      // Group records by date
+      // Group records by date — multi-session: accumulate entries[] per emp per day
       const byDate={};
       (Array.isArray(data)?data:(data.records||[])).forEach(r=>{
         const dKey=r.date||'';if(!dKey)return;
         if(!byDate[dKey])byDate[dKey]={};
-        byDate[dKey][r.emp_id]=_parseAttRec(r);
+        const eid=r.emp_id;
+        const parsed=_parseAttRec(r);
+        if(!byDate[dKey][eid]) byDate[dKey][eid]={status:'',checkin:'',checkout:'',entries:[]};
+        if(!byDate[dKey][eid].status&&parsed.status) byDate[dKey][eid].status=parsed.status;
+        const entry={in:parsed.checkin||'',out:parsed.checkout||''};
+        if(entry.in||entry.out) byDate[dKey][eid].entries.push(entry);
+        if(byDate[dKey][eid].entries.length===1) byDate[dKey][eid].checkin=entry.in;
+        if(entry.out) byDate[dKey][eid].checkout=entry.out;
       });
       // Merge backend data into attCache (backend wins over empty, localStorage wins over backend)
       days.forEach(d=>{
@@ -3551,15 +3576,25 @@ function filterStatus(s){
 async function saveAttendance(){
   const dKey=dk(viewDate);const vis=getVisibleEmployees();const att=attCache[dKey]||{};
   const unmarked=vis.filter(e=>!att[e.id]?.status);
-  if(unmarked.length>0){if(!confirm(`${unmarked.length} employees not marked. Save anyway? (→ Absent)`))return;unmarked.forEach(e=>{if(!att[e.id])att[e.id]={};att[e.id].status='absent';});attCache[dKey]=att;}
-  const records=vis.map(e=>{
+  if(unmarked.length>0){if(!confirm(`${unmarked.length} employees not marked. Save anyway? (-> Absent)`))return;unmarked.forEach(e=>{if(!att[e.id])att[e.id]={};att[e.id].status='absent';});attCache[dKey]=att;}
+  // Build records — expand multiple entries into separate rows per session
+  const records=[];
+  vis.forEach(e=>{
     const d=att[e.id]||{};const s=d.status||'absent';
     let apiSt='absent';
     if(s==='present') apiSt='present';
     else if(s==='off') apiSt='absent';
     else if(['cl','sl','el','pm'].includes(s)) apiSt='leave';
     const noteMap={cl:'Casual Leave',sl:'Sick Leave',el:'Earned Leave',pm:'Permission',off:'Off Day'};
-    return {emp_id:e.id,status:apiSt,checkin:d.checkin||'--',checkout:d.checkout||'--',remarks:noteMap[s]||''};
+    const entries=(d.entries&&d.entries.length>0)?d.entries:[{in:d.checkin||'',out:d.checkout||''}];
+    const validEntries=entries.filter(en=>en.in||en.out);
+    if(validEntries.length===0){
+      records.push({emp_id:e.id,status:apiSt,checkin:'--',checkout:'--',remarks:noteMap[s]||'',session:1,total_sessions:1});
+    } else {
+      validEntries.forEach((en,idx)=>{
+        records.push({emp_id:e.id,status:apiSt,checkin:en.in||'--',checkout:en.out||'--',remarks:noteMap[s]||'',session:idx+1,total_sessions:validEntries.length});
+      });
+    }
   });
   try{
     const res=await fetch('/api/attendance/save',{
@@ -3568,12 +3603,12 @@ async function saveAttendance(){
     });
     const data=await res.json();
     if(data.success){
-      markChanged(false);showToast('success','Attendance Saved!',`${records.length} records for ${dKey}`);
+      markChanged(false);showToast('success','Attendance Saved!',`${vis.length} employees for ${dKey}`);
     }else{
-      markChanged(false);showToast('success','Saved (local)',`${records.length} records`);
+      markChanged(false);showToast('success','Saved (local)',`${vis.length} employees`);
     }
   }catch(e){
-    markChanged(false);showToast('success','Saved (local)',`${records.length} records for ${dKey}`);
+    markChanged(false);showToast('success','Saved (local)',`${vis.length} employees for ${dKey}`);
   }
   // Persist attCache to localStorage so it survives logout/login
   persistAttCache();
