@@ -2782,37 +2782,18 @@ def get_attendance_range():
 def save_attendance():
     try:
         data = request.json or {}
-        date = data.get('date', str(datetime.date.today()))
         records = data.get('records', [data])
         conn = _db()
-        now = str(datetime.datetime.now())
-
-        # Group records by emp_id — each emp may have multiple session rows
-        from collections import defaultdict
-        emp_sessions = defaultdict(list)
         for rec in records:
             emp_id = rec.get('emp_id')
-            rec_date = rec.get('date', date)
-            if emp_id:
-                emp_sessions[(emp_id, rec_date)].append(rec)
-
-        for (emp_id, rec_date), sessions in emp_sessions.items():
-            # Delete all non-ESSL rows for this emp+date (manual/admin saved rows)
-            conn.execute(
-                "DELETE FROM attendance WHERE emp_id=? AND date=? AND (marked_by IS NULL OR marked_by != 'ESSL_AUTO')",
-                (emp_id, rec_date)
-            )
-            # Re-insert each session as its own row
-            for rec in sessions:
-                conn.execute(
-                    "INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                    (emp_id, rec_date,
-                     rec.get('checkin', '--'), rec.get('checkout', '--'),
-                     rec.get('status', 'present'),
-                     rec.get('note', rec.get('remarks', '')),
-                     rec.get('marked_by', 'admin'), now)
-                )
-
+            date = rec.get('date')
+            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=?", (emp_id, date)).fetchone()
+            if existing:
+                conn.execute("UPDATE attendance SET checkin=?,checkout=?,status=?,note=?,marked_by=?,updated_at=? WHERE emp_id=? AND date=?",
+                             (rec.get('checkin', '--'), rec.get('checkout', '--'), rec.get('status', 'present'), rec.get('note', ''), rec.get('marked_by', 'admin'), str(datetime.datetime.now()), emp_id, date))
+            else:
+                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                             (emp_id, date, rec.get('checkin', '--'), rec.get('checkout', '--'), rec.get('status', 'present'), rec.get('note', ''), rec.get('marked_by', 'admin'), str(datetime.datetime.now())))
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:
@@ -2943,8 +2924,41 @@ def get_leave_new():
 def action_leave(leave_id, action):
     try:
         status = 'approved' if action == 'approve' else 'rejected'
+        now = str(datetime.datetime.now())
         conn = _db()
-        conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, str(datetime.datetime.now()), leave_id))
+        conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, now, leave_id))
+
+        # If approved — also mark attendance table for each day of leave
+        if status == 'approved':
+            row = conn.execute("SELECT emp_id, leave_type, from_date, to_date FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
+            if row:
+                emp_id = row['emp_id']
+                leave_type = (row['leave_type'] or '').lower().strip()
+                # Normalize leave type to attendance status code
+                lt_map = {
+                    'sick leave': 'sl', 'sick': 'sl', 'sl': 'sl',
+                    'casual leave': 'cl', 'casual': 'cl', 'cl': 'cl',
+                    'earned leave': 'el', 'earned': 'el', 'el': 'el',
+                    'paid leave': 'el', 'paid': 'el', 'pl': 'el',
+                    'annual leave': 'el', 'annual': 'el',
+                    'permission': 'pm', 'pm': 'pm',
+                }
+                att_status = lt_map.get(leave_type, 'cl')
+                # Loop each date from_date to to_date
+                from_dt = datetime.datetime.strptime(str(row['from_date'])[:10], '%Y-%m-%d').date()
+                to_dt   = datetime.datetime.strptime(str(row['to_date'])[:10], '%Y-%m-%d').date()
+                cur = from_dt
+                while cur <= to_dt:
+                    date_str = str(cur)
+                    existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
+                    if existing:
+                        conn.execute("UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='LEAVE_AUTO',updated_at=? WHERE id=?",
+                                     (att_status, now, existing['id']))
+                    else:
+                        conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,'--','--',?,?,?)",
+                                     (emp_id, date_str, att_status, 'LEAVE_AUTO', now))
+                    cur += datetime.timedelta(days=1)
+
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:
