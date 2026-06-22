@@ -1,0 +1,45 @@
+warning: in the working copy of 'app.py', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/app.py b/app.py[m
+[1mindex b798e99..a7fd04f 100644[m
+[1m--- a/app.py[m
+[1m+++ b/app.py[m
+[36m@@ -651,8 +651,37 @@[m [mdef get_ex_employees():[m
+             ).fetchall()[m
+             emp['history'] = [dict(h) for h in hist_rows][m
+             approved_sal = [s for s in emp['salary_history'] if (s.get('approval_status') or '').lower() == 'approved'][m
+[31m-            emp['total_salary_received'] = sum(s.get('net_pay', 0) or 0 for s in approved_sal)[m
+[31m-            emp['months_worked'] = len(approved_sal)[m
+[32m+[m
+[32m+[m[32m            if approved_sal:[m
+[32m+[m[32m                # Preferred: use actual approved payroll records[m
+[32m+[m[32m                emp['total_salary_received'] = sum(s.get('net_pay', 0) or 0 for s in approved_sal)[m
+[32m+[m[32m                emp['months_worked'] = len(approved_sal)[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                # Fallback: no approved salary records found — estimate[m
+[32m+[m[32m                # months worked from joindate -> relieve_date, and total[m
+[32m+[m[32m                # salary from monthly CTC so the UI doesn't show "—" / ₹0.[m
+[32m+[m[32m                months = 0[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    jd = (emp.get('joindate') or '').strip()[m
+[32m+[m[32m                    rd = (emp.get('relieve_date') or '').strip()[m
+[32m+[m[32m                    if jd and rd:[m
+[32m+[m[32m                        jd_dt = datetime.datetime.strptime(jd[:10], '%Y-%m-%d')[m
+[32m+[m[32m                        rd_dt = datetime.datetime.strptime(rd[:10], '%Y-%m-%d')[m
+[32m+[m[32m                        months = (rd_dt.year - jd_dt.year) * 12 + (rd_dt.month - jd_dt.month)[m
+[32m+[m[32m                        if rd_dt.day >= jd_dt.day:[m
+[32m+[m[32m                            months += 1[m
+[32m+[m[32m                        months = max(months, 0)[m
+[32m+[m[32m                except Exception:[m
+[32m+[m[32m                    months = 0[m
+[32m+[m
+[32m+[m[32m                monthly_ctc = 0[m
+[32m+[m[32m                try:[m
+[32m+[m[32m                    monthly_ctc = float(emp.get('ctc') or emp.get('salary') or 0)[m
+[32m+[m[32m                except Exception:[m
+[32m+[m[32m                    monthly_ctc = 0[m
+[32m+[m
+[32m+[m[32m                emp['months_worked'] = months[m
+[32m+[m[32m                emp['total_salary_received'] = round(monthly_ctc * months) if months else 0[m
+         conn.close()[m
+         return jsonify({"success": True, "ex_employees": ex_emps, "count": len(ex_emps)})[m
+     except Exception as ex:[m
