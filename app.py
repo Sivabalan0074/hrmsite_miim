@@ -765,10 +765,11 @@ def get_attendance():
     try:
         date = request.args.get('date', str(datetime.date.today()))
         conn = _db()
-        rows = conn.execute("""SELECT a.*, e.username as name, e.empid as emp_id FROM attendance a
+        rows = conn.execute("""SELECT a.*, e.username as name, e.empid as e_emp_id, a.emp_id FROM attendance a
             JOIN employees e ON e.id=a.emp_id WHERE a.date=?""", (date,)).fetchall()
         conn.close()
-        return jsonify([dict(r) for r in rows])
+        records = [dict(r) for r in rows]
+        return jsonify({"records": records, "success": True})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 

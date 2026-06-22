@@ -2177,8 +2177,12 @@ async function fetchAtt(dKey){
     const data=await res.json();
     const map={};
     employees.forEach(e=>{map[e.id]={status:'',checkin:'',checkout:''};});
-    (data.records||[]).forEach(r=>{
-      map[r.emp_id]=_parseAttRec(r);
+    const empidToId={};
+    employees.forEach(e=>{ if(e.empid) empidToId[String(e.empid)]=e.id; });
+    (data.records||data||[]).forEach(r=>{
+      const byEmpid=empidToId[String(r.e_emp_id||'')];
+      const targetId=byEmpid||r.emp_id;
+      if(targetId) map[targetId]=_parseAttRec(r);
     });
     // Merge with any localStorage data (localStorage wins for status)
     try{
