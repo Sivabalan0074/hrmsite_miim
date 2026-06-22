@@ -2770,9 +2770,9 @@ def get_attendance_range():
         from_date = request.args.get('from', '')
         to_date = request.args.get('to', '')
         conn = _db()
-        rows = conn.execute("SELECT a.*, e.username as emp_name, e.empid FROM attendance a JOIN employees e ON e.id=a.emp_id WHERE a.date BETWEEN ? AND ? ORDER BY a.date", (from_date, to_date)).fetchall()
+        rows = conn.execute("SELECT a.*, e.username as emp_name, e.empid as e_emp_id FROM attendance a JOIN employees e ON e.id=a.emp_id WHERE a.date BETWEEN ? AND ? ORDER BY a.date", (from_date, to_date)).fetchall()
         conn.close()
-        return jsonify([dict(r) for r in rows])
+        return jsonify({"records": [dict(r) for r in rows], "success": True})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 

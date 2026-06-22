@@ -2276,7 +2276,7 @@ async function fetchAttRange(days){
       const data=await res.json();
       // Group records by date
       const byDate={};
-      (data.records||[]).forEach(r=>{
+      (Array.isArray(data)?data:(data.records||[])).forEach(r=>{
         const dKey=r.date||'';if(!dKey)return;
         if(!byDate[dKey])byDate[dKey]={};
         byDate[dKey][r.emp_id]=_parseAttRec(r);
