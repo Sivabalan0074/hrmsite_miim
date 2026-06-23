@@ -2174,6 +2174,14 @@ function _mergeAttRec(existing, r){
   const co=(r.checkout&&r.checkout!=='--')?r.checkout:'';
   existing.entries=existing.entries||[{in:existing.checkin||'',out:existing.checkout||''}];
   existing.entries.push({in:ci,out:co});
+  // Always keep sessions sorted by check-in time (HH:MM strings sort correctly lexically).
+  // Entries with no check-in time are pushed to the end.
+  existing.entries.sort((a,b)=>{
+    if(!a.in && !b.in) return 0;
+    if(!a.in) return 1;
+    if(!b.in) return -1;
+    return a.in.localeCompare(b.in);
+  });
   // checkin = earliest, checkout = latest non-empty
   const allIn=existing.entries.map(e=>e.in).filter(Boolean).sort();
   const allOut=existing.entries.map(e=>e.out).filter(Boolean).sort();
