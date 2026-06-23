@@ -2147,12 +2147,28 @@ function _parseAttRec(r){
     else if(note.includes('earned')||note.includes('el')) feSt='el';
     else if(note.includes('permission')||note.includes('pm')) feSt='pm';
     else feSt='cl';
-  } else if(['sl','cl','el','pm'].includes(st)) feSt=st; // already mapped
+  } else if(['sl','cl','el','pm'].includes(st)) feSt=st;
+  const ci=(r.checkin&&r.checkin!=='--')?r.checkin:'';
+  const co=(r.checkout&&r.checkout!=='--')?r.checkout:'';
   return {
     status:   feSt,
-    checkin:  (r.checkin&&r.checkin!=='--')?r.checkin:'',
-    checkout: (r.checkout&&r.checkout!=='--')?r.checkout:''
+    checkin:  ci,
+    checkout: co,
+    entries:  [{in:ci,out:co}]
   };
+}
+function _mergeAttRec(existing, r){
+  // Merge a new DB row into an existing attCache record (multi-session support)
+  const ci=(r.checkin&&r.checkin!=='--')?r.checkin:'';
+  const co=(r.checkout&&r.checkout!=='--')?r.checkout:'';
+  existing.entries=existing.entries||[{in:existing.checkin||'',out:existing.checkout||''}];
+  existing.entries.push({in:ci,out:co});
+  // checkin = earliest, checkout = latest non-empty
+  const allIn=existing.entries.map(e=>e.in).filter(Boolean).sort();
+  const allOut=existing.entries.map(e=>e.out).filter(Boolean).sort();
+  existing.checkin=allIn[0]||'';
+  existing.checkout=allOut[allOut.length-1]||'';
+  return existing;
 }
 
 // ── Load one or more dates — tries API, then falls back to localStorage ───────
@@ -2182,7 +2198,13 @@ async function fetchAtt(dKey){
     (data.records||data||[]).forEach(r=>{
       const byEmpid=empidToId[String(r.e_emp_id||'')];
       const targetId=byEmpid||r.emp_id;
-      if(targetId) map[targetId]=_parseAttRec(r);
+      if(targetId){
+        if(map[targetId]&&map[targetId].status){
+          map[targetId]=_mergeAttRec(map[targetId],r);
+        } else {
+          map[targetId]=_parseAttRec(r);
+        }
+      }
     });
     // Merge with any localStorage data (localStorage wins for status)
     try{
@@ -2279,7 +2301,11 @@ async function fetchAttRange(days){
       (Array.isArray(data)?data:(data.records||[])).forEach(r=>{
         const dKey=r.date||'';if(!dKey)return;
         if(!byDate[dKey])byDate[dKey]={};
-        byDate[dKey][r.emp_id]=_parseAttRec(r);
+        if(byDate[dKey][r.emp_id]&&byDate[dKey][r.emp_id].status){
+          byDate[dKey][r.emp_id]=_mergeAttRec(byDate[dKey][r.emp_id],r);
+        } else {
+          byDate[dKey][r.emp_id]=_parseAttRec(r);
+        }
       });
       // Merge backend data into attCache (backend wins over empty, localStorage wins over backend)
       days.forEach(d=>{
@@ -2986,22 +3012,14 @@ async function applyLeave(){
     updatePendingBadge();
   }
 
-  // Also try backend — save DB id back to pendingLeaves for correct approve/reject
+  // Also try backend (non-blocking)
   try{
     const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Annual'};
     const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
-    const lres=await fetch('/api/leave/apply',{
+    await fetch('/api/leave/apply',{
       method:'POST',headers:getHeaders(),
       body:JSON.stringify({emp_id:leaveModalEmpId,leave_type:backendType,from_date:dKey,to_date:dKey,reason:reason||''})
     });
-    if(lres.ok){
-      const ldata=await lres.json();
-      // Save DB-generated id back to pendingLeaves so approve uses correct id
-      if(ldata.id){
-        const pl=pendingLeaves.find(l=>l.empId===leaveModalEmpId&&l.date===dKey);
-        if(pl){ pl.leave_id=ldata.id; persistPendingLeaves(); }
-      }
-    }
   }catch(e){}
 
   markChanged();

@@ -2841,11 +2841,55 @@ def review_correction(corr_id, action):
     try:
         data = request.json or {}
         status = 'approved' if action == 'approve' else 'rejected'
+        now = str(datetime.datetime.now())
         conn = _db()
+        corr = conn.execute("SELECT * FROM attendance_corrections WHERE id=?", (corr_id,)).fetchone()
         conn.execute("UPDATE attendance_corrections SET status=?,reviewed_by=?,reviewed_by_name=?,review_note=?,reviewed_at=? WHERE id=?",
-                     (status, data.get('reviewed_by', ''), data.get('reviewed_by_name', ''), data.get('review_note', ''), str(datetime.datetime.now()), corr_id))
+                     (status, data.get('reviewed_by',''), data.get('reviewed_by_name',''), data.get('review_note',''), now, corr_id))
+        resp: dict = {"success": True}
+        if status == 'approved' and corr:
+            emp_id     = corr['emp_id']
+            date_str   = str(corr['date'])[:10]
+            checkin    = str(corr['req_checkin']  or '--')
+            checkout   = str(corr['req_checkout'] or '--')
+            att_status = str(corr['req_status']   or 'present')
+            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
+            if existing:
+                conn.execute("UPDATE attendance SET checkin=?,checkout=?,status=?,marked_by=?,updated_at=? WHERE id=?",
+                             (checkin, checkout, att_status, 'CORRECTION', now, existing['id']))
+            else:
+                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,?,?,?,?,?)",
+                             (emp_id, date_str, checkin, checkout, att_status, 'CORRECTION', now))
+            emp_name = str(corr['emp_name']) if corr['emp_name'] else ''
+            dept     = str(corr['dept'])     if corr['dept']     else ''
+            resp["emp_id"]      = emp_id
+            resp["emp_name"]    = emp_name
+            resp["dept"]        = dept
+            resp["date"]        = date_str
+            resp["checkin"]     = checkin
+            resp["checkout"]    = checkout
+            resp["status"]      = att_status
+            resp["req_checkin"] = checkin
+            resp["req_checkout"]= checkout
+            resp["req_status"]  = att_status
+            try:
+                create_sql = (
+                    "CREATE TABLE IF NOT EXISTS attendance_essl_corrections "
+                    "(id INTEGER PRIMARY KEY AUTOINCREMENT, emp_id TEXT, empid TEXT, "
+                    "date TEXT, checkin TEXT, checkout TEXT, synced INTEGER DEFAULT 0, created_at TEXT)"
+                )
+                conn.execute(create_sql)
+                emp_row = conn.execute("SELECT empid FROM employees WHERE id=?", (emp_id,)).fetchone()
+                empid = emp_row['empid'] if emp_row else None
+                if empid:
+                    conn.execute(
+                        "INSERT INTO attendance_essl_corrections (emp_id,empid,date,checkin,checkout,synced,created_at) VALUES (?,?,?,?,?,0,?)",
+                        (emp_id, empid, date_str, checkin, checkout, now)
+                    )
+            except Exception as essl_ex:
+                print(f"[ESSL correction log] {essl_ex}")
         conn.commit(); conn.close()
-        return jsonify({"success": True})
+        return jsonify(resp)
     except Exception as ex:
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
