@@ -2830,7 +2830,7 @@ def get_corrections():
         else:
             rows = conn.execute("SELECT * FROM attendance_corrections WHERE status=? ORDER BY created_at DESC", (status,)).fetchall()
         conn.close()
-        return jsonify([dict(r) for r in rows])
+        return jsonify({"corrections": [dict(r) for r in rows], "success": True})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
@@ -2853,7 +2853,7 @@ def review_correction(corr_id, action):
             checkin    = str(corr['req_checkin']  or '--')
             checkout   = str(corr['req_checkout'] or '--')
             att_status = str(corr['req_status']   or 'present')
-            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
+            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=? AND marked_by='ESSL_AUTO' LIMIT 1", (emp_id, date_str)).fetchone()
             if existing:
                 conn.execute("UPDATE attendance SET checkin=?,checkout=?,status=?,marked_by=?,updated_at=? WHERE id=?",
                              (checkin, checkout, att_status, 'CORRECTION', now, existing['id']))
