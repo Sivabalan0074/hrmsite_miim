@@ -1463,7 +1463,7 @@ tr.emp-row td {
       <div style="background:rgba(6,182,212,0.07);border:1px solid rgba(6,182,212,0.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#7dd3e8;line-height:1.5;">
         ℹ Your correction request will be sent to your <strong>Senior Manager</strong> for approval. Attendance will only be updated after approval.
       </div>
-      <!-- Auto-detected hint (shown when missing checkout detected) -->
+      <!-- Auto-detected hint -->
       <div id="corrReqHint" style="display:none;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;line-height:1.5;align-items:center;gap:8px;"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
         <div class="corr-field">
@@ -1478,18 +1478,29 @@ tr.emp-row td {
             <option value="absent">Absent</option>
           </select>
         </div>
-        <div class="corr-field">
-          <label>Correct Check-In Time</label>
-          <input type="time" id="corrReqCheckin"/>
-        </div>
-        <div class="corr-field">
-          <label>Correct Check-Out Time</label>
-          <input type="time" id="corrReqCheckout"/>
+      </div>
+      <!-- Existing sessions (read-only) -->
+      <div id="corrExistingSessions" style="display:none;margin-bottom:12px;">
+        <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Existing Sessions (already recorded)</div>
+        <div id="corrExistingList" style="display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
+      <!-- New session to add -->
+      <div style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
+        <div style="font-size:10px;color:var(--orange);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">➕ New Session to Add / Correct</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="corr-field">
+            <label>Check-In Time</label>
+            <input type="time" id="corrReqCheckin"/>
+          </div>
+          <div class="corr-field">
+            <label>Check-Out Time</label>
+            <input type="time" id="corrReqCheckout"/>
+          </div>
         </div>
       </div>
       <div class="corr-field" style="margin-bottom:16px;">
         <label>Reason / Explanation</label>
-        <textarea class="note-input" id="corrReqReason" rows="3" placeholder="e.g. Forgot to check out, left at 6:30 PM…"></textarea>
+        <textarea class="note-input" id="corrReqReason" rows="3" placeholder="e.g. Forgot to check in after lunch, came back at 2:00 PM…"></textarea>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCorrRequestModal()">Cancel</button>
@@ -3832,21 +3843,41 @@ function openCorrRequestModal(empId, empName, dateStr) {
   const existEntries = existRec.entries || [];
   const existCi = existRec.checkin || (existEntries[0]?.in) || '';
   const existCo = existRec.checkout || (existEntries[0]?.out) || '';
-  if (ci) ci.value = existCi || '';
-  if (co) co.value = existCo || '';
+  // Clear new session inputs
+  if (ci) ci.value = '';
+  if (co) co.value = '';
   if (rs) rs.value = '';
   if (st) st.value = existRec.status || 'present';
-  // Show hint if missing checkout detected
+
+  // Show existing sessions (read-only)
+  const existSessDiv  = document.getElementById('corrExistingSessions');
+  const existListDiv  = document.getElementById('corrExistingList');
+  const entries = existRec.entries || (existCi ? [{in:existCi,out:existCo}] : []);
+  if (existSessDiv && existListDiv) {
+    if (entries.length > 0 && entries.some(e=>e.in||e.out)) {
+      existSessDiv.style.display = 'block';
+      existListDiv.innerHTML = entries.filter(e=>e.in||e.out).map((e,i)=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;font-size:12px;">
+          <span style="color:var(--t3);font-size:10px;">Session ${i+1}</span>
+          <span style="color:var(--green);">↗ ${e.in||'--'}</span>
+          <span style="color:var(--t3);">→</span>
+          <span style="color:${e.out?'var(--orange)':'var(--t3)'};">↙ ${e.out||'--'}</span>
+          ${!e.out?'<span style="font-size:9px;color:var(--yellow);background:rgba(234,179,8,0.15);padding:1px 6px;border-radius:4px;">No Checkout</span>':''}
+        </div>`).join('');
+    } else {
+      existSessDiv.style.display = 'none';
+    }
+  }
+
+  // Show hint
   const hintEl = document.getElementById('corrReqHint');
   if (hintEl) {
-    if (existCi && !existCo) {
+    if (entries.length > 0 && entries.some(e=>e.in||e.out)) {
       hintEl.style.display = 'flex';
-      hintEl.innerHTML = `<span style="color:var(--yellow);">⚠ Check-in detected (<strong>${existCi}</strong>) but <strong>no checkout</strong> recorded. Please enter your checkout time.</span>`;
-    } else if (!existCi && !existCo) {
+      hintEl.innerHTML = `<span style="color:var(--t2);">Existing sessions shown above. Enter the <strong>new session</strong> to add below.</span>`;
+    } else {
       hintEl.style.display = 'flex';
       hintEl.innerHTML = `<span style="color:var(--t2);">No check-in/out recorded for this date. Enter the correct times below.</span>`;
-    } else {
-      hintEl.style.display = 'none';
     }
   }
   document.getElementById('corrRequestModal').classList.add('open');
