@@ -4037,22 +4037,11 @@ async function actOnCorrection(corrId, action) {
         const origReq = _corrApprovalList.find(c => c.id === corrId) || {};
         const dKey  = d.date  || origReq.date  || '';
         const empId = String(d.emp_id || origReq.emp_id || '');
-        if (dKey && empId) {
-          if (!attCache[dKey]) attCache[dKey] = {};
-          const existing = attCache[dKey][empId] || {};
-          const newCheckin  = d.checkin  || d.req_checkin  || origReq.req_checkin  || existing.checkin  || '';
-          const newCheckout = d.checkout || d.req_checkout || origReq.req_checkout || existing.checkout || '';
-          const newStatus   = d.status   || d.req_status   || origReq.req_status   || existing.status   || 'present';
-          attCache[dKey][empId] = Object.assign({}, existing, {
-            status:   newStatus,
-            checkin:  newCheckin,
-            checkout: newCheckout,
-          });
-          // Also update entries array for multi-inout display
-          if (newCheckin || newCheckout) {
-            attCache[dKey][empId].entries = [{ in: newCheckin, out: newCheckout }];
-          }
-          persistAttCache();
+        if (dKey) {
+          // Force a real refetch from backend instead of patching locally —
+          // patching only the approved session would wipe out other existing
+          // sessions (e.g. ESSL device punches) from the on-screen view.
+          delete attCache[dKey];
         }
         loadAttCache();
         setTimeout(() => render(), 300);
