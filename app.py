@@ -1,5 +1,5 @@
-"""
-MIIM HR Dashboard — Flask Backend
+﻿"""
+MIIM HR Dashboard â€” Flask Backend
 All routes, DB helpers, and background services in one file.
 """
 from flask import Flask, jsonify, request
@@ -13,7 +13,7 @@ import threading, datetime
 
 app = Flask(__name__)
 
-# ── CORS: Secure — only allow whitelisted origins ──
+# â”€â”€ CORS: Secure â€” only allow whitelisted origins â”€â”€
 from security import (
     limiter, hash_password, verify_password, needs_bcrypt_upgrade,
     create_token, verify_token, get_current_user,
@@ -52,7 +52,7 @@ def _inject_token_from_cookie():
             request.environ['HTTP_AUTHORIZATION'] = 'Bearer ' + token
 
 
-# ── IN-MEMORY DATA STORE ──
+# â”€â”€ IN-MEMORY DATA STORE â”€â”€
 employees = [
     {"id": 1, "emp_id": "MIIM001", "name": "Aravind Kumar", "department": "Engineering", "designation": "Senior Developer", "email": "aravind@miim.com", "phone": "9876543210", "status": "active", "join_date": "2022-01-15", "salary": 75000, "pending_leaves": 2},
     {"id": 2, "emp_id": "MIIM002", "name": "Priya Sharma", "department": "HR", "designation": "HR Manager", "email": "priya@miim.com", "phone": "9876543211", "status": "active", "join_date": "2021-06-01", "salary": 65000, "pending_leaves": 1},
@@ -102,7 +102,7 @@ guests = [
 ]
 
 
-# ── ROUTES ──
+# â”€â”€ ROUTES â”€â”€
 
 
 @app.route('/')
@@ -123,12 +123,12 @@ def index():
     return Response('<h3>Dashboard file not found.</h3>', mimetype='text/html')
 
 
-# ── DB helper — MySQL (production) / SQLite (local) ──
+# â”€â”€ DB helper â€” MySQL (production) / SQLite (local) â”€â”€
 from db_layer import _db, USE_MYSQL
 
 # AUTO_INCREMENT is valid MySQL syntax but invalid in SQLite (SQLite's
 # "INTEGER PRIMARY KEY" column is already auto-incrementing on its own, and
-# the literal keyword "AUTO_INCREMENT" causes a syntax error there — this is
+# the literal keyword "AUTO_INCREMENT" causes a syntax error there â€” this is
 # the "[DB INIT WARNING] near AUTO_INCREMENT: syntax error" seen on SQLite).
 # Use this in CREATE TABLE statements instead of hardcoding "AUTO_INCREMENT".
 _AUTOINC = 'AUTO_INCREMENT' if USE_MYSQL else ''
@@ -249,7 +249,7 @@ def add_employee():
         # Auto-generate user_id: name letters + DD + MM of joindate
         _uname5 = data.get('username', '').strip()
         _ujd5 = data.get('joindate', '').strip()
-        # Keep username lowercase as-is, only strip whitespace — dot/underscore stays
+        # Keep username lowercase as-is, only strip whitespace â€” dot/underscore stays
         _letters5 = _uname5.lower().replace(' ', '')
         if _ujd5 and len(_ujd5) >= 10:
             _parts5 = _ujd5.split('-')
@@ -342,7 +342,7 @@ def update_employee(emp_id):
         # Also reset force_reset to 0 when password is being set
         if 'password_hash' in filtered:
             filtered['force_reset'] = 0
-        # ── Auto-regenerate user_id when username or joindate changes ──
+        # â”€â”€ Auto-regenerate user_id when username or joindate changes â”€â”€
         username = filtered.get('username') or data.get('username') or ''
         joindate = filtered.get('joindate') or data.get('joindate') or ''
         if not username or not joindate:
@@ -356,7 +356,7 @@ def update_employee(emp_id):
             conn = _db()
         else:
             conn = _db()
-        # Keep username lowercase as-is, only strip whitespace — dot/underscore stays
+        # Keep username lowercase as-is, only strip whitespace â€” dot/underscore stays
         _letters = username.lower().replace(' ', '')
         if joindate and len(joindate) >= 10:
             _parts = joindate.split('-')
@@ -399,7 +399,7 @@ def add_emp_history(emp_id):
         conn = _db()
         conn.execute(
             "INSERT INTO emp_status_history (emp_id, field, from_val, to_val, changed_date, created_at) VALUES (?,?,?,?,?,?)",
-            (emp_id, data.get('field', ''), data.get('from', '—'), data.get('to', ''), data.get('date', str(_dt.date.today())), str(_dt.datetime.now()))
+            (emp_id, data.get('field', ''), data.get('from', 'â€”'), data.get('to', ''), data.get('date', str(_dt.date.today())), str(_dt.datetime.now()))
         )
         conn.commit()
         conn.close()
@@ -422,7 +422,7 @@ def delete_employee(emp_id):
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
 
-# ── PROMOTION: SM/PM request -> Admin approve ──
+# â”€â”€ PROMOTION: SM/PM request -> Admin approve â”€â”€
 def _ensure_pending_promotions_table(conn):
     conn.execute(f"""CREATE TABLE IF NOT EXISTS pending_promotions (
         id INTEGER PRIMARY KEY {_AUTOINC},
@@ -527,7 +527,7 @@ def approve_promotion(promo_id):
         role, _ = _get_role_dept(caller)
         status = row['status']
 
-        # ── STAGE 1: HR approves (status: pending → hr_approved) ──
+        # â”€â”€ STAGE 1: HR approves (status: pending â†’ hr_approved) â”€â”€
         if status == 'pending' and role in ('hr',):
             conn.execute(
                 "UPDATE pending_promotions SET status='hr_approved', hr_approved_by=?, hr_approved_at=? WHERE id=?",
@@ -538,7 +538,7 @@ def approve_promotion(promo_id):
             return jsonify({'success': True, 'stage': 'hr_approved',
                             'message': 'HR approved. Waiting for Admin final approval.'})
 
-        # ── STAGE 2: Admin final approve (status: hr_approved → approved) ──
+        # â”€â”€ STAGE 2: Admin final approve (status: hr_approved â†’ approved) â”€â”€
         if status == 'hr_approved' and role == 'admin':
             conn.execute('UPDATE employees SET desig=? WHERE id=?', (row['new_desig'], row['emp_id']))
             hist_to = row['new_desig'] + (' | ' + row['remarks'] if row['remarks'] else '') + ' * by: ' + approved_by
@@ -555,7 +555,7 @@ def approve_promotion(promo_id):
             return jsonify({'success': True, 'stage': 'approved',
                             'message': 'Promotion fully approved! Designation updated.'})
 
-        # ── Admin can also approve directly from pending (skip HR) ──
+        # â”€â”€ Admin can also approve directly from pending (skip HR) â”€â”€
         if status == 'pending' and role == 'admin':
             conn.execute('UPDATE employees SET desig=? WHERE id=?', (row['new_desig'], row['emp_id']))
             hist_to = row['new_desig'] + (' | ' + row['remarks'] if row['remarks'] else '') + ' * by: ' + approved_by
@@ -659,9 +659,9 @@ def get_ex_employees():
                 emp['total_salary_received'] = sum(s.get('net_pay', 0) or 0 for s in approved_sal)
                 emp['months_worked'] = len(approved_sal)
             else:
-                # Fallback: no approved salary records found — estimate
+                # Fallback: no approved salary records found â€” estimate
                 # months worked from joindate -> relieve_date, and total
-                # salary from monthly CTC so the UI doesn't show "—" / ₹0.
+                # salary from monthly CTC so the UI doesn't show "â€”" / â‚¹0.
                 months = 0
                 try:
                     jd = (emp.get('joindate') or '').strip()
@@ -872,7 +872,7 @@ def add_holiday():
         data = request.json or {}
         conn = _db()
         conn.execute("INSERT INTO holidays (date,name,type,emoji,`desc`) VALUES (?,?,?,?,?)",
-                     (data.get('date'), data.get('name'), data.get('type', 'National'), data.get('emoji', '🎉'), data.get('desc', '')))
+                     (data.get('date'), data.get('name'), data.get('type', 'National'), data.get('emoji', 'ðŸŽ‰'), data.get('desc', '')))
         conn.commit(); conn.close()
         return jsonify({"success": True}), 201
     except Exception as ex:
@@ -1251,7 +1251,7 @@ def login():
             "SELECT * FROM employees WHERE user_id=? AND status='active'",
             (username,)
         ).fetchone()
-        # Step 2: If not found, try by username — but ONLY if the matched employee is admin
+        # Step 2: If not found, try by username â€” but ONLY if the matched employee is admin
         if not emp:
             emp_by_name = conn.execute(
                 "SELECT * FROM employees WHERE username=? AND status='active'",
@@ -1265,13 +1265,13 @@ def login():
                 _is_admin = ("admin" in _chk_d or _chk_dept == "admin" or _chk_type == "admin" or _chk_name == "admin")
                 if _is_admin:
                     emp = emp_by_name  # allow admin to login with username
-                # Non-admin trying to login with username → reject (emp stays None)
+                # Non-admin trying to login with username â†’ reject (emp stays None)
         if emp:
-            # ── Verify password with bcrypt (or legacy plain) ──
+            # â”€â”€ Verify password with bcrypt (or legacy plain) â”€â”€
             if not verify_password(password, emp["password_hash"] or ""):
                 conn.close()
                 return jsonify({"success": False, "message": "Invalid username or password"}), 401
-            # ── Auto-upgrade legacy plain passwords to bcrypt ──
+            # â”€â”€ Auto-upgrade legacy plain passwords to bcrypt â”€â”€
             if needs_bcrypt_upgrade(emp["password_hash"] or ""):
                 conn.execute(
                     "UPDATE employees SET password_hash=? WHERE id=?",
@@ -1289,7 +1289,7 @@ def login():
             elif ("senior" in _d and "manager" in _d) or "senior-manager" in _d: _role = "sm"
             elif ("project" in _d and "manager" in _d) or "project-manager" in _d: _role = "pm"
             else: _role = "member"
-            # ── Issue JWT token ──
+            # â”€â”€ Issue JWT token â”€â”€
             token = create_token(
                 user_id=emp["id"],
                 username=emp["username"],
@@ -1326,7 +1326,7 @@ def login():
             _resp = _mkr(jsonify(_resp_data))
             _resp.set_cookie('miim_token', token, httponly=True, samesite='Lax', max_age=86400 * 7, path='/')
             return _resp
-        # ── Guest login check ──
+        # â”€â”€ Guest login check â”€â”€
         conn2 = _db()
         # Support both plain name and legacy MIIM@ prefixed guest_id
         username_alt = 'MIIM@' + username if not username.upper().startswith('MIIM@') else username[5:]
@@ -1356,7 +1356,7 @@ def login():
                 if g.get('perm_enabled', 1) == 0:
                     conn2.close()
                     return jsonify({"success": False, "message": "\u26d4 Your access has been disabled by the administrator. Please contact HR."}), 401
-                # Time window check — set time = BLOCKED period (IST)
+                # Time window check â€” set time = BLOCKED period (IST)
                 import datetime as _dt
                 from zoneinfo import ZoneInfo as _ZI; _IST = _ZI('Asia/Kolkata')
                 af = (g.get('access_from') or '').strip()
@@ -1376,7 +1376,7 @@ def login():
                     except Exception:
                         pass
 
-            # ── Project deadline / completion check ──
+            # â”€â”€ Project deadline / completion check â”€â”€
             # If the guest's project is completed OR its deadline has passed, deny access.
             try:
                 import json as _json_gl, datetime as _dt_gl
@@ -1396,7 +1396,7 @@ def login():
                                     conn2.close()
                                     return jsonify({
                                         "success": False,
-                                        "message": "🔒 Access Denied: The project '{}' has been completed. Your guest access is no longer valid.".format(guest_project)
+                                        "message": "ðŸ”’ Access Denied: The project '{}' has been completed. Your guest access is no longer valid.".format(guest_project)
                                     }), 401
                                 # Block if deadline has passed
                                 _deadline = (_p.get('deadline') or '').strip()
@@ -1408,7 +1408,7 @@ def login():
                                             conn2.close()
                                             return jsonify({
                                                 "success": False,
-                                                "message": "⏰ Access Expired: The deadline for project '{}' was {}. Your guest access has expired.".format(guest_project, _deadline)
+                                                "message": "â° Access Expired: The deadline for project '{}' was {}. Your guest access has expired.".format(guest_project, _deadline)
                                             }), 401
                                     except Exception:
                                         pass
@@ -1470,7 +1470,7 @@ def accheck(username):
                     (emp_id_val,)
                 ).fetchone()
             except Exception:
-                # approval_status column may not exist — use status only
+                # approval_status column may not exist â€” use status only
                 ra = conn.execute(
                     "SELECT COUNT(*) c FROM accounts WHERE emp_id=? AND LOWER(COALESCE(status,''))='approved'",
                     (emp_id_val,)
@@ -1552,7 +1552,7 @@ def api_salary_structures():
         emp_id = data.get('emp_id')
         # Get valid columns from DB schema
         valid_cols = _table_columns(conn, 'salary_structures')
-        # Filter payload to only valid columns (exclude approval tracking — managed by /approve endpoint)
+        # Filter payload to only valid columns (exclude approval tracking â€” managed by /approve endpoint)
         approval_cols = {'acct_approved_by', 'acct_approved_at', 'acct_approval_count', 'mgmt_approved_by', 'mgmt_approved_at', 'mgmt_approval_count'}
         clean_data = {k: v for k, v in data.items() if k in valid_cols and k not in approval_cols}
         # Auto-set required fields if missing
@@ -1658,7 +1658,7 @@ def export_salary_structures_excel():
             dn = (d.get('dept') or 'Unassigned').strip()
             dept_map.setdefault(dn, []).append(d)
 
-        # ── Styles ──
+        # â”€â”€ Styles â”€â”€
         HDR_BG = "F97316"
         HDR_FG = "FFFFFF"
         ROW_A = "1E1E2E"
@@ -1718,7 +1718,7 @@ def export_salary_structures_excel():
         wb.remove(wb.active)  # type: ignore[union-attr]
         tab_colours = ["F97316", "22C55E", "3B82F6", "A855F7", "EAB308", "EF4444", "06B6D4", "F43F5E"]
 
-        # Format period for display: YYYY-MM → Month YYYY
+        # Format period for display: YYYY-MM â†’ Month YYYY
         try:
             period_display = _dt.datetime.strptime(period_filter + '-01', '%Y-%m-%d').strftime('%B %Y')
         except Exception:
@@ -1730,7 +1730,7 @@ def export_salary_structures_excel():
                 sn = sn.replace(ch, '-')
             ws = wb.create_sheet(title=sn or 'Sheet')
 
-            # Row 1 — Title
+            # Row 1 â€” Title
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=NC)
             t = ws.cell(row=1, column=1)
             t.value = ("MIIM HR -- " + dn.upper()
@@ -1740,7 +1740,7 @@ def export_salary_structures_excel():
             t.alignment = Alignment(horizontal="left", vertical="center")
             ws.row_dimensions[1].height = 26
 
-            # Row 2 — Timestamp
+            # Row 2 â€” Timestamp
             ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=NC)
             g = ws.cell(row=2, column=1)
             g.value = ("Generated: " + _dt.datetime.now().strftime('%d %B %Y, %I:%M %p')
@@ -1751,7 +1751,7 @@ def export_salary_structures_excel():
             g.alignment = Alignment(horizontal="left", vertical="center")
             ws.row_dimensions[2].height = 15
 
-            # Row 3 — Section labels (Earnings / Deductions / Net)
+            # Row 3 â€” Section labels (Earnings / Deductions / Net)
             ws.merge_cells(start_row=3, start_column=13, end_row=3, end_column=20)
             earn_lbl = ws.cell(row=3, column=13)
             earn_lbl.value = "EARNINGS"
@@ -1774,7 +1774,7 @@ def export_salary_structures_excel():
             net_lbl.alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[3].height = 14
 
-            # Row 4 — Column headers
+            # Row 4 â€” Column headers
             for ci, (cn, cw) in enumerate(COLUMNS, start=1):
                 c = ws.cell(row=4, column=ci)
                 c.value = cn.upper()
@@ -1877,7 +1877,7 @@ def export_salary_structures_excel():
             ws.auto_filter.ref = "A4:" + get_column_letter(NC) + "4"
             ws.sheet_properties.tabColor = tab_colours[di % len(tab_colours)]
 
-        # ── Save to miim_storage ──
+        # â”€â”€ Save to miim_storage â”€â”€
         timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         period_slug = period_filter.replace('-', '_')
         filename = "MIIM_Salary_" + period_slug + "_" + timestamp + ".xlsx"
@@ -1891,7 +1891,7 @@ def export_salary_structures_excel():
         except Exception as save_err:
             saved_path = "Save error: " + str(save_err)
 
-        # ── Stream as browser download ──
+        # â”€â”€ Stream as browser download â”€â”€
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -1924,7 +1924,7 @@ def api_salary_structure_detail(ss_id):  # type: ignore
             data = request.json or {}
             # Get actual column names from DB to avoid unknown column errors
             valid_cols = _table_columns(conn, 'salary_structures')
-            # If table doesn't exist yet, valid_cols will be empty — create table first
+            # If table doesn't exist yet, valid_cols will be empty â€” create table first
             if not valid_cols:
                 conn.execute(f"""CREATE TABLE IF NOT EXISTS salary_structures (
                     id INTEGER PRIMARY KEY {_AUTOINC},
@@ -2033,8 +2033,8 @@ def api_archived_slips():  # type: ignore
 def api_salary_structure_approve(ss_id):
     """
     Body: { "role": "acct" | "mgmt", "approved_by": "<username or name>" }
-    - role="acct"  → sets approval_status="Acct Approved", increments acct_approval_count
-    - role="mgmt"  → sets approval_status="Fully Approved", increments mgmt_approval_count
+    - role="acct"  â†’ sets approval_status="Acct Approved", increments acct_approval_count
+    - role="mgmt"  â†’ sets approval_status="Fully Approved", increments mgmt_approval_count
     Both record who approved and when.
     """
     try:
@@ -2153,7 +2153,7 @@ def send_password_email(emp_id):
         if not email or '@' not in email:
             return jsonify({"success": False, "error": "Employee has no valid email address"}), 400
 
-        # ── RESEND API ──
+        # â”€â”€ RESEND API â”€â”€
         import requests as _requests
         RESEND_API_KEY = _os.environ.get('RESEND_API_KEY', '')
         if not RESEND_API_KEY:
@@ -2186,7 +2186,7 @@ def send_password_email(emp_id):
                 <tr>
                   <td style="padding:32px;">
                     <h2 style="color:#f97316;font-size:20px;margin:0 0 16px;">
-                      🔑 Password Reset Notification
+                      ðŸ”‘ Password Reset Notification
                     </h2>
                     <p style="color:#ccc;font-size:14px;line-height:1.7;margin:0 0 12px;">
                       Hi <strong style="color:#fff;">{username}</strong>,
@@ -2238,9 +2238,9 @@ def send_password_email(emp_id):
                     <div style="background:#1a1000;border:1px solid #f97316;
                                 border-radius:8px;padding:14px 16px;margin:0 0 24px;">
                       <p style="margin:0;font-size:13px;color:#fbbf24;line-height:1.6;">
-                        ⚠️ <strong>Important:</strong> This is a temporary password.
+                        âš ï¸ <strong>Important:</strong> This is a temporary password.
                         Please login immediately and change your password from
-                        <em>Settings → Security</em>.
+                        <em>Settings â†’ Security</em>.
                       </p>
                     </div>
 
@@ -2255,8 +2255,8 @@ def send_password_email(emp_id):
                   <td style="background:#111;padding:16px 32px;border-top:1px solid #1e1e1e;
                               text-align:center;">
                     <p style="margin:0;font-size:11px;color:#555;letter-spacing:1px;">
-                      © 2026 MIIM · Mission Impossible Industrial Management<br/>
-                      NO.31, CHINNAN CHETTIYAR STREET, VELANDIPALAYAM, COIMBATORE – 641025
+                      Â© 2026 MIIM Â· Mission Impossible Industrial Management<br/>
+                      NO.31, CHINNAN CHETTIYAR STREET, VELANDIPALAYAM, COIMBATORE â€“ 641025
                     </p>
                   </td>
                 </tr>
@@ -2277,7 +2277,7 @@ def send_password_email(emp_id):
             json={
                 "from": f"MIIM HR System <{_FROM_EMAIL}>",
                 "to": [email],
-                "subject": "MIIM — Your Login Password Has Been Reset",
+                "subject": "MIIM â€” Your Login Password Has Been Reset",
                 "text": f"Hi {username},\n\nPassword reset by {sender_role}.\nUsername: {username}\nTemporary Password: {password}\n\nLogin and change your password immediately.\n\nMIIM HR",
                 "html": html_body
             },
@@ -2305,14 +2305,14 @@ def send_password_email(emp_id):
 def approve_employee(emp_id):
     try:
         conn = _db()
-        # pending_employees-ல இருந்தா அதை employees-க்கு move பண்ணு
+        # pending_employees-à®² à®‡à®°à¯à®¨à¯à®¤à®¾ à®…à®¤à¯ˆ employees-à®•à¯à®•à¯ move à®ªà®£à¯à®£à¯
         pending = conn.execute("SELECT * FROM pending_employees WHERE id=?", (emp_id,)).fetchone()
         if pending:
             p = dict(pending)
             # Auto-generate user_id: name letters + DD + MM of joindate
             _uname = p.get('username', '')
             _ujd = p.get('joindate', '')
-            # Keep username lowercase as-is, only strip whitespace — dot/underscore stays
+            # Keep username lowercase as-is, only strip whitespace â€” dot/underscore stays
             _letters = _uname.lower().replace(' ', '')
             if _ujd and len(_ujd) >= 10:
                 _parts = _ujd.split('-')
@@ -2334,7 +2334,7 @@ def approve_employee(emp_id):
                              hash_password(p.get('password_hash') or 'miim@123'), 0, 'active'))
             conn.execute("DELETE FROM pending_employees WHERE id=?", (emp_id,))
         else:
-            # Already in employees table — just activate
+            # Already in employees table â€” just activate
             conn.execute("UPDATE employees SET status='active' WHERE id=?", (emp_id,))
         conn.commit()
         conn.close()
@@ -2446,7 +2446,7 @@ def export_accounts_excel():
             dn = (d.get('dept') or 'Unassigned').strip()
             dept_map.setdefault(dn, []).append(d)
 
-        # ── Styles ──
+        # â”€â”€ Styles â”€â”€
         HDR_BG = "F97316"   # orange
         HDR_FG = "FFFFFF"
         ROW_A = "1E1E2E"
@@ -2493,7 +2493,7 @@ def export_accounts_excel():
                 sn = sn.replace(ch, '-')
             ws = wb.create_sheet(title=sn or 'Sheet')
 
-            # Row 1 — Department title
+            # Row 1 â€” Department title
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=NC)
             t = ws.cell(row=1, column=1)
             t.value = "MIIM HR -- " + dn.upper() + " DEPARTMENT -- ACCOUNT DETAILS"
@@ -2502,7 +2502,7 @@ def export_accounts_excel():
             t.alignment = Alignment(horizontal="left", vertical="center")
             ws.row_dimensions[1].height = 26
 
-            # Row 2 — Timestamp
+            # Row 2 â€” Timestamp
             ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=NC)
             g = ws.cell(row=2, column=1)
             g.value = ("Generated: " + _dt.datetime.now().strftime('%d %B %Y, %I:%M %p')
@@ -2512,7 +2512,7 @@ def export_accounts_excel():
             g.alignment = Alignment(horizontal="left", vertical="center")
             ws.row_dimensions[2].height = 15
 
-            # Row 3 — Column headers
+            # Row 3 â€” Column headers
             for ci, (cn, cw) in enumerate(COLUMNS, start=1):
                 c = ws.cell(row=3, column=ci)
                 c.value = cn.upper()
@@ -2579,7 +2579,7 @@ def export_accounts_excel():
             ws.auto_filter.ref = "A3:" + get_column_letter(NC) + "3"
             ws.sheet_properties.tabColor = tab_colours[di % len(tab_colours)]
 
-        # ── Save to disk ──
+        # â”€â”€ Save to disk â”€â”€
         timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = "MIIM_Accounts_" + timestamp + ".xlsx"
         save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'miim_storage', 'accounts')
@@ -2589,7 +2589,7 @@ def export_accounts_excel():
         except Exception:
             pass  # disk save failure is non-fatal
 
-        # ── Stream as browser download ──
+        # â”€â”€ Stream as browser download â”€â”€
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -2853,7 +2853,7 @@ def review_correction(corr_id, action):
             checkin    = str(corr['req_checkin']  or '--')
             checkout   = str(corr['req_checkout'] or '--')
             att_status = str(corr['req_status']   or 'present')
-            # Always INSERT new row — never overwrite existing sessions
+            # Always INSERT new row â€” never overwrite existing sessions
             # This supports multiple sessions (morning + afternoon) per day
             conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by) VALUES (?,?,?,?,?,?)",
                          (emp_id, date_str, checkin, checkout, att_status, 'CORRECTION'))
@@ -2905,7 +2905,7 @@ def approval_history():
             return jsonify({"success": True})
         rows = conn.execute("SELECT * FROM approval_history ORDER BY actioned_at DESC LIMIT 50").fetchall()
         conn.close()
-        return jsonify([dict(r) for r in rows])
+        return jsonify({"corrections": [dict(r) for r in rows], "success": True})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
@@ -2970,7 +2970,7 @@ def action_leave(leave_id, action):
         conn = _db()
         conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, now, leave_id))
 
-        # If approved — also mark attendance table for each day of leave
+        # If approved â€” also mark attendance table for each day of leave
         if status == 'approved':
             row = conn.execute("SELECT emp_id, leave_type, from_date, to_date FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
             if row:
@@ -3038,7 +3038,7 @@ def action_leave(leave_id, action):
 def serve_template():
     import os
     from flask import request as req
-    # Get the filename from the URL path — sanitize to prevent path traversal
+    # Get the filename from the URL path â€” sanitize to prevent path traversal
     raw = req.path.lstrip('/')
     filename = os.path.basename(raw)  # strips any ../ components
     # Only allow .html files
@@ -3077,7 +3077,7 @@ def guest_login_page():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MIIM — Guest Login</title>
+<title>MIIM â€” Guest Login</title>
 <rect width='100' height='100' rx='16' fill='%23f97316'/><text y='.9em' font-size='80' x='10' font-weight='bold' fill='white'>M</text></svg>">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600&family=Rajdhani:wght@600;700&display=swap');
@@ -3179,7 +3179,7 @@ def guest_login_page():
 </head>
 <body>
 <div class="card">
-  <div class="guest-icon">👤</div>
+  <div class="guest-icon">ðŸ‘¤</div>
   <div class="logo">MIIM</div>
   <div class="subtitle">Guest Access Portal</div>
 
@@ -3191,7 +3191,7 @@ def guest_login_page():
 
   <button class="btn" id="login-btn" onclick="doGuestLogin()">LOGIN AS GUEST</button>
   <div class="msg" id="msg"></div>
-  <div class="back-link"><a href="/landing">← Back to Staff Login</a></div>
+  <div class="back-link"><a href="/landing">â† Back to Staff Login</a></div>
 </div>
 
 <script>
@@ -3203,12 +3203,12 @@ async function doGuestLogin() {
 
   if (!gid || !gpw) {
     msg.style.color = '#f87171';
-    msg.textContent = '⚠ Please enter both Guest ID and Password.';
+    msg.textContent = 'âš  Please enter both Guest ID and Password.';
     return;
   }
 
   btn.disabled = true;
-  btn.textContent = 'Verifying…';
+  btn.textContent = 'Verifyingâ€¦';
   msg.textContent = '';
 
   try {
@@ -3230,23 +3230,23 @@ async function doGuestLogin() {
       try { localStorage.setItem('miim_session', JSON.stringify(data.user)); } catch(e) {}
 
       msg.style.color = '#4ade80';
-      msg.textContent = '✅ Access granted! Redirecting…';
+      msg.textContent = 'âœ… Access granted! Redirectingâ€¦';
       sessionStorage.setItem('miim_just_logged_in', '1');
       setTimeout(function(){ window.location.href = '/'; }, 800);
     } else if (data.success && data.role !== 'guest') {
       msg.style.color = '#f87171';
-      msg.textContent = '⚠ This portal is for guests only. Use Staff Login.';
+      msg.textContent = 'âš  This portal is for guests only. Use Staff Login.';
       btn.disabled = false;
       btn.textContent = 'LOGIN AS GUEST';
     } else {
       msg.style.color = '#f87171';
-      msg.textContent = '❌ ' + (data.message || 'Invalid Guest ID or Password.');
+      msg.textContent = 'âŒ ' + (data.message || 'Invalid Guest ID or Password.');
       btn.disabled = false;
       btn.textContent = 'LOGIN AS GUEST';
     }
   } catch(e) {
     msg.style.color = '#f87171';
-    msg.textContent = '❌ Server error. Please try again.';
+    msg.textContent = 'âŒ Server error. Please try again.';
     btn.disabled = false;
     btn.textContent = 'LOGIN AS GUEST';
   }
@@ -3316,12 +3316,12 @@ def init_db():
         conn.execute("ALTER TABLE employees ADD COLUMN relieved_by TEXT DEFAULT ''")
     except Exception:
         pass
-    # ── MIGRATION: Regenerate all user_ids → name+DD+MM format ──
+    # â”€â”€ MIGRATION: Regenerate all user_ids â†’ name+DD+MM format â”€â”€
     try:
         rows = conn.execute("SELECT id, username, joindate FROM employees").fetchall()
         for row in rows:
             _uid_id, _uname, _ujd = row[0], row[1] or '', row[2] or ''
-            # Keep username lowercase as-is, only strip whitespace — dot/underscore stays
+            # Keep username lowercase as-is, only strip whitespace â€” dot/underscore stays
             _letters = _uname.lower().replace(' ', '')
             if _ujd and len(_ujd) >= 10:
                 _parts = _ujd.split('-')
@@ -3334,7 +3334,7 @@ def init_db():
         conn.commit()
     except Exception:
         pass
-    # ── Pending Promotions table ──
+    # â”€â”€ Pending Promotions table â”€â”€
     conn.execute(f"""CREATE TABLE IF NOT EXISTS pending_promotions (
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER NOT NULL,
@@ -3425,7 +3425,7 @@ def init_db():
         date TEXT DEFAULT '',
         description TEXT DEFAULT ''
     )""")
-    # ── Migrate existing accounts table — add missing columns safely ──
+    # â”€â”€ Migrate existing accounts table â€” add missing columns safely â”€â”€
     for _acol, _adef in [
         ('account_type', "TEXT DEFAULT 'Salary'"),
         ('bank_name', "TEXT DEFAULT ''"),
@@ -3498,7 +3498,7 @@ def init_db():
         )""")
         conn.commit()
 
-    # ── Additional tables ──
+    # â”€â”€ Additional tables â”€â”€
     conn.execute(f"""CREATE TABLE IF NOT EXISTS attendance (
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, date TEXT, checkin TEXT, checkout TEXT,
@@ -3508,7 +3508,7 @@ def init_db():
     conn.execute(f"""CREATE TABLE IF NOT EXISTS holidays (
         id INTEGER PRIMARY KEY {_AUTOINC},
         date TEXT, name TEXT, type TEXT DEFAULT 'National',
-        emoji TEXT DEFAULT '🎉', `desc` TEXT DEFAULT ''
+        emoji TEXT DEFAULT 'ðŸŽ‰', `desc` TEXT DEFAULT ''
     )""")
     conn.execute(f"""CREATE TABLE IF NOT EXISTS guests (
         id INTEGER PRIMARY KEY {_AUTOINC},
@@ -3630,25 +3630,25 @@ def init_db():
     hol_count = conn.execute("SELECT COUNT(*) FROM holidays").fetchone()[0]
     if hol_count == 0:
         default_holidays = [
-            ("2026-01-01", "New Year's Day", "National", "🎉"),
-            ("2026-01-14", "Pongal", "National", "🌾"),
-            ("2026-01-15", "Thiruvalluvar Day", "National", "📜"),
-            ("2026-01-16", "Uzhavar Thirunal", "National", "🌻"),
-            ("2026-01-26", "Republic Day", "Government", "🇮🇳"),
-            ("2026-03-10", "Company Foundation Day", "National", "🏢"),
-            ("2026-04-14", "Tamil New Year", "National", "🎊"),
-            ("2026-04-14", "Dr. Ambedkar Jayanti", "Government", "🙏"),
-            ("2026-05-01", "Labour Day", "Government", "⚒️"),
-            ("2026-06-07", "Eid al-Adha", "Religious", "🌙"),
-            ("2026-08-15", "Independence Day", "Government", "🇮🇳"),
-            ("2026-08-19", "Krishna Jayanthi", "Religious", "🪈"),
-            ("2026-10-02", "Gandhi Jayanti", "Government", "🕊️"),
-            ("2026-10-02", "Vijaya Dasami", "Religious", "⚔️"),
-            ("2026-10-19", "Diwali", "Religious", "🪔"),
-            ("2026-10-20", "Diwali Holiday", "National", "🪔"),
-            ("2026-11-01", "Kannada Rajyotsava", "National", "🌟"),
-            ("2026-11-14", "Children's Day", "National", "🧒"),
-            ("2026-12-25", "Christmas", "Religious", "🎄"),
+            ("2026-01-01", "New Year's Day", "National", "ðŸŽ‰"),
+            ("2026-01-14", "Pongal", "National", "ðŸŒ¾"),
+            ("2026-01-15", "Thiruvalluvar Day", "National", "ðŸ“œ"),
+            ("2026-01-16", "Uzhavar Thirunal", "National", "ðŸŒ»"),
+            ("2026-01-26", "Republic Day", "Government", "ðŸ‡®ðŸ‡³"),
+            ("2026-03-10", "Company Foundation Day", "National", "ðŸ¢"),
+            ("2026-04-14", "Tamil New Year", "National", "ðŸŽŠ"),
+            ("2026-04-14", "Dr. Ambedkar Jayanti", "Government", "ðŸ™"),
+            ("2026-05-01", "Labour Day", "Government", "âš’ï¸"),
+            ("2026-06-07", "Eid al-Adha", "Religious", "ðŸŒ™"),
+            ("2026-08-15", "Independence Day", "Government", "ðŸ‡®ðŸ‡³"),
+            ("2026-08-19", "Krishna Jayanthi", "Religious", "ðŸªˆ"),
+            ("2026-10-02", "Gandhi Jayanti", "Government", "ðŸ•Šï¸"),
+            ("2026-10-02", "Vijaya Dasami", "Religious", "âš”ï¸"),
+            ("2026-10-19", "Diwali", "Religious", "ðŸª”"),
+            ("2026-10-20", "Diwali Holiday", "National", "ðŸª”"),
+            ("2026-11-01", "Kannada Rajyotsava", "National", "ðŸŒŸ"),
+            ("2026-11-14", "Children's Day", "National", "ðŸ§’"),
+            ("2026-12-25", "Christmas", "Religious", "ðŸŽ„"),
         ]
         for h in default_holidays:
             conn.execute(
@@ -3658,7 +3658,7 @@ def init_db():
         conn.commit()
         print(f"[DB] {len(default_holidays)} default holidays seeded.")
 
-    # ── users table (for landing page login) ──
+    # â”€â”€ users table (for landing page login) â”€â”€
     conn.execute(f"""CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY {_AUTOINC},
         username VARCHAR(100) NOT NULL UNIQUE,
@@ -3688,13 +3688,13 @@ def init_db():
     print("[DB] Initialized successfully")
 
 
-# ── AUTO-INIT DB on every startup (module level) ──
+# â”€â”€ AUTO-INIT DB on every startup (module level) â”€â”€
 try:
     init_db()
 except Exception as _e:
     print(f"[DB INIT WARNING] {_e}")
 
-# ── EXPENSES API ──────────────────────────────────────────────────────────────
+# â”€â”€ EXPENSES API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
@@ -3756,9 +3756,9 @@ def exp_get():
             q += " AND status=?"
             params.append(status)
         # Role-based filter:
-        # admin / hr / account_manager → see ALL expenses
-        # sm / pm → see only their dept
-        # member → see only own (emp_id from frontend)
+        # admin / hr / account_manager â†’ see ALL expenses
+        # sm / pm â†’ see only their dept
+        # member â†’ see only own (emp_id from frontend)
         if caller:
             role, dept = _get_role_dept(caller)
             if role in ('admin', 'hr', 'account_manager'):
@@ -3898,7 +3898,7 @@ def exp_put(exp_id):
             updates['review_note'] = review_note
 
         else:
-            # Edit mode (no action) — update basic fields
+            # Edit mode (no action) â€” update basic fields
             for fld in ('category', 'amount', 'description', 'receipt_b64', 'receipt_files'):
                 if fld in data:
                     col = 'receipt_url' if fld == 'receipt_b64' else fld
@@ -3963,7 +3963,7 @@ def exp_summary():
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
-# ── GUEST SEND CREDENTIALS ──
+# â”€â”€ GUEST SEND CREDENTIALS â”€â”€
 
 
 @app.route('/api/guests/send-credentials', methods=['POST'])
@@ -3985,7 +3985,7 @@ def guest_send_credentials():
         if not email:
             return jsonify({"success": False, "error": "Email address is required."}), 400
 
-        # ── RESEND API ──
+        # â”€â”€ RESEND API â”€â”€
         import os as _guest_os
         import requests as _greq
         RESEND_API_KEY = _guest_os.environ.get('RESEND_API_KEY', '')
@@ -3996,18 +3996,18 @@ def guest_send_credentials():
         access_type_label = "Temporary (One-Time Login)" if is_temp else "Permanent Access"
         access_note = (
             "<p style='margin:16px 0 0;padding:12px 16px;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);border-radius:8px;font-size:.82rem;color:#f97316;'>"
-            "⚠️ <strong>One-Time Access:</strong> These credentials are valid for a single login only. After you log in once, they will expire automatically."
+            "âš ï¸ <strong>One-Time Access:</strong> These credentials are valid for a single login only. After you log in once, they will expire automatically."
             "</p>"
         ) if is_temp else (
             "<p style='margin:16px 0 0;padding:12px 16px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);border-radius:8px;font-size:.82rem;color:#4ade80;'>"
-            "✅ <strong>Permanent Access:</strong> You can use these credentials to log in anytime — no expiry."
+            "âœ… <strong>Permanent Access:</strong> You can use these credentials to log in anytime â€” no expiry."
             "</p>"
         )
 
         html_body = f"""
         <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#0f0f0f;color:#e5e5e5;border-radius:12px;overflow:hidden;border:1px solid #2a2a2a;">
           <div style="background:#f97316;padding:20px 28px;">
-            <h2 style="margin:0;color:#fff;font-size:1.3rem;letter-spacing:1px;">MIIM — Guest Access Credentials</h2>
+            <h2 style="margin:0;color:#fff;font-size:1.3rem;letter-spacing:1px;">MIIM â€” Guest Access Credentials</h2>
             <div style="margin-top:6px;font-size:.8rem;color:rgba(255,255,255,0.75);">{access_type_label}</div>
           </div>
           <div style="padding:28px;">
@@ -4020,7 +4020,7 @@ def guest_send_credentials():
             {access_note}
             <p style="margin:20px 0 0;font-size:.82rem;color:#666;">Please keep these credentials confidential. Contact HR if you face any issues.</p>
           </div>
-          <div style="padding:14px 28px;border-top:1px solid #2a2a2a;text-align:center;font-size:.75rem;color:#555;">MIIM HR System &nbsp;·&nbsp; Automated Notification</div>
+          <div style="padding:14px 28px;border-top:1px solid #2a2a2a;text-align:center;font-size:.75rem;color:#555;">MIIM HR System &nbsp;Â·&nbsp; Automated Notification</div>
         </div>
         """
 
@@ -4033,7 +4033,7 @@ def guest_send_credentials():
             json={
                 "from": f"MIIM HR System <{_FROM_EMAIL}>",
                 "to": [email],
-                "subject": f"MIIM — Guest Access Credentials ({project})",
+                "subject": f"MIIM â€” Guest Access Credentials ({project})",
                 "html": html_body
             },
             timeout=15
@@ -4048,11 +4048,11 @@ def guest_send_credentials():
         return jsonify({"success": False, "error": str(ex)}), 500
 
 
-# ══════════════════════════════════════════════════
-# ── MIIM ROBOT CHATBOT API ──
-# Employee messages → only Admin can read them
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# â”€â”€ MIIM ROBOT CHATBOT API â”€â”€
+# Employee messages â†’ only Admin can read them
 # Admin can reply to any employee
-# ══════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 import os as _ch_os
 import datetime as _ch_dt
 
@@ -4100,16 +4100,16 @@ def chat_get():
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
-# ── SMTP constants for chat alerts ──
+# â”€â”€ SMTP constants for chat alerts â”€â”€
 _CHAT_SMTP_HOST = 'smtp.hostinger.com'
 _CHAT_SMTP_PORT = 465
-# ── Credentials loaded from environment variables (see security.py) ──
+# â”€â”€ Credentials loaded from environment variables (see security.py) â”€â”€
 # _CHAT_SMTP_USER, _CHAT_SMTP_PASS, _ADMIN_EMAIL are imported from security.py above
 
 
 
 def _send_chat_alert(emp_id, emp_name, dept, message, ts):
-    """Deliver chat alert to inbox using IMAP APPEND — avoids self-send SMTP bounce. Name/identity hidden."""
+    """Deliver chat alert to inbox using IMAP APPEND â€” avoids self-send SMTP bounce. Name/identity hidden."""
     try:
         import ssl as _ssl, time as _time
         from email.mime.multipart import MIMEMultipart
@@ -4118,7 +4118,7 @@ def _send_chat_alert(emp_id, emp_name, dept, message, ts):
         html_body = f"""
         <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#0f0f0f;color:#e5e5e5;border-radius:12px;overflow:hidden;border:1px solid #2a2a2a;">
           <div style="background:#f97316;padding:16px 24px;">
-            <h2 style="margin:0;color:#fff;font-size:1.1rem;letter-spacing:1px;">MIIM — New Chat Message</h2>
+            <h2 style="margin:0;color:#fff;font-size:1.1rem;letter-spacing:1px;">MIIM â€” New Chat Message</h2>
           </div>
           <div style="padding:24px;">
             <table style="width:100%;border-collapse:collapse;background:#1a1a1a;border-radius:8px;overflow:hidden;margin-bottom:16px;">
@@ -4128,17 +4128,17 @@ def _send_chat_alert(emp_id, emp_name, dept, message, ts):
               {message}
             </div>
             <p style="margin:20px 0 0;font-size:.8rem;color:#555;">
-              <strong style="color:#f97316;">Reply to this email</strong> — your reply will appear in the employee chat automatically.
+              <strong style="color:#f97316;">Reply to this email</strong> â€” your reply will appear in the employee chat automatically.
             </p>
           </div>
           <div style="padding:12px 24px;border-top:1px solid #2a2a2a;text-align:center;font-size:.72rem;color:#555;">
-            MIIM HR System · Ref: {emp_id}
+            MIIM HR System Â· Ref: {emp_id}
           </div>
         </div>
         """
 
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'[MIIM Chat] New message — Ref: {emp_id}'
+        msg['Subject'] = f'[MIIM Chat] New message â€” Ref: {emp_id}'
         msg['From'] = f'MIIM HR System <{_CHAT_SMTP_USER}>'
         msg['To'] = _ADMIN_EMAIL or ''
         msg['Reply-To'] = f'MIIM Chat <{_CHAT_SMTP_USER}>'
@@ -4146,15 +4146,15 @@ def _send_chat_alert(emp_id, emp_name, dept, message, ts):
         msg['X-MIIM-Alert'] = 'outgoing'
         msg.attach(MIMEText(html_body, 'html'))
 
-        # IMAP APPEND — places mail directly in inbox, no SMTP self-send bounce
+        # IMAP APPEND â€” places mail directly in inbox, no SMTP self-send bounce
         ctx = _ssl.create_default_context()
         imap = _imap.IMAP4_SSL('imap.hostinger.com', 993, ssl_context=ctx)
         imap.login(_CHAT_SMTP_USER, _CHAT_SMTP_PASS)
         imap.append('INBOX', '', _imap.Time2Internaldate(_time.time()), msg.as_bytes())
         imap.logout()
-        print(f'[ChatAlert] ✅ Alert delivered to inbox — Ref: {emp_id}')
+        print(f'[ChatAlert] âœ… Alert delivered to inbox â€” Ref: {emp_id}')
     except Exception as _e:
-        print(f'[ChatAlert] ❌ Failed: {_e}')
+        print(f'[ChatAlert] âŒ Failed: {_e}')
 
 
 @app.route('/api/chat/send', methods=['POST'])
@@ -4177,7 +4177,7 @@ def chat_send():
             (emp_id, emp_name, dept, role, sender, message, ts)
         )
         conn.commit(); conn.close()
-        # ── Send email alert to admin for employee messages only (not bot auto-replies) ──
+        # â”€â”€ Send email alert to admin for employee messages only (not bot auto-replies) â”€â”€
         if sender == 'user' and emp_name != 'MIIM Bot':
             import threading as _th
             _th.Thread(target=_send_chat_alert, args=(emp_id, emp_name, dept, message, ts), daemon=True).start()
@@ -4187,11 +4187,11 @@ def chat_send():
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
-# ══════════════════════════════════════════════════
-# ── EMAIL INBOUND WEBHOOK — Admin email reply → Chat ──
-# Admin replies to the alert email → POST to /api/chat/email-reply
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# â”€â”€ EMAIL INBOUND WEBHOOK â€” Admin email reply â†’ Chat â”€â”€
+# Admin replies to the alert email â†’ POST to /api/chat/email-reply
 # This endpoint is called by Hostinger email webhook or a polling script
-# ══════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 
 @app.route('/api/chat/email-reply', methods=['POST'])
@@ -4233,7 +4233,7 @@ def chat_email_reply():
 @require_auth
 def chat_clear():
     try:
-        # Role from verified JWT token — NOT from URL query param
+        # Role from verified JWT token â€” NOT from URL query param
         current_user = get_current_user()
         caller_role = current_user.get('role', 'member')  # type: ignore[union-attr]
         caller_id = str(current_user.get('emp_id', ''))  # type: ignore[union-attr]
@@ -4248,7 +4248,7 @@ def chat_clear():
         print(f"[chat_clear error] {ex}")
         return jsonify({'success': False, 'error': 'Operation failed'}), 500
 
-# ── FAVICON — prevents 404 in browser console ──
+# â”€â”€ FAVICON â€” prevents 404 in browser console â”€â”€
 
 
 @app.route('/api/chat/test-email', methods=['GET'])
@@ -4259,11 +4259,11 @@ def chat_test_email():
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = '[MIIM Chat] Test — IMAP Deliver Working'
+        msg['Subject'] = '[MIIM Chat] Test â€” IMAP Deliver Working'
         msg['From'] = f'MIIM HR System <{_CHAT_SMTP_USER}>'
         msg['To'] = _ADMIN_EMAIL or ''
         msg['X-MIIM-Alert'] = 'outgoing'
-        msg.attach(MIMEText('<h2 style="color:#f97316;">✅ IMAP deliver working!</h2><p>Chat alerts will appear in inbox.</p>', 'html'))
+        msg.attach(MIMEText('<h2 style="color:#f97316;">âœ… IMAP deliver working!</h2><p>Chat alerts will appear in inbox.</p>', 'html'))
         ctx = _ssl.create_default_context()
         imap = _imap.IMAP4_SSL('imap.hostinger.com', 993, ssl_context=ctx)
         imap.login(_CHAT_SMTP_USER, _CHAT_SMTP_PASS)
@@ -4284,10 +4284,10 @@ def favicon():
     return Response(base64.b64decode(ico_b64), mimetype='image/x-icon')
 
 
-# ══════════════════════════════════════════════════
-# ── EMBEDDED EMAIL REPLY POLLER ──
-# Runs in background thread — checks inbox every 30s
-# ══════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# â”€â”€ EMBEDDED EMAIL REPLY POLLER â”€â”€
+# Runs in background thread â€” checks inbox every 30s
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 import imaplib as _imap_lib
 import imaplib as _imap  # for _send_chat_alert IMAP APPEND
 import email as _email_lib
@@ -4357,7 +4357,7 @@ def _mail_extract_emp_id(subject, body):
 
 def _email_poll_loop():
     import time as _time
-    print('[EmailPoller] Started — watching', _CHAT_SMTP_USER)
+    print('[EmailPoller] Started â€” watching', _CHAT_SMTP_USER)
     while True:
         try:
             mail = _imap_lib.IMAP4_SSL(_IMAP_HOST, _IMAP_PORT)
@@ -4394,7 +4394,7 @@ def _email_poll_loop():
                                 (emp_id, emp_name2, '', 'admin', 'bot', reply_text, ts2)
                             )
                             conn2.commit(); conn2.close()
-                            print(f'[EmailPoller] ✅ Reply saved for {emp_id}')
+                            print(f'[EmailPoller] âœ… Reply saved for {emp_id}')
                         mail.store(msg_id, '+FLAGS', '\\Seen')
                     except Exception as _ep:
                         print(f'[EmailPoller] msg error: {_ep}')
@@ -4404,10 +4404,10 @@ def _email_poll_loop():
         _time.sleep(_POLL_EVERY)
 
 
-# ══════════════════════════════════════════════════════════════════
-# ── DB ADMIN PANEL — /dbadmin  (Admin only) ──
-# hrm.miim.co.in/dbadmin → admin login மட்டும் access
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# â”€â”€ DB ADMIN PANEL â€” /dbadmin  (Admin only) â”€â”€
+# hrm.miim.co.in/dbadmin â†’ admin login à®®à®Ÿà¯à®Ÿà¯à®®à¯ access
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 import sqlite3 as _dba_sqlite  # dbadmin needs direct sqlite
 import os as _dba_os
@@ -4423,7 +4423,7 @@ def _dba_get_path(db_name):
     return path if _dba_os.path.exists(path) else None
 
 def _dba_is_admin():
-    """Check admin via JWT token directly — bypasses get_current_user issues."""
+    """Check admin via JWT token directly â€” bypasses get_current_user issues."""
     try:
         # Read token from Authorization header first
         auth = request.headers.get("Authorization", "")
@@ -4567,12 +4567,12 @@ _DBA_HTML = """<!DOCTYPE html>
 <!-- LOGIN PAGE -->
 <div class="login-wrap" id="loginPage">
   <div class="login-box">
-    <h1>⚡ MIIM DB Admin</h1>
+    <h1>âš¡ MIIM DB Admin</h1>
     <p>Admin credentials only have access</p>
     <input type="text" id="loginUser" placeholder="User ID / Username" autocomplete="username">
     <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password"
            onkeydown="if(event.key==='Enter')doLogin()">
-    <button onclick="doLogin()">Login →</button>
+    <button onclick="doLogin()">Login â†’</button>
     <div class="err-msg" id="loginErr">Invalid credentials or not admin</div>
   </div>
 </div>
@@ -4580,12 +4580,12 @@ _DBA_HTML = """<!DOCTYPE html>
 <!-- MAIN PANEL (hidden until login) -->
 <div id="mainPanel" style="display:none;flex-direction:column;height:100vh;">
   <div class="header">
-    <h1>⚡ MIIM DB Admin</h1>
+    <h1>âš¡ MIIM DB Admin</h1>
     <select class="db-sel" id="dbSelect" onchange="switchDB()"></select>
-    <span class="badge" id="dbBadge">—</span>
+    <span class="badge" id="dbBadge">â€”</span>
     <div class="nav-tabs">
-      <button class="nav-tab active" id="tabDB" onclick="showTab('db')">🗄 Database</button>
-      <button class="nav-tab" id="tabBK" onclick="showTab('backup')">💾 Backups</button>
+      <button class="nav-tab active" id="tabDB" onclick="showTab('db')">ðŸ—„ Database</button>
+      <button class="nav-tab" id="tabBK" onclick="showTab('backup')">ðŸ’¾ Backups</button>
     </div>
     <button class="logout-btn" onclick="doLogout()">Logout</button>
   </div>
@@ -4598,15 +4598,15 @@ _DBA_HTML = """<!DOCTYPE html>
     <div class="main">
       <div class="toolbar">
         <select id="filterCol" class="db-sel" style="width:130px"></select>
-        <input id="filterVal" placeholder="Search…" oninput="applyFilter()">
-        <button class="btn btn-ghost" onclick="clearFilter()">✕ Clear</button>
+        <input id="filterVal" placeholder="Searchâ€¦" oninput="applyFilter()">
+        <button class="btn btn-ghost" onclick="clearFilter()">âœ• Clear</button>
         <button class="btn btn-ok" onclick="openAddModal()">+ Add Row</button>
         <span class="row-count" id="rowCount"></span>
-        <button class="btn btn-ghost" style="margin-left:auto" onclick="exportTable('csv')" title="Export CSV">⬇ CSV</button>
-        <button class="btn btn-ghost" onclick="exportTable('excel')" title="Export Excel">⬇ Excel</button>
+        <button class="btn btn-ghost" style="margin-left:auto" onclick="exportTable('csv')" title="Export CSV">â¬‡ CSV</button>
+        <button class="btn btn-ghost" onclick="exportTable('excel')" title="Export Excel">â¬‡ Excel</button>
       </div>
       <div class="table-wrap" id="tableWrap">
-        <div class="empty">← Select a table from the left</div>
+        <div class="empty">â† Select a table from the left</div>
       </div>
       <div class="pg" id="pagination" style="display:none"></div>
     </div>
@@ -4614,23 +4614,23 @@ _DBA_HTML = """<!DOCTYPE html>
   <!-- Backup View -->
   <div id="backupPanel">
     <div class="bk-toolbar">
-      <h2 style="font-size:18px;color:var(--acc);">💾 Backup History</h2>
-      <button class="bk-refresh" onclick="loadBackups()">🔄 Refresh</button>
-      <button class="bk-refresh" onclick="bkSelectAll()">☑ Select All</button>
-      <button class="bk-refresh" onclick="bkClearAll()">✕ Clear</button>
+      <h2 style="font-size:18px;color:var(--acc);">ðŸ’¾ Backup History</h2>
+      <button class="bk-refresh" onclick="loadBackups()">ðŸ”„ Refresh</button>
+      <button class="bk-refresh" onclick="bkSelectAll()">â˜‘ Select All</button>
+      <button class="bk-refresh" onclick="bkClearAll()">âœ• Clear</button>
       <span class="bk-sel-count" id="bkSelCount"></span>
-      <button class="bk-export-btn" id="bkExportBtn" onclick="bkExportExcel()">📊 Export Selected to Excel</button>
+      <button class="bk-export-btn" id="bkExportBtn" onclick="bkExportExcel()">ðŸ“Š Export Selected to Excel</button>
       <span class="bk-count" id="bkCount"></span>
     </div>
     <div class="bk-grid" id="bkGrid">
-      <div class="bk-empty">Loading backups…</div>
+      <div class="bk-empty">Loading backupsâ€¦</div>
     </div>
   </div>
 </div>
 
 <div class="modal-bg" id="addModal">
   <div class="modal">
-    <h2>➕ Add New Row</h2>
+    <h2>âž• Add New Row</h2>
     <div id="addFields"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -4646,13 +4646,13 @@ let currentDB = '', currentTable = '', allRows = [], columns = [], page = 1;
 const PER_PAGE = 50;
 let editingRow = null;
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function doLogin() {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value.trim();
   if (!u || !p) return;
   const btn = document.querySelector('.login-box button');
-  if (btn) { btn.textContent = 'Logging in…'; btn.disabled = true; }
+  if (btn) { btn.textContent = 'Logging inâ€¦'; btn.disabled = true; }
   try {
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -4670,14 +4670,14 @@ async function doLogin() {
       sessionStorage.setItem('dba_token', _token);
       showPanel();
     } else if (d.success && !isAdmin) {
-      showErr('Access denied — Admin only');
+      showErr('Access denied â€” Admin only');
     } else {
       showErr(d.message || 'Invalid credentials');
     }
   } catch(err) {
     showErr('Network error: ' + err.message);
   } finally {
-    if (btn) { btn.textContent = 'Login →'; btn.disabled = false; }
+    if (btn) { btn.textContent = 'Login â†’'; btn.disabled = false; }
   }
 }
 
@@ -4708,13 +4708,13 @@ if (_token) {
   showPanel();
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function init() {
   const res = await fetch('/dbadmin/api/databases', {headers: authHeaders(), credentials: 'include'});
   if (res.status === 401 || res.status === 403) {
     const errData = await res.json().catch(() => ({}));
     console.error('[DBA] Auth failed:', res.status, errData);
-    showErr('Session expired — please login again');
+    showErr('Session expired â€” please login again');
     doLogout(); return;
   }
   const dbs = await res.json();
@@ -4723,7 +4723,7 @@ async function init() {
   if (dbs.length) { currentDB = dbs[0]; await loadTables(); }
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
+// â”€â”€ Tab switching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showTab(tab) {
   if (tab === 'db') {
     document.getElementById('dbView').style.display = 'flex';
@@ -4743,11 +4743,11 @@ function showTab(tab) {
   }
 }
 
-// ── Backup ────────────────────────────────────────────────────────────────────
+// â”€â”€ Backup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let _bkData = []; // store loaded backup data
 
 async function loadBackups() {
-  document.getElementById('bkGrid').innerHTML = '<div class="bk-empty">Loading…</div>';
+  document.getElementById('bkGrid').innerHTML = '<div class="bk-empty">Loadingâ€¦</div>';
   const res = await fetch('/dbadmin/api/backups', {headers: authHeaders()});
   if (!res.ok) { document.getElementById('bkGrid').innerHTML = '<div class="bk-empty">Failed to load backups.</div>'; return; }
   const data = await res.json();
@@ -4760,7 +4760,7 @@ async function loadBackups() {
   document.getElementById('bkGrid').innerHTML = _bkData.map((bk, bi) => `
     <div class="bk-card">
       <div class="bk-card-header">
-        <span class="bk-date">📅 ${bk.folder}</span>
+        <span class="bk-date">ðŸ“… ${bk.folder}</span>
       </div>
       <div class="bk-files">
         ${bk.files.map((f, fi) => `
@@ -4769,10 +4769,10 @@ async function loadBackups() {
               onchange="bkToggle(${bi},${fi})"
               data-folder="${bk.folder}" data-file="${f.name}" data-date="${bk.folder}">
             <div class="bk-info">
-              <span class="bk-fname">🗄 ${f.name}</span>
+              <span class="bk-fname">ðŸ—„ ${f.name}</span>
               <span class="bk-size">${f.size_kb} KB</span>
             </div>
-            <button class="bk-dl" onclick="downloadBackup('${bk.folder}','${f.name}')">⬇ Download</button>
+            <button class="bk-dl" onclick="downloadBackup('${bk.folder}','${f.name}')">â¬‡ Download</button>
           </div>
         `).join('')}
         ${!bk.files.length ? '<span style="color:var(--mut);font-size:12px">No files</span>' : ''}
@@ -4829,7 +4829,7 @@ async function bkExportExcel() {
     file: cb.dataset.file,
     date: cb.dataset.date
   }));
-  showToast('Preparing Excel export…');
+  showToast('Preparing Excel exportâ€¦');
   const res = await fetch('/dbadmin/api/backup-export-excel', {
     method: 'POST',
     headers: authHeaders(),
@@ -4841,7 +4841,7 @@ async function bkExportExcel() {
   const a    = document.createElement('a');
   a.href = url; a.download = 'backup_export.xlsx'; a.click();
   URL.revokeObjectURL(url);
-  showToast('Excel downloaded! ✓');
+  showToast('Excel downloaded! âœ“');
 }
 
 async function downloadBackup(folder, filename) {
@@ -4850,7 +4850,7 @@ async function downloadBackup(folder, filename) {
   a.href = url; a.download = filename; a.click();
 }
 
-// ── Export — filtered rows மட்டும் download ஆகும் ──────────────────────────
+// â”€â”€ Export â€” filtered rows à®®à®Ÿà¯à®Ÿà¯à®®à¯ download à®†à®•à¯à®®à¯ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getFilteredRows() {
   const col = document.getElementById('filterCol').value;
   const val = document.getElementById('filterVal').value.toLowerCase();
@@ -4871,7 +4871,7 @@ function exportTable(fmt) {
   const isFiltered = !!filterVal;
 
   if (fmt === 'csv') {
-    // Client-side CSV — filtered rows மட்டும்
+    // Client-side CSV â€” filtered rows à®®à®Ÿà¯à®Ÿà¯à®®à¯
     const escape = v => {
       const s = v === null || v === undefined ? '' : String(v);
       return s.includes(',') || s.includes('"') || s.includes('\\n')
@@ -4886,10 +4886,10 @@ function exportTable(fmt) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = fname; a.click();
     URL.revokeObjectURL(a.href);
-    showToast(`CSV downloaded (${rows.length} rows) ✓`);
+    showToast(`CSV downloaded (${rows.length} rows) âœ“`);
 
   } else if (fmt === 'excel') {
-    // Server-side Excel — filtered row data POST பண்றோம்
+    // Server-side Excel â€” filtered row data POST à®ªà®£à¯à®±à¯‹à®®à¯
     const fname = isFiltered
       ? `${currentDB.replace('.db','')}_${currentTable}_filtered.xlsx`
       : `${currentDB.replace('.db','')}_${currentTable}.xlsx`;
@@ -4904,7 +4904,7 @@ function exportTable(fmt) {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = fname; a.click();
       URL.revokeObjectURL(a.href);
-      showToast(`Excel downloaded (${rows.length} rows) ✓`);
+      showToast(`Excel downloaded (${rows.length} rows) âœ“`);
     }).catch(e => showToast(e.message, true));
   }
 }
@@ -4912,7 +4912,7 @@ function exportTable(fmt) {
 async function switchDB() {
   currentDB = document.getElementById('dbSelect').value;
   currentTable = '';
-  document.getElementById('tableWrap').innerHTML = '<div class="empty">← Select a table from the left</div>';
+  document.getElementById('tableWrap').innerHTML = '<div class="empty">â† Select a table from the left</div>';
   document.getElementById('pagination').style.display = 'none';
   document.getElementById('rowCount').textContent = '';
   await loadTables();
@@ -4924,7 +4924,7 @@ async function loadTables() {
   document.getElementById('dbBadge').textContent = `${data.tables.length} tables`;
   const list = document.getElementById('tableList');
   list.innerHTML = data.tables.map(t =>
-    `<div class="tbl-item" id="ti_${t}" onclick="selectTable('${t}')">📋 ${t}</div>`
+    `<div class="tbl-item" id="ti_${t}" onclick="selectTable('${t}')">ðŸ“‹ ${t}</div>`
   ).join('');
   if (data.tables.length) selectTable(data.tables[0]);
 }
@@ -4938,7 +4938,7 @@ async function selectTable(name) {
   await fetchRows();
 }
 
-// ── Data ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function fetchRows() {
   if (!currentTable) return;
   const res = await fetch(`/dbadmin/api/rows?db=${encodeURIComponent(currentDB)}&table=${encodeURIComponent(currentTable)}`, {headers: authHeaders()});
@@ -4968,7 +4968,7 @@ function clearFilter(doRender = true) {
   if (doRender) renderTable(allRows);
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderTable(rows) {
   document.getElementById('rowCount').textContent = `${rows.length} rows`;
   const totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
@@ -4993,30 +4993,30 @@ function renderTable(rows) {
     }).join('');
     return `<tr id="row_${idx}">
       <td><div class="act">
-        <button class="ic ed" id="eb_${idx}" onclick="startEdit(${idx})" title="Edit">✏</button>
-        <button class="ic sv" id="sb_${idx}" onclick="saveEdit(${idx})" style="display:none" title="Save">✓</button>
-        <button class="ic" id="cb_${idx}" onclick="cancelEdit(${idx})" style="display:none" title="Cancel">✕</button>
-        <button class="ic dl" onclick="deleteRow(${idx})" title="Delete">🗑</button>
+        <button class="ic ed" id="eb_${idx}" onclick="startEdit(${idx})" title="Edit">âœ</button>
+        <button class="ic sv" id="sb_${idx}" onclick="saveEdit(${idx})" style="display:none" title="Save">âœ“</button>
+        <button class="ic" id="cb_${idx}" onclick="cancelEdit(${idx})" style="display:none" title="Cancel">âœ•</button>
+        <button class="ic dl" onclick="deleteRow(${idx})" title="Delete">ðŸ—‘</button>
       </div></td>${cells}</tr>`;
   }).join('');
   document.getElementById('tableWrap').innerHTML = `<table>${thead}<tbody>${tbody}</tbody></table>`;
   const pg = document.getElementById('pagination');
   if (totalPages <= 1) { pg.style.display='none'; return; }
   pg.style.display = 'flex';
-  let html = `<button class="pb" onclick="goPage(${page-1})" ${page===1?'disabled':''}>‹</button>`;
+  let html = `<button class="pb" onclick="goPage(${page-1})" ${page===1?'disabled':''}>â€¹</button>`;
   for (let p2=1;p2<=totalPages;p2++) {
     if (totalPages>10 && Math.abs(p2-page)>2 && p2!==1 && p2!==totalPages) {
-      if (p2===2||p2===totalPages-1) html+='<span style="color:var(--mut);padding:0 4px">…</span>'; continue;
+      if (p2===2||p2===totalPages-1) html+='<span style="color:var(--mut);padding:0 4px">â€¦</span>'; continue;
     }
     html+=`<button class="pb ${p2===page?'act':''}" onclick="goPage(${p2})">${p2}</button>`;
   }
-  html+=`<button class="pb" onclick="goPage(${page+1})" ${page===totalPages?'disabled':''}>›</button><span class="pi">Page ${page} of ${totalPages}</span>`;
+  html+=`<button class="pb" onclick="goPage(${page+1})" ${page===totalPages?'disabled':''}>â€º</button><span class="pi">Page ${page} of ${totalPages}</span>`;
   pg.innerHTML = html;
 }
 
 function goPage(p) { page=p; applyFilter(); }
 
-// ── Edit ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function startEdit(idx) {
   if (editingRow!==null) cancelEdit(editingRow);
   editingRow=idx;
@@ -5050,11 +5050,11 @@ async function saveEdit(idx) {
   const res=await fetch('/dbadmin/api/update',{method:'POST',headers:authHeaders(),body:JSON.stringify(payload)});
   const data=await res.json();
   if(data.error){showToast(data.error,true);return;}
-  showToast('Saved! ✓');
+  showToast('Saved! âœ“');
   allRows[idx]=newRow; editingRow=null; renderTable(allRows);
 }
 
-// ── Delete ────────────────────────────────────────────────────────────────────
+// â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function deleteRow(idx) {
   if(!confirm('Delete this row?')) return;
   const row=allRows[idx];
@@ -5065,9 +5065,9 @@ async function deleteRow(idx) {
   allRows.splice(idx,1); renderTable(allRows);
 }
 
-// ── Add ───────────────────────────────────────────────────────────────────────
+// â”€â”€ Add â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function openAddModal() {
-  if(!currentTable){showToast('Table select பண்ணுங்க',true);return;}
+  if(!currentTable){showToast('Table select à®ªà®£à¯à®£à¯à®™à¯à®•',true);return;}
   document.getElementById('addFields').innerHTML=columns.map(c=>`<div class="field"><label>${c}</label><input id="add_${c}" placeholder="${c}"></div>`).join('');
   document.getElementById('addModal').classList.add('show');
 }
@@ -5078,10 +5078,10 @@ async function submitAdd() {
   const res=await fetch('/dbadmin/api/insert',{method:'POST',headers:authHeaders(),body:JSON.stringify({db:currentDB,table:currentTable,values})});
   const data=await res.json();
   if(data.error){showToast(data.error,true);return;}
-  showToast('Row added! ✓'); closeModal(); await fetchRows();
+  showToast('Row added! âœ“'); closeModal(); await fetchRows();
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Utils â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showToast(msg,err=false){
   const t=document.getElementById('toast');
   t.textContent=msg; t.className=err?'err':'';
@@ -5096,7 +5096,7 @@ document.getElementById('addModal').addEventListener('click',e=>{if(e.target.id=
 
 
 def _dba_check():
-    """Decorator helper — returns 403 if not admin."""
+    """Decorator helper â€” returns 403 if not admin."""
     from flask import jsonify as _j
     if not _dba_is_admin():
         return _j({'error': 'Admin access only'}), 403
@@ -5118,7 +5118,7 @@ def dbadmin_databases():
 
 
 def _dba_validate_table(con, table):
-    """Return True only if table exists in sqlite_master — prevents SQL injection via table name."""
+    """Return True only if table exists in sqlite_master â€” prevents SQL injection via table name."""
     valid = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
     return table in valid
 
@@ -5234,14 +5234,14 @@ def dbadmin_insert():
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'error': str(e)})
-# ══════════════════════════════════════════════════════════════════
-# EXPORT API — Table → CSV / Excel / Full DB download
-# ══════════════════════════════════════════════════════════════════
-# Usage (Admin login வேணும்):
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# EXPORT API â€” Table â†’ CSV / Excel / Full DB download
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Usage (Admin login à®µà¯‡à®£à¯à®®à¯):
 #   CSV  : /dbadmin/api/export?db=miim_hr.db&table=employees&format=csv
 #   Excel: /dbadmin/api/export?db=miim_hr.db&table=employees&format=excel
 #   DB   : /dbadmin/api/export-db?db=miim_hr.db
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 import csv as _csv_mod
 import io as _io_mod
@@ -5271,7 +5271,7 @@ def dbadmin_export():
 
     filename_base = f"{db_name.replace('.db', '')}_{table}"
 
-    # ── CSV ──────────────────────────────────────────────────────
+    # â”€â”€ CSV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if fmt == 'csv':
         from flask import Response as _FResp
         output = _io_mod.StringIO()
@@ -5285,7 +5285,7 @@ def dbadmin_export():
             headers={'Content-Disposition': f'attachment; filename="{filename_base}.csv"'}
         )
 
-    # ── Excel ─────────────────────────────────────────────────────
+    # â”€â”€ Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     elif fmt == 'excel':
         import openpyxl as _xl  # type: ignore[import]
         from openpyxl.styles import Font, PatternFill, Alignment  # type: ignore[import]
@@ -5345,7 +5345,7 @@ def dbadmin_export_db():
     )
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 
 @app.route('/dbadmin/api/export-filtered', methods=['POST'])
@@ -5388,12 +5388,12 @@ def dbadmin_export_filtered():
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
-# AUTO BACKUP — Daily SQLite DB backup with auto-cleanup
-# ══════════════════════════════════════════════════════════════════
-# Manual run : python app.py → background-ல auto start ஆகும்
+# AUTO BACKUP â€” Daily SQLite DB backup with auto-cleanup
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Manual run : python app.py â†’ background-à®² auto start à®†à®•à¯à®®à¯
 # Backup location: <project>/backups/YYYY-MM-DD_HH-MM/
-# 30 days-க்கு மேல பழைய backups auto delete ஆகும்
-# ══════════════════════════════════════════════════════════════════
+# 30 days-à®•à¯à®•à¯ à®®à¯‡à®² à®ªà®´à¯ˆà®¯ backups auto delete à®†à®•à¯à®®à¯
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 import shutil  as _shutil
 import glob    as _glob
@@ -5416,7 +5416,7 @@ def _run_backup():
         today   = datetime.datetime.now().strftime('%Y-%m-%d')
         day_dir = _dba_os.path.join(_BACKUP_DIR, today)
 
-        # Already backed up today — skip
+        # Already backed up today â€” skip
         if _dba_os.path.exists(day_dir):
             return
 
@@ -5430,7 +5430,7 @@ def _run_backup():
             dst = _dba_os.path.join(day_dir, db_file)
             _shutil.copy2(src, dst)
             size_kb = _dba_os.path.getsize(dst) // 1024
-            _log.info(f"Backed up: {db_file} ({size_kb} KB) → {dst}")
+            _log.info(f"Backed up: {db_file} ({size_kb} KB) â†’ {dst}")
 
         # Cleanup old backups
         cutoff   = datetime.datetime.now() - datetime.timedelta(days=_BACKUP_KEEP_DAYS)
@@ -5449,7 +5449,7 @@ def _run_backup():
         _log2.error(f"Backup error: {e}")
 
 def _backup_loop():
-    """Check every hour — run backup once per day."""
+    """Check every hour â€” run backup once per day."""
     import time
     while True:
         _run_backup()
@@ -5599,7 +5599,7 @@ def dbadmin_backup_download():
     )
 
 
-# ── Self-ping: prevent Render free tier sleep ──
+# â”€â”€ Self-ping: prevent Render free tier sleep â”€â”€
 import requests as _ping_requests
 import time as _ping_time
 
@@ -5614,18 +5614,18 @@ def _self_ping_loop():
         _ping_time.sleep(240)  # ping every 4 minutes
 
 
-# ── PUBLIC SALARY API (for OFF application) ──────────────────
-# No login required — protected by secret key only
+# â”€â”€ PUBLIC SALARY API (for OFF application) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# No login required â€” protected by secret key only
 _OFF_SECRET_KEY = 'MIIM_OFF_2026'
 
 @app.route('/api/public/salary-summary', methods=['GET', 'OPTIONS'])
 def public_salary_summary():
     """
     Public endpoint for OFF application to fetch salary data.
-    Protected by secret key — no session required.
+    Protected by secret key â€” no session required.
     Query params:
-      key    — secret key (required)
-      period — e.g. 2026-07-01 (optional, defaults to latest)
+      key    â€” secret key (required)
+      period â€” e.g. 2026-07-01 (optional, defaults to latest)
     """
     if request.args.get('key', '') != _OFF_SECRET_KEY:
         return jsonify({'error': 'unauthorized'}), 401
@@ -5713,7 +5713,7 @@ def public_salary_summary():
 
 @app.route('/api/public/salary-periods', methods=['GET'])
 def public_salary_periods():
-    """Return distinct periods (months) available — for OFF app month dropdown."""
+    """Return distinct periods (months) available â€” for OFF app month dropdown."""
     if request.args.get('key', '') != _OFF_SECRET_KEY:
         return jsonify({'error': 'unauthorized'}), 401
     try:
