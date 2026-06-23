@@ -2875,10 +2875,11 @@ def apply_leave_new():
     try:
         data = request.json or {}
         conn = _db()
-        conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at) VALUES (?,?,?,?,?,?,'pending',?)",
+        cur = conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at) VALUES (?,?,?,?,?,?,'pending',?)",
                      (data.get('emp_id'), data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), str(datetime.datetime.now())))
+        new_id = cur.lastrowid
         conn.commit(); conn.close()
-        return jsonify({"success": True}), 201
+        return jsonify({"success": True, "id": new_id}), 201
     except Exception as ex:
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
