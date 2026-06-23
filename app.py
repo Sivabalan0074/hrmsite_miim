@@ -766,7 +766,7 @@ def get_attendance():
         date = request.args.get('date', str(datetime.date.today()))
         conn = _db()
         rows = conn.execute("""SELECT a.*, e.username as name, e.empid as e_emp_id, a.emp_id FROM attendance a
-            JOIN employees e ON e.id=a.emp_id WHERE a.date=?""", (date,)).fetchall()
+            JOIN employees e ON e.id=a.emp_id WHERE a.date=? ORDER BY a.checkin ASC""", (date,)).fetchall()
         conn.close()
         records = [dict(r) for r in rows]
         return jsonify({"records": records, "success": True})
