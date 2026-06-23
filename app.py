@@ -2853,13 +2853,13 @@ def review_correction(corr_id, action):
             checkin    = str(corr['req_checkin']  or '--')
             checkout   = str(corr['req_checkout'] or '--')
             att_status = str(corr['req_status']   or 'present')
-            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=? AND marked_by='ESSL_AUTO' LIMIT 1", (emp_id, date_str)).fetchone()
+            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=? LIMIT 1", (emp_id, date_str)).fetchone()
             if existing:
-                conn.execute("UPDATE attendance SET checkin=?,checkout=?,status=?,marked_by=?,updated_at=? WHERE id=?",
-                             (checkin, checkout, att_status, 'CORRECTION', now, existing['id']))
+                conn.execute("UPDATE attendance SET checkin=?,checkout=?,status=?,marked_by=? WHERE id=?",
+                             (checkin, checkout, att_status, 'CORRECTION', existing['id']))
             else:
-                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,?,?,?,?,?)",
-                             (emp_id, date_str, checkin, checkout, att_status, 'CORRECTION', now))
+                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by) VALUES (?,?,?,?,?,?)",
+                             (emp_id, date_str, checkin, checkout, att_status, 'CORRECTION'))
             emp_name = str(corr['emp_name']) if corr['emp_name'] else ''
             dept     = str(corr['dept'])     if corr['dept']     else ''
             resp["emp_id"]      = emp_id
