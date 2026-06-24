@@ -259,12 +259,18 @@ def add_employee():
         else:
             _uid5 = _letters5 + '0101'
         conn = _db()
-        conn.execute("""INSERT INTO employees (username,user_id,empid,dept,desig,manager,joindate,type,company_email,password_hash,status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        conn.execute("""INSERT INTO employees (username,user_id,empid,dept,desig,manager,joindate,type,company_email,password_hash,status,
+            sub_dept,division,grade,team,location,category,employment_type,sex,dob,aadhaar,card_number,doc,lwd)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                      (_uname5, _uid5, data.get('empid', ''),
                       data.get('dept', ''), data.get('desig', ''), data.get('manager', ''),
                       _ujd5, data.get('type', 'Regular'),
-                      data.get('company_email', ''), hash_password(data.get('password_hash') or 'miim@123'), 'active'))
+                      data.get('company_email', ''), hash_password(data.get('password_hash') or 'miim@123'), 'active',
+                      data.get('sub_dept', ''), data.get('division', ''), data.get('grade', ''),
+                      data.get('team', ''), data.get('location', ''), data.get('category', ''),
+                      data.get('employment_type', ''), data.get('sex', ''), data.get('dob', ''),
+                      data.get('aadhaar', ''), data.get('card_number', ''), data.get('doc', ''),
+                      data.get('lwd', '')))
         conn.commit()
         conn.close()
         return jsonify({"success": True}), 201
@@ -289,13 +295,22 @@ def request_employee():
         # Insert into pending_employees
         conn.execute("""INSERT INTO pending_employees
             (username, user_id, empid, dept, desig, manager, joindate, type,
-             company_email, password_hash, status, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+             company_email, password_hash, status, created_at,
+             sub_dept, division, grade, team, location, category,
+             employment_type, sex, dob, aadhaar, card_number, doc, lwd)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                      (username, user_id, empid,
                       data.get('dept', ''), data.get('desig', ''),
                       data.get('manager', ''), data.get('joindate', ''),
                       data.get('type', 'Regular'), data.get('company_email', ''),
-                      'miim@123', 'pending', str(datetime.datetime.now())))
+                      'miim@123', 'pending', str(datetime.datetime.now()),
+                      data.get('sub_dept', ''), data.get('division', ''),
+                      data.get('grade', ''), data.get('team', ''),
+                      data.get('location', ''), data.get('category', ''),
+                      data.get('employment_type', ''), data.get('sex', ''),
+                      data.get('dob', ''), data.get('aadhaar', ''),
+                      data.get('card_number', ''), data.get('doc', ''),
+                      data.get('lwd', '')))
         conn.commit()
         conn.close()
         return jsonify({'success': True, 'message': 'Employee request submitted for approval'}), 201
@@ -2324,14 +2339,20 @@ def approve_employee(emp_id):
             conn.execute("""INSERT INTO employees
                 (username, user_id, empid, dept, desig, manager, joindate, type,
                  company_email, mobile, dob, father_name, photo_url,
-                 password_hash, force_reset, status)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                 password_hash, force_reset, status,
+                 sub_dept, division, grade, team, location, category,
+                 employment_type, sex, aadhaar, card_number, doc, lwd)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                          (_uname, _gen_uid, p.get('empid', ''),
                           p.get('dept', ''), p.get('desig', ''), p.get('manager', ''),
                              _ujd, p.get('type', 'Regular'),
                              p.get('company_email', ''), p.get('mobile', ''), p.get('dob', ''),
                              p.get('father_name', ''), p.get('photo_url', ''),
-                             hash_password(p.get('password_hash') or 'miim@123'), 0, 'active'))
+                             hash_password(p.get('password_hash') or 'miim@123'), 0, 'active',
+                             p.get('sub_dept', ''), p.get('division', ''), p.get('grade', ''),
+                             p.get('team', ''), p.get('location', ''), p.get('category', ''),
+                             p.get('employment_type', ''), p.get('sex', ''), p.get('aadhaar', ''),
+                             p.get('card_number', ''), p.get('doc', ''), p.get('lwd', '')))
             conn.execute("DELETE FROM pending_employees WHERE id=?", (emp_id,))
         else:
             # Already in employees table â€” just activate
@@ -3292,6 +3313,13 @@ def init_db():
         conn.execute("ALTER TABLE employees ADD COLUMN address TEXT DEFAULT ''")
     except Exception:
         pass
+    # Migration: ESSL-style employee detail fields
+    for _col in ['sub_dept', 'division', 'grade', 'team', 'location', 'category',
+                 'employment_type', 'sex', 'aadhaar', 'card_number', 'doc', 'lwd']:
+        try:
+            conn.execute(f"ALTER TABLE employees ADD COLUMN {_col} TEXT DEFAULT ''")
+        except Exception:
+            pass
     try:
         conn.execute("ALTER TABLE employees ADD COLUMN days_worked INTEGER DEFAULT 0")
     except Exception:
@@ -3375,6 +3403,13 @@ def init_db():
         status TEXT DEFAULT 'pending',
         created_at TEXT
     )""")
+    # Migration: same ESSL-style detail fields on pending_employees
+    for _col in ['sub_dept', 'division', 'grade', 'team', 'location', 'category',
+                 'employment_type', 'sex', 'aadhaar', 'card_number', 'doc', 'lwd']:
+        try:
+            conn.execute(f"ALTER TABLE pending_employees ADD COLUMN {_col} TEXT DEFAULT ''")
+        except Exception:
+            pass
     conn.execute(f"""CREATE TABLE IF NOT EXISTS salary_structures (
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, period TEXT, department TEXT, designation TEXT,
