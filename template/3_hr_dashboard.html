@@ -7872,6 +7872,20 @@ function addEmployee(){
   var jd = document.getElementById('i-jd').value;
   var tp = document.getElementById('i-type').value;
   var em = document.getElementById('i-email-preview').value.trim();
+  // ── Additional ESSL-style details ──
+  var subDept  = (document.getElementById('i-subdept')  || {}).value || '';
+  var division = (document.getElementById('i-division') || {}).value || '';
+  var grade    = (document.getElementById('i-grade')    || {}).value || '';
+  var team     = (document.getElementById('i-team')     || {}).value || '';
+  var location = (document.getElementById('i-location') || {}).value || '';
+  var category = (document.getElementById('i-category') || {}).value || '';
+  var empType  = (document.getElementById('i-emptype')  || {}).value || '';
+  var sex      = (document.getElementById('i-sex')      || {}).value || '';
+  var dob      = (document.getElementById('i-dob')      || {}).value || '';
+  var aadhaar  = (document.getElementById('i-aadhaar')  || {}).value || '';
+  var cardNo   = (document.getElementById('i-cardno')   || {}).value || '';
+  var doc      = (document.getElementById('i-doc')      || {}).value || '';
+  var lwd      = (document.getElementById('i-lwd')      || {}).value || '';
   if(!u||!d||!de){ alert('Please fill in Username, Department and Designation.'); return; }
   if(!ei){ alert('Please fill in the Employee ID to generate the User ID.'); return; }
 
@@ -7879,17 +7893,27 @@ function addEmployee(){
   var payload = { username: u, empid: ei, dept: d, desig: de,
     manager: mg||SIVABALAN_USERNAME, joindate: jd, type: tp, company_email: em,
     probation_period: tp === 'Probationary' ? (probPeriod || '') : '',
-    intern_period: tp === 'Intern' ? '3m' : '' };
+    intern_period: tp === 'Intern' ? '3m' : '',
+    sub_dept: subDept, division: division, grade: grade, team: team,
+    location: location, category: category, employment_type: empType,
+    sex: sex, dob: dob, aadhaar: aadhaar, card_number: cardNo,
+    doc: doc, lwd: lwd };
   if (tp === 'Probationary' && !probPeriod) {
     alert('Please select a Probation Period (3 or 6 months).');
     return;
   }
 
   function clearForm(){
-    ['i-user','i-empid','i-jd','i-email-preview','i-userid-preview'].forEach(function(x){
+    ['i-user','i-empid','i-jd','i-email-preview','i-userid-preview',
+     'i-subdept','i-division','i-grade','i-team','i-location','i-category',
+     'i-dob','i-aadhaar','i-cardno','i-doc','i-lwd'].forEach(function(x){
       var el = document.getElementById(x); if(el) el.value='';
     });
     document.getElementById('i-dept').value='';
+    var emptypeSel = document.getElementById('i-emptype');
+    if(emptypeSel) emptypeSel.value='';
+    var sexSel = document.getElementById('i-sex');
+    if(sexSel) sexSel.value='';
     // Reset designation dropdown fully
     var desigSel = document.getElementById('i-desig');
     if(desigSel) desigSel.innerHTML = '<option value="">Select Designation</option>';
@@ -8664,6 +8688,34 @@ function _qsSlipOpen(id,name,dept,desig,empno,type){
             <label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Company Email</label>
             <input type="email" id="i-email-preview" placeholder="employee@miim.co.in" style="width:100%;" aria-label="employee@miim.co.in">
           </div>
+        </div>
+        <!-- ── Additional ESSL-style employee details ── -->
+        <div class="form-row" style="margin-top:14px;">
+          <input type="text" placeholder="Sub Department" id="i-subdept" aria-label="Sub Department">
+          <input type="text" placeholder="Division" id="i-division" aria-label="Division">
+          <input type="text" placeholder="Grade" id="i-grade" aria-label="Grade">
+          <input type="text" placeholder="Team" id="i-team" aria-label="Team">
+        </div>
+        <div class="form-row">
+          <input type="text" placeholder="Location" id="i-location" aria-label="Location">
+          <input type="text" placeholder="Category" id="i-category" aria-label="Category">
+          <select id="i-emptype" aria-label="select">
+            <option value="">Select Employment Type</option>
+            <option>Permanent</option><option>Contract</option><option>Temporary</option><option>Probation</option>
+          </select>
+          <select id="i-sex" aria-label="select">
+            <option value="">Select Sex</option>
+            <option>Male</option><option>Female</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Date of Birth</label><input type="date" id="i-dob" aria-label="Date of Birth"></div>
+          <input type="text" placeholder="Aadhaar Number" id="i-aadhaar" maxlength="12" aria-label="Aadhaar Number">
+          <input type="text" placeholder="Card Number" id="i-cardno" aria-label="Card Number">
+          <div><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Date of Confirmation</label><input type="date" id="i-doc" aria-label="Date of Confirmation"></div>
+        </div>
+        <div class="form-row">
+          <div><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Last Working Day</label><input type="date" id="i-lwd" aria-label="Last Working Day"></div>
         </div>
         <div class="et-box" id="i-et-box">
           <div class="el">Employee Type</div>
