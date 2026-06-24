@@ -8690,32 +8690,39 @@ function _qsSlipOpen(id,name,dept,desig,empno,type){
           </div>
         </div>
         <!-- ── Additional ESSL-style employee details ── -->
-        <div class="form-row" style="margin-top:14px;">
-          <input type="text" placeholder="Sub Department" id="i-subdept" aria-label="Sub Department">
-          <input type="text" placeholder="Division" id="i-division" aria-label="Division">
-          <input type="text" placeholder="Grade" id="i-grade" aria-label="Grade">
-          <input type="text" placeholder="Team" id="i-team" aria-label="Team">
+        <div class="jd-row" style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;">
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Sub Department</label><input type="text" id="i-subdept" placeholder="Sub Department" style="width:100%;" aria-label="Sub Department"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Division</label><input type="text" id="i-division" placeholder="Division" style="width:100%;" aria-label="Division"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Grade</label><input type="text" id="i-grade" placeholder="Grade" style="width:100%;" aria-label="Grade"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Team</label><input type="text" id="i-team" placeholder="Team" style="width:100%;" aria-label="Team"></div>
         </div>
-        <div class="form-row">
-          <input type="text" placeholder="Location" id="i-location" aria-label="Location">
-          <input type="text" placeholder="Category" id="i-category" aria-label="Category">
-          <select id="i-emptype" aria-label="select">
-            <option value="">Select Employment Type</option>
-            <option>Permanent</option><option>Contract</option><option>Temporary</option><option>Probation</option>
-          </select>
-          <select id="i-sex" aria-label="select">
-            <option value="">Select Sex</option>
-            <option>Male</option><option>Female</option>
-          </select>
+        <div class="jd-row" style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;">
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Location</label><input type="text" id="i-location" placeholder="Location" style="width:100%;" aria-label="Location"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Category</label><input type="text" id="i-category" placeholder="Category" style="width:100%;" aria-label="Category"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Employment Type</label>
+            <select id="i-emptype" style="width:100%;" aria-label="select">
+              <option value="">Select Employment Type</option>
+              <option>Permanent</option><option>Contract</option><option>Temporary</option><option>Probation</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Sex</label>
+            <select id="i-sex" style="width:100%;" aria-label="select">
+              <option value="">Select Sex</option>
+              <option>Male</option><option>Female</option>
+            </select>
+          </div>
         </div>
-        <div class="form-row">
-          <div><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Date of Birth</label><input type="date" id="i-dob" aria-label="Date of Birth"></div>
-          <input type="text" placeholder="Aadhaar Number" id="i-aadhaar" maxlength="12" aria-label="Aadhaar Number">
-          <input type="text" placeholder="Card Number" id="i-cardno" aria-label="Card Number">
-          <div><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Date of Confirmation</label><input type="date" id="i-doc" aria-label="Date of Confirmation"></div>
+        <div class="jd-row" style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;">
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Date of Birth</label><input type="date" id="i-dob" style="width:100%;" aria-label="Date of Birth"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Aadhaar Number</label><input type="text" id="i-aadhaar" placeholder="Aadhaar Number" maxlength="12" style="width:100%;" aria-label="Aadhaar Number"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Card Number</label><input type="text" id="i-cardno" placeholder="Card Number" style="width:100%;" aria-label="Card Number"></div>
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Date of Confirmation</label><input type="date" id="i-doc" style="width:100%;" aria-label="Date of Confirmation"></div>
         </div>
-        <div class="form-row">
-          <div><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Last Working Day</label><input type="date" id="i-lwd" aria-label="Last Working Day"></div>
+        <div class="jd-row" style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;margin-bottom:14px;">
+          <div style="flex:1;min-width:180px;"><label style="display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem;">Last Working Day</label><input type="date" id="i-lwd" style="width:100%;" aria-label="Last Working Day"></div>
+          <div style="flex:1;min-width:180px;"></div>
+          <div style="flex:1;min-width:180px;"></div>
+          <div style="flex:1;min-width:180px;"></div>
         </div>
         <div class="et-box" id="i-et-box">
           <div class="el">Employee Type</div>
