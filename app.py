@@ -343,7 +343,9 @@ def update_employee(emp_id):
             'joindate', 'type', 'company_email', 'mobile', 'dob',
             'father_name', 'photo_url', 'password_hash', 'force_reset',
             'status', 'salary_status', 'probation_period', 'intern_period',
-            'days_worked', 'pay_date', 'mode_of_payment'
+            'days_worked', 'pay_date', 'mode_of_payment',
+            'sub_dept', 'division', 'grade', 'team', 'location', 'category',
+            'employment_type', 'sex', 'aadhaar', 'card_number', 'doc', 'lwd'
         }
         filtered = {k: v for k, v in data.items() if k in ALLOWED}
         if not filtered:

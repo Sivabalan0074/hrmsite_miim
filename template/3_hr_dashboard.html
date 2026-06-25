@@ -7201,6 +7201,33 @@ function empRender(){
           _eh += '</div>';
           _eh += '<div id="ie-type-note">'+ieNote+'</div>';
           _eh += '</div>';
+          // ── Extended Fields ──────────────────────────────────────────
+          var _s = 'width:100%;background:#111;border:1px solid #2a2a2a;color:#fff;padding:8px 12px;border-radius:6px;font-size:.85rem;box-sizing:border-box;';
+          var _l = 'font-size:.72rem;color:#888;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px;';
+          _eh += '<div style="border:1px solid #2a2a2a;border-radius:8px;padding:14px;margin-bottom:12px;">';
+          _eh += '<div style="font-size:.7rem;color:#f97316;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;">Additional Details</div>';
+          _eh += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+          _eh += '<div><label style="'+_l+'">Sub Department</label><input id="ie-subdept" value="'+(emp.sub_dept||'')+'" placeholder="Sub Department" style="'+_s+'" aria-label="sub dept"></div>';
+          _eh += '<div><label style="'+_l+'">Division</label><input id="ie-division" value="'+(emp.division||'')+'" placeholder="Division" style="'+_s+'" aria-label="division"></div>';
+          _eh += '<div><label style="'+_l+'">Grade</label><input id="ie-grade" value="'+(emp.grade||'')+'" placeholder="Grade" style="'+_s+'" aria-label="grade"></div>';
+          _eh += '<div><label style="'+_l+'">Team</label><input id="ie-team" value="'+(emp.team||'')+'" placeholder="Team" style="'+_s+'" aria-label="team"></div>';
+          _eh += '</div>';
+          _eh += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">';
+          _eh += '<div><label style="'+_l+'">Location</label><input id="ie-location" value="'+(emp.location||'')+'" placeholder="Location" style="'+_s+'" aria-label="location"></div>';
+          _eh += '<div><label style="'+_l+'">Category</label><input id="ie-category" value="'+(emp.category||'')+'" placeholder="Category" style="'+_s+'" aria-label="category"></div>';
+          _eh += '<div><label style="'+_l+'">Employment Type</label><input id="ie-emptype" value="'+(emp.employment_type||'')+'" placeholder="Full-time/Part-time" style="'+_s+'" aria-label="employment type"></div>';
+          _eh += '<div><label style="'+_l+'">Sex</label><select id="ie-sex" style="'+_s+'" aria-label="select"><option value="">Select</option><option value="Male"'+(emp.sex==="Male"?" selected":"")+'>Male</option><option value="Female"'+(emp.sex==="Female"?" selected":"")+'>Female</option><option value="Other"'+(emp.sex==="Other"?" selected":"")+'>Other</option></select></div>';
+          _eh += '</div>';
+          _eh += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">';
+          _eh += '<div><label style="'+_l+'">Date of Birth</label><input id="ie-dob" type="date" value="'+(emp.dob||'')+'" style="'+_s+'color-scheme:dark;" aria-label="dob"></div>';
+          _eh += '<div><label style="'+_l+'">Aadhaar Number</label><input id="ie-aadhaar" value="'+(emp.aadhaar||'')+'" placeholder="Aadhaar" maxlength="12" style="'+_s+'" aria-label="aadhaar"></div>';
+          _eh += '<div><label style="'+_l+'">Card Number</label><input id="ie-cardno" value="'+(emp.card_number||'')+'" placeholder="Card Number" style="'+_s+'" aria-label="card number"></div>';
+          _eh += '<div><label style="'+_l+'">Date of Confirmation</label><input id="ie-doc" type="date" value="'+(emp.doc||'')+'" style="'+_s+'color-scheme:dark;" aria-label="doc"></div>';
+          _eh += '</div>';
+          _eh += '<div style="display:grid;grid-template-columns:1fr 3fr;gap:10px;margin-top:10px;">';
+          _eh += '<div><label style="'+_l+'">Last Working Day</label><input id="ie-lwd" type="date" value="'+(emp.lwd||'')+'" style="'+_s+'color-scheme:dark;" aria-label="lwd"></div>';
+          _eh += '</div>';
+          _eh += '</div>';
           // ── Smart Action Panel ──────────────────────────────────────
           var curType = emp.type || 'Regular';
           var curProb = emp.probation_period || '3';
@@ -7831,7 +7858,20 @@ function saveEdit(){
     type:             finalType,
     probation_period: finalProbPeriod,
     intern_period:    finalType === 'Intern' ? '3m' : '',
-    company_email:    document.getElementById('ie-email').value.trim()
+    company_email:    document.getElementById('ie-email').value.trim(),
+    sub_dept:         (document.getElementById('ie-subdept')  ||{}).value||'',
+    division:         (document.getElementById('ie-division') ||{}).value||'',
+    grade:            (document.getElementById('ie-grade')    ||{}).value||'',
+    team:             (document.getElementById('ie-team')     ||{}).value||'',
+    location:         (document.getElementById('ie-location') ||{}).value||'',
+    category:         (document.getElementById('ie-category') ||{}).value||'',
+    employment_type:  (document.getElementById('ie-emptype')  ||{}).value||'',
+    sex:              (document.getElementById('ie-sex')      ||{}).value||'',
+    dob:              (document.getElementById('ie-dob')      ||{}).value||'',
+    aadhaar:          (document.getElementById('ie-aadhaar')  ||{}).value||'',
+    card_number:      (document.getElementById('ie-cardno')   ||{}).value||'',
+    doc:              (document.getElementById('ie-doc')      ||{}).value||'',
+    lwd:              (document.getElementById('ie-lwd')      ||{}).value||''
   };
   if(!nd.username||!nd.dept||!nd.desig){ alert('Username, Department and Designation are required.'); return; }
   // Record field changes in status history before saving
