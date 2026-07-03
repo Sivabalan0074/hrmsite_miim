@@ -3125,6 +3125,35 @@ def apply_leave_new():
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+@app.route('/api/leave/<int:leave_id>', methods=['PUT'])
+@require_auth
+def update_leave_new(leave_id):
+    """Edit an existing PENDING leave request (type/dates/reason).
+    Only allowed while status is still 'pending' — once approved or rejected
+    the request is final and must not be edited. This updates the row in
+    place so the person's edit doesn't create a duplicate request."""
+    try:
+        data = request.json or {}
+        conn = _db()
+        row = conn.execute("SELECT status FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "error": "Leave request not found"}), 404
+        if row['status'] != 'pending':
+            conn.close()
+            return jsonify({"success": False, "error": "Only pending leave requests can be edited"}), 400
+        conn.execute(
+            "UPDATE leave_requests SET leave_type=?, from_date=?, to_date=?, days=?, reason=? WHERE id=?",
+            (data.get('leave_type'), data.get('from_date'), data.get('to_date'),
+             data.get('days', 1), data.get('reason', ''), leave_id)
+        )
+        conn.commit(); conn.close()
+        return jsonify({"success": True})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 @app.route('/api/leave/balance/<int:emp_id>', methods=['GET'])
 @require_auth
 def get_leave_balance_by_id(emp_id):
