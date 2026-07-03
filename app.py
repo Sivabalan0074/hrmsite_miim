@@ -3096,8 +3096,10 @@ def _role_from_desig_dept(desig, dept, username=''):
 
 
 def _approval_chain_for_role(role):
-    """Mirrors getApprovalChain() in attendance.html — keep both in sync."""
-    if role == 'sm': return ['hr', 'admin']
+    """Mirrors getApprovalChain() in attendance.html — keep both in sync.
+    NOTE: 'sm' role leave goes to Admin ONLY — HR does not approve/reject an
+    SM's leave, HR can only view the outcome afterwards (Approval History)."""
+    if role == 'sm': return ['admin']
     if role == 'hr': return ['sm', 'admin']
     if role in ('pm', 'employee'): return ['sm', 'hr']
     return ['hr', 'admin']
