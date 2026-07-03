@@ -355,6 +355,7 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .appr-actions{display:flex;gap:8px;}
 .btn-approve{background:linear-gradient(135deg,var(--green),#16a34a);color:#000;border:none;padding:6px 16px;border-radius:7px;font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
 .btn-reject{background:var(--red-dim);border:1px solid rgba(239,68,68,0.3);color:var(--red);padding:6px 16px;border-radius:7px;font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
+.btn-edit{background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);color:#3b82f6;padding:6px 16px;border-radius:7px;font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
 .btn-approve:hover{opacity:.9;}.btn-reject:hover{background:var(--red);color:#fff;}
 .appr-empty{text-align:center;padding:40px;color:var(--t3);font-size:13px;}
 
@@ -1395,7 +1396,7 @@ tr.emp-row td {
   <div class="modal-box">
     <div class="modal-header">
       <div>
-        <div class="modal-title">📋 Apply Leave / Permission</div>
+        <div class="modal-title" id="leaveModalTitleTxt">📋 Apply Leave / Permission</div>
         <div class="modal-sub" id="leaveModalEmpName">—</div>
       </div>
       <div class="modal-close" onclick="closeLeaveModal()">✕</div>
@@ -1635,7 +1636,9 @@ const ROLE_CONFIG={
 /*
   APPROVAL HIERARCHY (multi-stage — each request must clear every stage in order):
   ─ employee / pm  → Stage 1: SM of SAME dept   → Stage 2: HR/Senior HR         → Fully Approved
-  ─ sm             → Stage 1: HR/Senior HR      → Stage 2: Admin                → Fully Approved
+  ─ sm             → Stage 1: Admin only                                       → Fully Approved
+                      (HR does NOT approve/reject an SM's leave — HR can only
+                       VIEW the outcome afterwards, via Approval History)
   ─ hr / senior_hr → Stage 1: SM (Design)       → Stage 2: Admin                → Fully Approved
   ─ admin          → auto-approved (no pending queue)
 
@@ -1645,8 +1648,20 @@ const ROLE_CONFIG={
   A request only becomes fully "approved" once stage === chain.length (every link signed off).
   Rejecting at ANY stage kills the whole request immediately.
 */
+// Mirrors the backend's designation-based role classification (used at login) —
+// needed so a real employee's leave request is tagged with their TRUE role
+// (sm / pm / hr / admin / employee) instead of defaulting to 'employee' for everyone.
+function deriveRoleFromDesig(desig,dept){
+  const d=(desig||'').toLowerCase();
+  const dp=(dept||'').toLowerCase();
+  if(d.includes('admin')||dp==='admin') return 'admin';
+  if(d.includes('hr')||dp==='hr') return 'hr';
+  if(d.includes('senior')&&d.includes('manager')) return 'sm';
+  if(d.includes('project')&&d.includes('manager')) return 'pm';
+  return 'employee';
+}
 function getApprovalChain(role){
-  if(role==='sm')                        return ['hr','admin'];
+  if(role==='sm')                        return ['admin'];
   if(role==='hr'||role==='senior_hr')    return ['sm','admin'];
   if(role==='pm'||role==='employee')     return ['sm','hr'];
   if(role==='account_manager')           return ['hr','admin'];
@@ -1706,6 +1721,7 @@ let expandedEmpId=null;
 let lbViewMode='year';
 
 let leaveModalEmpId=null,leaveModalDKey=null;
+let leaveEditReqId=null; // set while editing an existing PENDING leave request (null = normal apply)
 let selectedLeaveType=null;
 
 let pendingLeaves=[];
@@ -1755,6 +1771,12 @@ function getMyPendingApprovals(){
   const cfg=getRoleCfg();
   if(!cfg.canApprove) return [];
   return pendingLeaves.filter(l=>l.status==='pending' && canApproveLeaveOf(l));
+}
+
+// Find the applicant's OWN still-pending leave request for a given emp+date —
+// used to swap the "Apply Leave" button into an "Edit" button until it's approved.
+function findMyPendingLeave(empId,dKey){
+  return pendingLeaves.find(l=>l.status==='pending' && String(l.empId)===String(empId) && l.date===dKey) || null;
 }
 
 // ════════════════════════════════════════════════════
@@ -2099,18 +2121,26 @@ async function loadEmployees(){
     try{
       const lr=await fetchWithTimeout('/api/leave?status=pending',{headers:getHeaders()},3000);
       const ld=await lr.json();
-      pendingLeaves=(ld.leaves||[]).map(l=>({
-        id:       l.id,
-        empId:    l.emp_id,
-        empName:  l.username||'',
-        dept:     l.dept||'',
-        empRole:  'employee',
-        type:     mapLeaveType(l.leave_type),
-        date:     l.from_date,
-        reason:   l.reason||'',
-        status:   l.status||'pending',
-        leave_id: l.id
-      }));
+      pendingLeaves=(ld.leaves||[]).map(l=>{
+        const role=deriveRoleFromDesig(l.desig||'', l.dept||'');
+        let chain=null;
+        try{ chain = l.approval_chain ? JSON.parse(l.approval_chain) : null; }catch(e){ chain=null; }
+        if(!chain || !chain.length) chain=getApprovalChain(role);
+        return {
+          id:       l.id,
+          empId:    l.emp_id,
+          empName:  l.username||'',
+          dept:     l.dept||'',
+          empRole:  role,
+          type:     mapLeaveType(l.leave_type),
+          date:     l.from_date,
+          reason:   l.reason||'',
+          status:   l.status||'pending',
+          leave_id: l.id,
+          chain:    chain,
+          stage:    l.approval_stage||0
+        };
+      });
     }catch(e){pendingLeaves=[];}
 
     // ── Seed miim_approved_leaves from backend approved leave records ──
@@ -2608,7 +2638,12 @@ function renderEmployeeDetail(empId){
         <div class="emp-detail-name">${emp.username}${emp.id===currentUserId?' <span class="self-you-tag">YOU</span>':''}</div>
         <div class="emp-detail-sub">${emp.desig} · <span class="dept-chip ${DEPT_CHIP[emp.dept]||''}" style="display:inline-block;">${emp.dept}</span> · <span style="color:var(--yellow);">${emp.type}</span></div>
       </div>
-      ${canApplyLeave?`<button class="apply-leave-btn" style="flex-shrink:0;" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}')">📋 Apply Leave</button>`:''}
+      ${canApplyLeave?(()=>{
+          const _myReq=findMyPendingLeave(emp.id,dk(viewDate));
+          return _myReq
+            ?`<button class="apply-leave-btn" style="flex-shrink:0;" onclick="editPendingLeave(${_myReq.id})">✎ Edit Leave</button>`
+            :`<button class="apply-leave-btn" style="flex-shrink:0;" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}')">📋 Apply Leave</button>`;
+        })():''}
       ${(canApplyLeave)?`<button class="req-corr-btn" style="flex-shrink:0;" onclick="openCorrRequestModal(${emp.id},'${emp.username}','${dk(viewDate)}')" title="Request attendance correction">✏ Correction</button>`:''}
       <button class="close-detail-btn" onclick="closeEmployeeDetail()">✕ Close</button>
     </div>
@@ -2761,8 +2796,13 @@ function buildDayRow(emp,idx,att,cfg){
   const cbHtml=cfg.canMarkAll?`<input type="checkbox" class="cb" id="cb_${emp.id}" ${isSel?'checked':''} onchange="onCb(${emp.id},this.checked)">`:'';
 
   // ★ CHANGE 2: Apply Leave button — show for editable rows OR the logged-in user's own row
+  //   While the request is still PENDING (not yet approved), this becomes an
+  //   Edit button that updates the same request instead of applying fresh.
+  const myPendingReq=leaveActive?findMyPendingLeave(emp.id,dk(viewDate)):null;
   const leaveBtnHtml=(editable||isOwnRow)
-    ?`<button class="apply-leave-btn${['cl','sl','el','pm'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`
+    ?(myPendingReq
+        ?`<button class="apply-leave-btn has-leave" onclick="event.stopPropagation();editPendingLeave(${myPendingReq.id})">✎ Edit Leave</button>`
+        :`<button class="apply-leave-btn${['cl','sl','el','pm'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`)
     :'';
 
   // Correction request button — visible to employees for own row, managers see all
@@ -2790,6 +2830,21 @@ function buildDayRow(emp,idx,att,cfg){
 // ════════════════════════════════════════════════════
 // APPLY LEAVE MODAL
 // ════════════════════════════════════════════════════
+// Open the leave modal to EDIT an existing PENDING leave request (until it is approved).
+// Reuses the apply modal but pre-fills the saved type/date/reason and, on save,
+// updates the same request in place instead of creating a duplicate.
+function editPendingLeave(reqId){
+  const req=pendingLeaves.find(l=>l.id===reqId);
+  if(!req)return;
+  closeApprovalModal();
+  leaveEditReqId=req.id;
+  openLeaveModal(req.empId, req.date);
+  document.getElementById('leaveReason').value=req.reason||'';
+  document.getElementById('leaveApplyBtn').textContent='💾 Update Leave Request';
+  const titleEl=document.getElementById('leaveModalTitleTxt');
+  if(titleEl)titleEl.textContent='✏️ Edit Leave Request';
+}
+
 function openLeaveModal(empId, dKey, e){
   if(e)e.stopPropagation();
   leaveModalEmpId=empId;
@@ -2803,6 +2858,8 @@ function openLeaveModal(empId, dKey, e){
   document.getElementById('leaveReason').value='';
   document.getElementById('leaveApplyBtn').disabled=true;
   document.getElementById('leaveApplyBtn').textContent='Apply Leave';
+  const _titleEl=document.getElementById('leaveModalTitleTxt');
+  if(_titleEl)_titleEl.textContent='📋 Apply Leave / Permission';
 
   // ── Visual balance cards at top of modal ──
   const balCardsEl=document.getElementById('leaveModalBalCards');
@@ -2982,6 +3039,58 @@ async function applyLeave(){
   if(!dKey){showToast('error','Date required','Please select a date');return;}
   const emp=employees.find(e=>e.id===leaveModalEmpId);
 
+  // ── EDIT MODE: updating an existing PENDING leave request in place ─────────
+  // (allowed only until the request is approved — once approved/rejected it
+  // disappears from pendingLeaves and this branch is never reached for it)
+  if(leaveEditReqId!==null){
+    const req=pendingLeaves.find(l=>l.id===leaveEditReqId);
+    if(!req){leaveEditReqId=null;closeLeaveModal();return;}
+    const oldDate=req.date;
+
+    // Clear the old attCache slot if the date moved
+    if(oldDate!==dKey && attCache[oldDate] && attCache[oldDate][leaveModalEmpId]){
+      attCache[oldDate][leaveModalEmpId].status='';
+    }
+    if(!attCache[dKey])attCache[dKey]={};
+    if(!attCache[dKey][leaveModalEmpId])attCache[dKey][leaveModalEmpId]={status:'',checkin:'',checkout:''};
+    attCache[dKey][leaveModalEmpId].status=selectedLeaveType;
+    attCache[dKey][leaveModalEmpId].checkin='';
+    attCache[dKey][leaveModalEmpId].checkout='';
+
+    // Update the request fields directly — status stays 'pending', so the
+    // leave balance is still untouched (it's only ever deducted on approval).
+    req.type=selectedLeaveType;
+    req.date=dKey;
+    req.reason=reason||'';
+    persistPendingLeaves();
+    persistAttCache();
+
+    // Update the SAME record on the backend by its id (PUT), not a new POST —
+    // avoids leaving a stale duplicate row behind if the date was changed.
+    try{
+      const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Annual'};
+      const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
+      const leaveId=req.leave_id||req.id;
+      await fetch(`/api/leave/${leaveId}`,{
+        method:'PUT',headers:getHeaders(),
+        body:JSON.stringify({leave_type:backendType,from_date:dKey,to_date:dKey,reason:reason||''})
+      });
+    }catch(e){}
+
+    leaveEditReqId=null;
+    markChanged();
+    closeLeaveModal();
+    if(currentView==='day')renderDayTable();
+    else if(currentView==='week'){if(statusFilter)renderWeekViewFiltered(weekDays(viewDate));else renderWeekView(weekDays(viewDate));}
+    else{if(statusFilter)renderMonthViewFiltered(monthDays(viewDate));else renderMonthView(monthDays(viewDate));}
+    updateSummaryForDay(dk(viewDate));
+    renderCal();
+    renderApprovalList();
+    updatePendingBadge();
+    showToast('success','✏️ Leave Request Updated',`${emp?.username||''} · ${dKey} (${selectedLeaveType.toUpperCase()})`);
+    return;
+  }
+
   // ── Determine if auto-approved or needs approval ──────────────────────────
   // Rule: Admin applying for themselves → auto-approve (deduct balance immediately)
   //       Anyone else → goes into pending queue; balance deducted ONLY after approval
@@ -3084,6 +3193,7 @@ async function applyLeave(){
 function closeLeaveModal(){
   document.getElementById('leaveModal').classList.remove('open');
   selectedLeaveType=null;leaveModalEmpId=null;
+  leaveEditReqId=null;
 }
 
 // ════════════════════════════════════════════════════
@@ -3137,6 +3247,7 @@ function renderApprovalList(){
       </div>
       ${req.reason?`<div class="appr-reason">💬 ${req.reason}</div>`:''}
       <div class="appr-actions">
+        <button class="btn-edit" onclick="editPendingLeave(${req.id})">✎ Edit</button>
         <button class="btn-approve" onclick="handleApproval(${req.id},'approved')">✓ Approve</button>
         <button class="btn-reject" onclick="handleApproval(${req.id},'rejected')">✕ Reject</button>
       </div>
@@ -3156,6 +3267,13 @@ async function handleApproval(reqId,action){
     req.stage=stage+1;
     const nextRole=chain[req.stage];
     const nextLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'}[nextRole]||nextRole;
+    // Persist the stage advance to the backend (non-blocking) so a reload doesn't lose progress
+    try{
+      await fetch(`/api/leave/${leaveId}/advance`,{
+        method:'POST',headers:getHeaders(),
+        body:JSON.stringify({stage:req.stage,advanced_by:currentRole})
+      });
+    }catch(e){}
     // Log the partial approval in history but keep status pending — do NOT touch balance/attendance yet
     const now=new Date();
     const timeStr=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
