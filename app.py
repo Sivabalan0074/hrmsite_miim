@@ -2791,18 +2791,35 @@ def me_role():
 def attendance_monthly_summary():
     """
     Auto-calculate "Days Worked" (payable days) for an employee for a given
-    month, straight from the attendance table -- so leave that has been
-    applied for and approved (which writes cl/sl/el/pm/absent rows into
-    attendance) automatically reflects in the salary structure.
+    month, straight from the attendance table -- applying MIIM Leave Policy
+    V24 so leave that has been applied for and approved is correctly split
+    into PAID leave (no salary impact) vs LOP / Loss of Pay (reduces Days
+    Worked, same as an Absent day).
 
     Query params:
       emp_id  -- required
       period  -- required, format YYYY-MM
 
-    Payable days = Total calendar days in month minus explicit Absent days.
-    (Present, weekly Off, and approved paid leave -- CL/SL/EL/PM -- all count
-    towards salary; only unapproved/unpaid Absent reduces payable days.
-    Days that were never marked at all are treated as payable/present.)
+    Policy V24 rules applied:
+      - Probationary / Intern: 1 day/month leave allowed total (any type);
+        anything beyond that in the month is LOP. CL/SL/EL quotas do not
+        apply to them.
+      - Regular / Regular(PIP) (permanent): CL/SL/EL are paid leave, up to
+        each type's accrued quota for the year so far:
+          CL -> 6 days/year, flat (no monthly accrual, no carry-over)
+          SL -> accrues 1/month, capped at 12/year
+          EL -> accrues 0.5/month, capped at 6/year
+        Any usage beyond the accrued-to-date quota is LOP.
+        PM (Permission) -> 2/month, resets every month; extra PM instances
+        beyond 2 in the month are LOP.
+      - Notice period: if the employee has a Last Working Day (lwd) set and
+        this period falls on/before that month, ALL leave in the month is
+        LOP (per policy: "All leaves = LOP during notice period").
+      - Absent is always unpaid (LOP), same as before.
+
+    Days Worked (payable) = Total calendar days in month
+                             - Absent days
+                             - LOP leave days (per the rules above)
     """
     try:
         emp_id = request.args.get('emp_id')
@@ -2814,13 +2831,23 @@ def attendance_monthly_summary():
         import calendar
         year, month = int(period[:4]), int(period[5:7])
         total_days = calendar.monthrange(year, month)[1]
+        period_start = f"{period}-01"
+        year_start = f"{year:04d}-01-01"
 
         conn = _db()
+
+        # Employee type + notice-period marker (lwd = Last Working Day)
+        emp_row = conn.execute("SELECT type, lwd FROM employees WHERE id=?", (emp_id,)).fetchone()
+        emp_type = (emp_row['type'] if emp_row and 'type' in emp_row.keys() else '') or 'Regular'
+        lwd = (emp_row['lwd'] if emp_row and 'lwd' in emp_row.keys() else '') or ''
+        is_permanent = emp_type in ('Regular', 'Regular(PIP)')
+        is_notice_period = bool(lwd) and period <= str(lwd)[:7]
+
+        # This month's attendance
         rows = conn.execute(
             "SELECT date, status FROM attendance WHERE emp_id=? AND date LIKE ?",
             (emp_id, f"{period}-%")
         ).fetchall()
-        conn.close()
 
         counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "other": 0}
         marked_dates = set()
@@ -2838,10 +2865,52 @@ def attendance_monthly_summary():
                 counts[st] += 1
             else:
                 counts['other'] += 1
-
         not_marked = max(0, total_days - len(marked_dates))
-        # Payable / worked days = every day in the month EXCEPT explicit Absent.
-        days_worked = total_days - counts['absent']
+
+        lop_breakdown = {"cl": 0, "sl": 0, "el": 0, "pm": 0}
+
+        if is_notice_period:
+            # Everything this month is LOP during notice period.
+            lop_breakdown = {"cl": counts['cl'], "sl": counts['sl'], "el": counts['el'], "pm": counts['pm']}
+        elif not is_permanent:
+            # Probationary / Intern: 1 day/month allowed total, rest is LOP.
+            total_leave_this_month = counts['cl'] + counts['sl'] + counts['el'] + counts['pm']
+            excess = max(0, total_leave_this_month - 1)
+            # Spread the excess across types, biggest buckets first, for reporting.
+            for t in ('cl', 'sl', 'el', 'pm'):
+                if excess <= 0:
+                    break
+                take = min(excess, counts[t])
+                lop_breakdown[t] = take
+                excess -= take
+        else:
+            # Permanent employee: quota-based, accrued-to-date.
+            used_before = {"cl": 0, "sl": 0, "el": 0}
+            for t in used_before:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status=? AND date>=? AND date<?",
+                    (emp_id, t, year_start, period_start)
+                ).fetchone()
+                used_before[t] = (row['c'] if row else 0) or 0
+
+            accrued = {
+                "cl": 6.0,                                  # flat annual quota, no monthly accrual
+                "sl": min(month, 12) * 1.0,                  # 1/month, capped 12/year
+                "el": min(month * 0.5, 6.0),                 # 0.5/month, capped 6/year
+            }
+            for t in ('cl', 'sl', 'el'):
+                remaining_before_month = max(0.0, accrued[t] - used_before[t])
+                used_this_month = counts[t]
+                paid_this_month = min(used_this_month, remaining_before_month)
+                lop_breakdown[t] = max(0, used_this_month - int(paid_this_month))
+
+            # PM: 2/month, resets monthly (not cumulative).
+            lop_breakdown['pm'] = max(0, counts['pm'] - 2)
+
+        lop_leave_days = sum(lop_breakdown.values())
+        # Payable / worked days = every day in the month EXCEPT Absent and LOP leave.
+        days_worked = total_days - counts['absent'] - lop_leave_days
+        conn.close()
 
         return jsonify({
             "success": True,
@@ -2856,6 +2925,11 @@ def attendance_monthly_summary():
             "el": counts['el'],
             "pm": counts['pm'],
             "not_marked": not_marked,
+            "emp_type": emp_type,
+            "is_permanent": is_permanent,
+            "is_notice_period": is_notice_period,
+            "lop_leave_days": lop_leave_days,
+            "lop_breakdown": lop_breakdown,
             "days_worked": days_worked
         })
     except Exception as ex:

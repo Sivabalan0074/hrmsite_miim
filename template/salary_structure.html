@@ -1873,13 +1873,17 @@ async function sseAutoFillDaysWorked(force){
       if(noteEl){
         var bits = [];
         if(d.present) bits.push('Present '+d.present);
-        if(d.cl) bits.push('CL '+d.cl);
-        if(d.sl) bits.push('SL '+d.sl);
-        if(d.el) bits.push('EL '+d.el);
-        if(d.pm) bits.push('PM '+d.pm);
+        if(d.cl) bits.push('CL '+d.cl+(d.lop_breakdown&&d.lop_breakdown.cl?' ('+d.lop_breakdown.cl+' LOP)':''));
+        if(d.sl) bits.push('SL '+d.sl+(d.lop_breakdown&&d.lop_breakdown.sl?' ('+d.lop_breakdown.sl+' LOP)':''));
+        if(d.el) bits.push('EL '+d.el+(d.lop_breakdown&&d.lop_breakdown.el?' ('+d.lop_breakdown.el+' LOP)':''));
+        if(d.pm) bits.push('PM '+d.pm+(d.lop_breakdown&&d.lop_breakdown.pm?' ('+d.lop_breakdown.pm+' LOP)':''));
         if(d.off) bits.push('Off '+d.off);
         if(d.absent) bits.push('Absent '+d.absent);
-        noteEl.textContent = (bits.length?bits.join(' · ')+' — ':'') + d.days_worked+'/'+d.total_days_in_month+' payable days';
+        var tail = d.days_worked+'/'+d.total_days_in_month+' payable days';
+        if(d.is_notice_period) tail += ' — ⚠ Notice period: all leave = LOP';
+        else if(d.lop_leave_days>0) tail += ' — ⚠ '+d.lop_leave_days+' LOP day(s)'+(d.is_permanent?' (over leave quota)':' (Probationary/Intern: 1 day/month only)');
+        noteEl.textContent = (bits.length?bits.join(' · ')+' — ':'') + tail;
+        noteEl.style.color = (d.is_notice_period || d.lop_leave_days>0) ? 'var(--red, #f87171)' : 'var(--text3)';
       }
       sseRecalc();
     } else if(noteEl) noteEl.textContent = '';
