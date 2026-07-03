@@ -44,7 +44,7 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--t1);display
 .readonly-banner{display:none;align-items:center;gap:10px;padding:9px 20px;background:rgba(59,130,246,0.07);border-bottom:1px solid rgba(59,130,246,0.2);font-size:12px;color:var(--blue);flex-shrink:0;}
 .readonly-banner.show{display:flex;}
 
-.view-bar{display:flex;align-items:center;gap:10px;padding:8px 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;position:relative;z-index:10;}
+.view-bar{display:flex;align-items:center;gap:10px;padding:8px 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;position:relative;z-index:150;}
 .view-tabs{display:flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px;}
 .vtab{background:transparent;border:none;color:var(--t2);padding:5px 16px;border-radius:6px;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .18s;letter-spacing:.5px;}
 .vtab.active{background:var(--orange);color:#fff;box-shadow:0 2px 8px rgba(249,115,22,0.4);}
@@ -1633,24 +1633,42 @@ const ROLE_CONFIG={
 };
 
 /*
-  APPROVAL HIERARCHY:
-  ─ employee       → approved by: SM/PM of SAME dept  +  senior_hr, hr, admin
-  ─ sm / pm        → approved by: senior_hr, hr, admin
-  ─ senior_hr / hr → approved by: admin only
+  APPROVAL HIERARCHY (multi-stage — each request must clear every stage in order):
+  ─ employee / pm  → Stage 1: SM of SAME dept   → Stage 2: HR/Senior HR         → Fully Approved
+  ─ sm             → Stage 1: HR/Senior HR      → Stage 2: Admin                → Fully Approved
+  ─ hr / senior_hr → Stage 1: SM (Design)       → Stage 2: Admin                → Fully Approved
   ─ admin          → auto-approved (no pending queue)
+
+  Each pendingLeaves item carries:
+    chain: [ 'sm', 'hr' ]   — ordered list of roles that must approve, one after another
+    stage: 0                — index into chain of the role whose turn it currently is
+  A request only becomes fully "approved" once stage === chain.length (every link signed off).
+  Rejecting at ANY stage kills the whole request immediately.
 */
-function canApproveLeaveOf(requesterRole, requesterDept){
-  // admin can approve anyone except themselves (admin auto-approved)
+function getApprovalChain(role){
+  if(role==='sm')                        return ['hr','admin'];
+  if(role==='hr'||role==='senior_hr')    return ['sm','admin'];
+  if(role==='pm'||role==='employee')     return ['sm','hr'];
+  if(role==='account_manager')           return ['hr','admin'];
+  return ['hr','admin']; // safe fallback for unknown roles
+}
+// A role "slot" in the chain is satisfied by the matching currentRole (hr slot accepts hr or senior_hr)
+function roleMatchesSlot(slot,role){
+  if(slot==='hr') return role==='hr'||role==='senior_hr';
+  return slot===role;
+}
+function canApproveLeaveOf(req){
+  if(!req) return false;
+  const chain=req.chain||getApprovalChain(req.empRole||'employee');
+  const stage=req.stage||0;
+  if(stage>=chain.length) return false; // already fully approved
+  const neededRole=chain[stage];
+  // admin can always act as a stand-in for the current stage (keeps things moving)
   if(currentRole==='admin') return true;
-  // senior_hr and hr can approve employee, sm, pm
-  if(currentRole==='senior_hr'||currentRole==='hr'){
-    return ['employee','sm','pm'].includes(requesterRole);
-  }
-  // SM and PM can only approve employees in their OWN department
-  if(currentRole==='sm'||currentRole==='pm'){
-    return requesterRole==='employee' && requesterDept===currentUserDept;
-  }
-  return false;
+  if(!roleMatchesSlot(neededRole,currentRole)) return false;
+  // The SM stage is department-scoped — only the SM of the SAME department as the requester
+  if(neededRole==='sm') return req.dept===currentUserDept;
+  return true;
 }
 
 let currentRole='admin';
@@ -1736,7 +1754,7 @@ function updatePendingBadge(){
 function getMyPendingApprovals(){
   const cfg=getRoleCfg();
   if(!cfg.canApprove) return [];
-  return pendingLeaves.filter(l=>l.status==='pending' && canApproveLeaveOf(l.empRole||'employee', l.dept||''));
+  return pendingLeaves.filter(l=>l.status==='pending' && canApproveLeaveOf(l));
 }
 
 // ════════════════════════════════════════════════════
@@ -1966,14 +1984,14 @@ function loadDemo(){
   });
 
   pendingLeaves=[
-    // Employee in Design dept → SM/PM of Design + Senior HR/HR/Admin can approve
-    {id:1,empId:1,empName:'Arun Kumar',dept:'Design',empRole:'employee',type:'sl',date:dk(addDays(TODAY,2)),reason:'Medical checkup',status:'pending'},
-    // Employee in Simulation dept → SM/PM of Simulation + Senior HR/HR/Admin can approve
-    {id:2,empId:3,empName:'Karthik R',dept:'Simulation',empRole:'employee',type:'cl',date:dk(addDays(TODAY,5)),reason:'Personal work',status:'pending'},
-    // PM role → Senior HR/HR/Admin only (not SM/PM) can approve
-    {id:3,empId:14,empName:'Chethan R',dept:'Manufacturing',empRole:'pm',type:'el',date:dk(addDays(TODAY,3)),reason:'Family function',status:'pending'},
-    // SM role → Senior HR/HR/Admin only can approve
-    {id:4,empId:11,empName:'Ramesh S',dept:'Manufacturing',empRole:'sm',type:'cl',date:dk(addDays(TODAY,4)),reason:'Personal work',status:'pending'},
+    // Employee in Design dept → Stage 1: Design SM, Stage 2: HR
+    {id:1,empId:1,empName:'Arun Kumar',dept:'Design',empRole:'employee',type:'sl',date:dk(addDays(TODAY,2)),reason:'Medical checkup',status:'pending',chain:getApprovalChain('employee'),stage:0},
+    // Employee in Simulation dept → Stage 1: Simulation SM, Stage 2: HR
+    {id:2,empId:3,empName:'Karthik R',dept:'Simulation',empRole:'employee',type:'cl',date:dk(addDays(TODAY,5)),reason:'Personal work',status:'pending',chain:getApprovalChain('employee'),stage:0},
+    // Project Manager in Design dept → Stage 1: Design SM (NOT himself), Stage 2: HR
+    {id:3,empId:14,empName:'Chethan R',dept:'Design',empRole:'pm',type:'el',date:dk(addDays(TODAY,3)),reason:'Family function',status:'pending',chain:getApprovalChain('pm'),stage:0},
+    // SM role → Stage 1: HR, Stage 2: Admin
+    {id:4,empId:11,empName:'Ramesh S',dept:'Manufacturing',empRole:'sm',type:'cl',date:dk(addDays(TODAY,4)),reason:'Personal work',status:'pending',chain:getApprovalChain('sm'),stage:0},
   ];
 }
 
@@ -3025,7 +3043,9 @@ async function applyLeave(){
       type: selectedLeaveType,
       date: dKey,
       reason: reason || '',
-      status: 'pending'
+      status: 'pending',
+      chain: getApprovalChain(applicantRole),
+      stage: 0
     });
     persistPendingLeaves();
     updatePendingBadge();
@@ -3053,11 +3073,10 @@ async function applyLeave(){
   if(isAdminSelfApply){
     showToast('success',`✅ ${selectedLeaveType.toUpperCase()} – Auto Approved`,`${emp?.username||'Employee'} · ${dKey}`);
   } else {
-    // Tell the user who will approve their leave
-    let approverHint='';
-    if(applicantRole==='employee') approverHint=`SM/PM (${applicantDept}) + HR`;
-    else if(applicantRole==='sm'||applicantRole==='pm') approverHint='Senior HR / HR / Admin';
-    else if(applicantRole==='senior_hr'||applicantRole==='hr') approverHint='Admin';
+    // Tell the user who will approve their leave first (stage 1 of the chain)
+    const chain=getApprovalChain(applicantRole);
+    const stageLabel={sm:`SM (${applicantDept})`,hr:'HR',admin:'Admin'};
+    const approverHint=chain.map(r=>stageLabel[r]||r).join(' → ');
     showToast('success',`${selectedLeaveType.toUpperCase()} Applied – Pending`,`${emp?.username||''} · ${dKey} → Awaiting ${approverHint}`);
   }
 }
@@ -3093,6 +3112,10 @@ function renderApprovalList(){
     const dateObj=parseDK(req.date);
     const roleColor=ROLE_COLORS[req.empRole||'employee']||'#22c55e';
     const roleLabel=ROLE_LABELS[req.empRole||'employee']||req.empRole;
+    const chain=req.chain||getApprovalChain(req.empRole||'employee');
+    const stage=req.stage||0;
+    const stageChainLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'};
+    const stageProgress=`Stage ${stage+1}/${chain.length} · ${chain.map((r,i)=>i<stage?`✓${stageChainLabel[r]||r}`:i===stage?`→${stageChainLabel[r]||r}`:(stageChainLabel[r]||r)).join(' · ')}`;
     return `<div class="appr-item" id="appr-${req.id}">
       <div class="appr-item-top">
         <div class="appr-emp-info">
@@ -3102,6 +3125,7 @@ function renderApprovalList(){
               <span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;background:${roleColor}22;color:${roleColor};border:1px solid ${roleColor}44;">${roleLabel}</span>
             </div>
             <div class="appr-emp-meta">${req.dept}</div>
+            <div class="appr-emp-meta" style="margin-top:2px;font-size:9px;color:var(--t3);">${stageProgress}</div>
           </div>
         </div>
         <span class="appr-type-badge" style="background:${color}22;color:${color};border:1px solid ${color}44;">${label}</span>
@@ -3124,15 +3148,47 @@ async function handleApproval(reqId,action){
   const req=pendingLeaves.find(l=>l.id===reqId);
   if(!req)return;
   const leaveId=req.leave_id||req.id;
+  const chain=req.chain||getApprovalChain(req.empRole||'employee');
+  const stage=req.stage||0;
 
+  // ── Intermediate stage: this approver signs off, but the chain isn't finished yet ──
+  if(action==='approved' && stage+1<chain.length){
+    req.stage=stage+1;
+    const nextRole=chain[req.stage];
+    const nextLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'}[nextRole]||nextRole;
+    // Log the partial approval in history but keep status pending — do NOT touch balance/attendance yet
+    const now=new Date();
+    const timeStr=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const dateStr=`${now.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.getMonth()]} ${now.getFullYear()}`;
+    approvalHistory.unshift({
+      id: Date.now(),
+      empName: req.empName, dept: req.dept, leaveType: req.type, leaveDate: req.date,
+      action: `approved (stage ${stage+1}/${chain.length})`,
+      actionBy: currentRole,
+      actionByName: employees.find(e=>e.id===currentUserId)?.username || currentRole,
+      actionAt: `${dateStr} ${timeStr}`,
+      reason: req.reason||''
+    });
+    persistPendingLeaves();
+    persistApprovalHistory();
+    updatePendingBadge();
+    renderApprovalList();
+    const remaining=getMyPendingApprovals();
+    document.getElementById('approvalModalSub').textContent=`${remaining.length} request${remaining.length!==1?'s':''} awaiting your approval`;
+    showToast('success','✓ Forwarded for next approval',`${req.empName} · ${req.type.toUpperCase()} → Awaiting ${nextLabel}`);
+    return;
+  }
+
+  // ── Final stage (or rejection at any stage) ──
   // Update attCache based on action
   const dKey=req.date;
   if(action==='approved'){
-    // Balance was NOT deducted on apply — deduct now on approval
+    // Balance was NOT deducted on apply — deduct now that the chain is fully cleared
     deductLeaveBalance(req.empId, req.type);
     const logKey=`${req.empId}_${dKey}`;
     appliedLeaveLog[logKey]=req.type;
     if(attCache[dKey]&&attCache[dKey][req.empId]) attCache[dKey][req.empId].approved=true;
+    req.stage=chain.length; // mark chain fully cleared
   } else if(action==='rejected'){
     // Balance was never deducted — just clear the attendance status
     if(attCache[dKey]&&attCache[dKey][req.empId])attCache[dKey][req.empId].status='';
@@ -3140,7 +3196,7 @@ async function handleApproval(reqId,action){
     delete appliedLeaveLog[logKey];
   }
 
-  // Try backend (non-blocking)
+  // Try backend (non-blocking) — only called once the request reaches a final state
   try{
     const endpoint=action==='approved'?'approve':'reject';
     await fetch(`/api/leave/${leaveId}/${endpoint}`,{
