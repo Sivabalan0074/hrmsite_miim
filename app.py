@@ -3083,14 +3083,40 @@ def approval_history():
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
 
+def _role_from_desig_dept(desig, dept, username=''):
+    """Mirrors the designation-based role classification used at login."""
+    _d = (desig or '').lower()
+    _dept = (dept or '').lower()
+    _uname = (username or '').lower()
+    if "admin" in _d or _dept == "admin" or _uname == "admin": return "admin"
+    if "hr" in _d or _dept == "hr": return "hr"
+    if ("senior" in _d and "manager" in _d) or "senior-manager" in _d: return "sm"
+    if ("project" in _d and "manager" in _d) or "project-manager" in _d: return "pm"
+    return "employee"
+
+
+def _approval_chain_for_role(role):
+    """Mirrors getApprovalChain() in attendance.html — keep both in sync."""
+    if role == 'sm': return ['hr', 'admin']
+    if role == 'hr': return ['sm', 'admin']
+    if role in ('pm', 'employee'): return ['sm', 'hr']
+    return ['hr', 'admin']
+
+
 @app.route('/api/leave/apply', methods=['POST'])
 @require_auth
 def apply_leave_new():
     try:
+        import json as _json_leave
         data = request.json or {}
         conn = _db()
-        cur = conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at) VALUES (?,?,?,?,?,?,'pending',?)",
-                     (data.get('emp_id'), data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), str(datetime.datetime.now())))
+        emp_id = data.get('emp_id')
+        # Look up the applicant's designation/dept so the correct approval chain is stored
+        emp_row = conn.execute("SELECT dept, desig, username FROM employees WHERE id=?", (emp_id,)).fetchone()
+        role = _role_from_desig_dept(emp_row['desig'] if emp_row else '', emp_row['dept'] if emp_row else '', emp_row['username'] if emp_row else '')
+        chain = _approval_chain_for_role(role)
+        cur = conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at,approval_chain,approval_stage) VALUES (?,?,?,?,?,?,'pending',?,?,0)",
+                     (emp_id, data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), str(datetime.datetime.now()), _json_leave.dumps(chain)))
         new_id = cur.lastrowid
         conn.commit(); conn.close()
         return jsonify({"success": True, "id": new_id}), 201
@@ -3120,16 +3146,21 @@ def get_leave_new():
         status = request.args.get('status')
         emp_id = request.args.get('emp_id')
         conn = _db()
+        base = """SELECT lr.*, e.username as username, e.dept as dept, e.desig as desig
+                   FROM leave_requests lr LEFT JOIN employees e ON e.id = lr.emp_id"""
         if emp_id and status:
-            rows = conn.execute("SELECT * FROM leave_requests WHERE emp_id=? AND status=? ORDER BY id DESC", (emp_id, status)).fetchall()
+            rows = conn.execute(base + " WHERE lr.emp_id=? AND lr.status=? ORDER BY lr.id DESC", (emp_id, status)).fetchall()
         elif status:
-            rows = conn.execute("SELECT * FROM leave_requests WHERE status=? ORDER BY id DESC", (status,)).fetchall()
+            rows = conn.execute(base + " WHERE lr.status=? ORDER BY lr.id DESC", (status,)).fetchall()
         elif emp_id:
-            rows = conn.execute("SELECT * FROM leave_requests WHERE emp_id=? ORDER BY id DESC", (emp_id,)).fetchall()
+            rows = conn.execute(base + " WHERE lr.emp_id=? ORDER BY lr.id DESC", (emp_id,)).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM leave_requests ORDER BY id DESC").fetchall()
+            rows = conn.execute(base + " ORDER BY lr.id DESC").fetchall()
         conn.close()
-        return jsonify([dict(r) for r in rows])
+        # ── Response wrapped as {leaves:[...]} — the frontend reads `data.leaves`,
+        #    a bare array here meant `data.leaves` was always undefined and the
+        #    pending-approval list stayed empty no matter what was in the DB.
+        return jsonify({"success": True, "leaves": [dict(r) for r in rows]})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
@@ -3138,9 +3169,25 @@ def get_leave_new():
 @require_auth
 def action_leave(leave_id, action):
     try:
-        status = 'approved' if action == 'approve' else 'rejected'
         now = str(datetime.datetime.now())
         conn = _db()
+
+        # ── Intermediate stage sign-off: chain isn't finished, stays 'pending' ──
+        if action == 'advance':
+            data = request.json or {}
+            new_stage = data.get('stage')
+            if new_stage is None:
+                conn.close()
+                return jsonify({"success": False, "error": "stage is required"}), 400
+            conn.execute("UPDATE leave_requests SET approval_stage=? WHERE id=?", (new_stage, leave_id))
+            conn.commit(); conn.close()
+            return jsonify({"success": True, "stage": new_stage})
+
+        if action not in ('approve', 'reject'):
+            conn.close()
+            return jsonify({"success": False, "error": "Unknown action"}), 400
+
+        status = 'approved' if action == 'approve' else 'rejected'
         conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, now, leave_id))
 
         # If approved â€” also mark attendance table for each day of leave
@@ -3635,8 +3682,18 @@ def init_db():
         emp_id TEXT, leave_type TEXT, from_date TEXT,
         to_date TEXT, days INTEGER DEFAULT 1,
         reason TEXT, status TEXT DEFAULT 'pending',
-        applied_at TEXT, reviewed_at TEXT
+        applied_at TEXT, reviewed_at TEXT,
+        approval_chain TEXT, approval_stage INTEGER DEFAULT 0
     )""")
+    # â”€â”€ Migrate existing leave_requests â€” add multi-stage approval tracking columns â”€â”€
+    for _lcol, _ldef in [
+        ('approval_chain', "TEXT"),
+        ('approval_stage', "INTEGER DEFAULT 0"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE leave_requests ADD COLUMN {_lcol} {_ldef}")
+        except Exception:
+            pass  # column already exists
     conn.execute(f"""CREATE TABLE IF NOT EXISTS leave_balances (
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, year TEXT,
