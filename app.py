@@ -2786,6 +2786,82 @@ def me_role():
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+@app.route('/api/attendance/monthly-summary', methods=['GET'])
+@require_auth
+def attendance_monthly_summary():
+    """
+    Auto-calculate "Days Worked" (payable days) for an employee for a given
+    month, straight from the attendance table -- so leave that has been
+    applied for and approved (which writes cl/sl/el/pm/absent rows into
+    attendance) automatically reflects in the salary structure.
+
+    Query params:
+      emp_id  -- required
+      period  -- required, format YYYY-MM
+
+    Payable days = Total calendar days in month minus explicit Absent days.
+    (Present, weekly Off, and approved paid leave -- CL/SL/EL/PM -- all count
+    towards salary; only unapproved/unpaid Absent reduces payable days.
+    Days that were never marked at all are treated as payable/present.)
+    """
+    try:
+        emp_id = request.args.get('emp_id')
+        period = request.args.get('period', '')  # YYYY-MM
+        if not emp_id or not period or len(period) < 7:
+            return jsonify({"success": False, "error": "emp_id and period (YYYY-MM) are required"}), 400
+        period = period[:7]
+
+        import calendar
+        year, month = int(period[:4]), int(period[5:7])
+        total_days = calendar.monthrange(year, month)[1]
+
+        conn = _db()
+        rows = conn.execute(
+            "SELECT date, status FROM attendance WHERE emp_id=? AND date LIKE ?",
+            (emp_id, f"{period}-%")
+        ).fetchall()
+        conn.close()
+
+        counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "other": 0}
+        marked_dates = set()
+        for r in rows:
+            d = str(r['date'])[:10]
+            marked_dates.add(d)
+            st = (r['status'] or '').lower().strip()
+            if st in ('present', 'p'):
+                counts['present'] += 1
+            elif st in ('absent', 'a'):
+                counts['absent'] += 1
+            elif st == 'off':
+                counts['off'] += 1
+            elif st in ('cl', 'sl', 'el', 'pm'):
+                counts[st] += 1
+            else:
+                counts['other'] += 1
+
+        not_marked = max(0, total_days - len(marked_dates))
+        # Payable / worked days = every day in the month EXCEPT explicit Absent.
+        days_worked = total_days - counts['absent']
+
+        return jsonify({
+            "success": True,
+            "emp_id": emp_id,
+            "period": period,
+            "total_days_in_month": total_days,
+            "present": counts['present'],
+            "absent": counts['absent'],
+            "off": counts['off'],
+            "cl": counts['cl'],
+            "sl": counts['sl'],
+            "el": counts['el'],
+            "pm": counts['pm'],
+            "not_marked": not_marked,
+            "days_worked": days_worked
+        })
+    except Exception as ex:
+        print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
+
+
 @app.route('/api/attendance/range', methods=['GET'])
 @require_auth
 def get_attendance_range():

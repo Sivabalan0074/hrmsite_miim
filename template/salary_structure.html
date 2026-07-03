@@ -652,8 +652,14 @@
           </div>
           <div class="sse-field"><label>Pay Date</label><input id="ssePayDate" type="date" style="color-scheme:dark"/></div>
           <input type="hidden" id="ssePeriod"/>
-          <div class="sse-field"><label>Days Worked</label><input id="sseDaysWorked" type="number" min="0" max="31" placeholder="e.g. 26"/></div>
-          
+          <div class="sse-field">
+            <label style="display:flex;align-items:center;gap:6px;justify-content:space-between">
+              <span>Days Worked <span id="sseDWAutoBadge" style="display:none;font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--green);background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:99px;padding:1px 7px;">AUTO · ATTENDANCE</span></span>
+              <button type="button" onclick="sseAutoFillDaysWorked(true)" title="Recalculate from Attendance" style="background:none;border:none;color:var(--orange);cursor:pointer;font-size:12px;padding:0;">🔄</button>
+            </label>
+            <input id="sseDaysWorked" type="number" min="0" max="31" placeholder="e.g. 26" oninput="sseDaysWorkedManualEdit();sseRecalc();"/>
+            <div id="sseDWBreakdown" style="font-size:10px;color:var(--text3);margin-top:4px;"></div>
+          </div>
         </div>
       </div>
 
@@ -700,7 +706,7 @@
       <!-- Live Calc -->
       <div class="sse-calc-row">
         <div class="sse-calc-item">
-          <div class="sse-calc-lbl">Total Earnings</div>
+          <div class="sse-calc-lbl">Total Earnings <span id="sseCalcEarnNote" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)"></span></div>
           <div class="sse-calc-val" style="color:var(--green)" id="sseCalcEarn">₹0</div>
         </div>
         <div class="sse-calc-item">
@@ -1481,6 +1487,9 @@ function openSSEntry(empId, period){
   ['sseBasic','sseHRA','sseDA','sseMA','sseLTA','sseSA','sseCCA','ssePT','sseTDS','sseAdv','sseOtherDed','sseDaysWorked'].forEach(id=>{document.getElementById(id).value='';});
   ['sseEmpId','sseDept','sseDesig','sseDOJ','sseDOB','sseFatherName'].forEach(id=>{document.getElementById(id).value='';});
   document.getElementById('sseMOP').value='Account';
+  _sseDWIsAuto = false;
+  var _dwBadge0 = document.getElementById('sseDWAutoBadge'); if(_dwBadge0) _dwBadge0.style.display='none';
+  var _dwNote0 = document.getElementById('sseDWBreakdown'); if(_dwNote0) _dwNote0.textContent='';
   const now=new Date();
   const ym=period||`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   document.getElementById('ssePeriod').value=ym;
@@ -1522,15 +1531,19 @@ function openSSEntry(empId, period){
           _sseEditId=ss.id;
           document.getElementById('sseTitle').textContent='Edit Salary Structure';
           ssePopulateFromExisting(ss);
+          // Only auto-fill from attendance if this saved record has no days_worked yet
+          sseAutoFillDaysWorked(false);
         } else {
           _sseEditId=null;
           document.getElementById('sseTitle').textContent='Add Salary Structure';
+          // New entry for this period — auto-calc Days Worked from Attendance right away
+          sseAutoFillDaysWorked(true);
         }
       })
       .catch(function(){
         const ss=allSalaryStructures.find(s=>s.emp_id===empId&&(s.period||'').slice(0,7)===ym);
-        if(ss){ _sseEditId=ss.id; document.getElementById('sseTitle').textContent='Edit Salary Structure'; ssePopulateFromExisting(ss); }
-        else { document.getElementById('sseTitle').textContent='Add Salary Structure'; }
+        if(ss){ _sseEditId=ss.id; document.getElementById('sseTitle').textContent='Edit Salary Structure'; ssePopulateFromExisting(ss); sseAutoFillDaysWorked(false); }
+        else { document.getElementById('sseTitle').textContent='Add Salary Structure'; sseAutoFillDaysWorked(true); }
       });
     // ── AUTO-SYNC: apply pending deduction saved by HR Deduction modal ──
     try {
@@ -1695,9 +1708,12 @@ function ssePopulateFromExisting(s){
   setV('sseMA',s.medical_allowance);setV('sseLTA',s.lta);setV('sseSA',s.special_allowance);
   setV('sseCCA',s.city_compensatory_allowance);setV('ssePT',s.professional_tax);
   setV('sseTDS',s.tds);setV('sseAdv',s.existing_advance);setV('sseOtherDed',s.other_deductions);
-  // days_worked: prefer salary structure value (including 0), fallback to employee record
+  // days_worked: use the value already saved on this salary structure (including 0).
+  // If it's empty, leave it empty here — openSSEntry() will auto-calc it live from
+  // the Attendance table (leave-aware) via sseAutoFillDaysWorked() right after this.
   const _dwEmp = allEmps.find(function(e){return String(e.id)===String(s.emp_id);});
-  const _dw = (s.days_worked!=null&&s.days_worked!=='') ? s.days_worked : (_dwEmp&&(_dwEmp.days_worked!=null&&_dwEmp.days_worked!=='')?_dwEmp.days_worked:'');
+  const _dw = (s.days_worked!=null&&s.days_worked!=='') ? s.days_worked : '';
+  if(_dw!==''){ _sseDWIsAuto=false; var _b=document.getElementById('sseDWAutoBadge'); if(_b)_b.style.display='none'; }
   setV('sseDaysWorked',_dw);setV('sseMOP',s.mode_of_payment||(_dwEmp&&_dwEmp.mode_of_payment)||'');
   setV('ssePayDate',s.pay_date);setV('ssePeriod',(s.period||'').slice(0,7));
   // Snapshot originals and attach listeners for highlight
@@ -1762,11 +1778,9 @@ function sseOnEmpChange(){
   document.getElementById('sseDOB').value=fmtDate(emp.dob)||'';
   document.getElementById('sseFatherName').value=emp.father_name||'';
   if(emp.mode_of_payment) document.getElementById('sseMOP').value=emp.mode_of_payment;
-  // Auto-fill days_worked from employee record if field is currently empty
-  var dwEl = document.getElementById('sseDaysWorked');
-  if(dwEl && (dwEl.value===''||dwEl.value==null) && emp.days_worked!=null && emp.days_worked!==''){
-    dwEl.value = emp.days_worked;
-  }
+  // Days Worked is now auto-calculated live from the Attendance table
+  // (see sseAutoFillDaysWorked, called from openSSEntry) instead of the
+  // static employee.days_worked field, so approved leave is always reflected.
 }
 
 // ── CTC Auto-Fill: Basic=CTC/2, HRA=Basic/2, DA=HRA/2, MA=DA/2, LTA=MA/2, SA=Remaining ──
@@ -1809,6 +1823,71 @@ function ilCTCAutoFill(eid){
   if(saEl)  saEl.value  = sa    || '';
   ilRecalc(eid);
 }
+// ── Days Worked: auto-calculated from Attendance (leave-aware) ──
+// Total calendar days in the selected period (YYYY-MM).
+function sseTotalDaysInPeriod(){
+  const ym = document.getElementById('ssePeriod').value; // "YYYY-MM"
+  if(!ym) return 30;
+  const parts = ym.split('-').map(Number);
+  const y = parts[0], m = parts[1];
+  if(!y || !m) return 30;
+  return new Date(y, m, 0).getDate();
+}
+
+var _sseDWIsAuto = false;   // true while the Days Worked field holds an auto-fetched value
+var _sseDWFetchToken = 0;   // guards against out-of-order responses when emp/period changes fast
+
+// If the admin types into Days Worked directly, it's no longer "auto" — stop
+// claiming it's attendance-derived, but leave whatever they typed alone.
+function sseDaysWorkedManualEdit(){
+  _sseDWIsAuto = false;
+  var badge = document.getElementById('sseDWAutoBadge');
+  if(badge) badge.style.display = 'none';
+}
+
+// Fetch Present/Absent/Leave counts for emp+period from the attendance table
+// and auto-fill Days Worked = Total days in month − Absent days (approved
+// leave, weekly-off, and present days all count as payable).
+// force=true always overwrites (used by the 🔄 button and for brand-new /
+// empty entries); force=false (default) only fills if the field is empty,
+// so it never silently clobbers a value that was already saved/edited.
+async function sseAutoFillDaysWorked(force){
+  const empId = parseInt(document.getElementById('sseEmpSel').value) || null;
+  const ym = document.getElementById('ssePeriod').value;
+  const dwEl = document.getElementById('sseDaysWorked');
+  const noteEl = document.getElementById('sseDWBreakdown');
+  if(!empId || !ym || !dwEl) return;
+  if(!force && dwEl.value !== '' && dwEl.value != null) return; // don't clobber an existing/edited value
+
+  const myToken = ++_sseDWFetchToken;
+  if(noteEl) noteEl.textContent = 'Calculating from attendance…';
+  try{
+    const r = await fetch(`${BASE}/api/attendance/monthly-summary?emp_id=${empId}&period=${ym}`, {headers: hdrs()});
+    const d = await r.json();
+    if(myToken !== _sseDWFetchToken) return; // a newer request superseded this one
+    if(d && d.success){
+      dwEl.value = d.days_worked;
+      _sseDWIsAuto = true;
+      var badge = document.getElementById('sseDWAutoBadge');
+      if(badge) badge.style.display = 'inline-block';
+      if(noteEl){
+        var bits = [];
+        if(d.present) bits.push('Present '+d.present);
+        if(d.cl) bits.push('CL '+d.cl);
+        if(d.sl) bits.push('SL '+d.sl);
+        if(d.el) bits.push('EL '+d.el);
+        if(d.pm) bits.push('PM '+d.pm);
+        if(d.off) bits.push('Off '+d.off);
+        if(d.absent) bits.push('Absent '+d.absent);
+        noteEl.textContent = (bits.length?bits.join(' · ')+' — ':'') + d.days_worked+'/'+d.total_days_in_month+' payable days';
+      }
+      sseRecalc();
+    } else if(noteEl) noteEl.textContent = '';
+  }catch(e){
+    if(myToken === _sseDWFetchToken && noteEl) noteEl.textContent = '';
+  }
+}
+
 function sseRecalc(){
   const g=id=>parseFloat(document.getElementById(id).value)||0;
   const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
@@ -1817,9 +1896,19 @@ function sseRecalc(){
   const extraDed  = typeof getExtraDeductions==='function' ? getExtraDeductions() : 0;
   const earn = baseEarn + extraEarn;
   const ded  = baseDed  + extraDed;
-  const net=Math.round(earn-ded);
+
+  // ── Pro-rate earnings by Days Worked (attendance/leave-aware) ──
+  const totalDaysInMonth = sseTotalDaysInPeriod();
+  const dwRaw = document.getElementById('sseDaysWorked').value;
+  const daysWorked = (dwRaw!==''&&dwRaw!=null) ? Math.min(parseFloat(dwRaw)||0, totalDaysInMonth) : totalDaysInMonth;
+  const ratio = totalDaysInMonth>0 ? daysWorked/totalDaysInMonth : 1;
+  const payableEarn = Math.round(earn*ratio);
+  const net = Math.round(payableEarn-ded);
+
   const fmt=v=>'₹'+v.toLocaleString('en-IN');
-  document.getElementById('sseCalcEarn').textContent=fmt(earn);
+  document.getElementById('sseCalcEarn').textContent = fmt(payableEarn);
+  var _earnNote = document.getElementById('sseCalcEarnNote');
+  if(_earnNote) _earnNote.textContent = ratio<1 ? `(pro-rated · ${daysWorked}/${totalDaysInMonth} days, full ${fmt(earn)})` : '';
   document.getElementById('sseCalcDed').textContent=fmt(ded);
   document.getElementById('sseCalcNet').textContent=fmt(net);
 }
@@ -1834,6 +1923,14 @@ async function saveSSEntry(){
   const ded  = baseDed  + (typeof getExtraDeductions==='function'?getExtraDeductions():0);
   // Block save if no salary components are filled — prevents stale ₹0/junk records
   if(earn === 0 && ded === 0){ toast('Please fill in at least one salary component before saving.','error'); return; }
+  // ── Pro-rate earnings by Days Worked (attendance/leave-aware) so the
+  //    stored net pay matches what's shown in the Live Calc panel ──
+  const totalDaysInMonth = sseTotalDaysInPeriod();
+  const dwRaw = document.getElementById('sseDaysWorked').value;
+  const daysWorkedVal = (dwRaw!==''&&dwRaw!=null) ? parseInt(dwRaw) : null;
+  const dwForCalc = daysWorkedVal!=null ? Math.min(daysWorkedVal, totalDaysInMonth) : totalDaysInMonth;
+  const ratio = totalDaysInMonth>0 ? dwForCalc/totalDaysInMonth : 1;
+  const payableEarn = Math.round(earn*ratio);
   const payload={
     emp_id:empId,
     period:document.getElementById('ssePeriod').value+'-01',
@@ -1841,8 +1938,8 @@ async function saveSSEntry(){
     medical_allowance:g('sseMA'),lta:g('sseLTA'),special_allowance:g('sseSA'),
     city_compensatory_allowance:g('sseCCA'),
     professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),
-    total_earnings:earn,total_deductions:ded,net_pay:Math.round(earn-ded),
-    days_worked:(document.getElementById('sseDaysWorked').value!==''&&document.getElementById('sseDaysWorked').value!=null)?parseInt(document.getElementById('sseDaysWorked').value):null,
+    total_earnings:payableEarn,total_deductions:ded,net_pay:Math.round(payableEarn-ded),
+    days_worked:daysWorkedVal,
     mode_of_payment:document.getElementById('sseMOP').value,
     pay_date:document.getElementById('ssePayDate').value,
     notes: window._pendingSubject||''
