@@ -1578,7 +1578,7 @@ tr.emp-row td {
         <div class="policy-cards">
           <div class="policy-card">
             <div class="pc-title">🌴 <span style="color:var(--blue)">Casual Leave (CL)</span></div>
-            <div class="pc-row"><span class="pc-key">Quota</span><span class="pc-val gr">6 days/year</span></div>
+            <div class="pc-row"><span class="pc-key">Quota</span><span class="pc-val gr">12 days/year</span></div>
             <div class="pc-row"><span class="pc-key">Carry-over</span><span class="pc-val re">Lapsed year-end</span></div>
           </div>
           <div class="policy-card">
@@ -1910,7 +1910,7 @@ function loadDemo(){
     const elUsed=perm?(elAccrued>=1?Math.floor(Math.random()*Math.floor(elAccrued)):0):0;
     const remaining_earned=Math.max(0,elAccrued-elUsed);
     const clUsed=perm?Math.floor(Math.random()*4):0;
-    const remaining_casual=perm?Math.max(0,6-clUsed):0;
+    const remaining_casual=perm?Math.max(0,12-clUsed):0;
     const pmUsed=Math.floor(Math.random()*2);
     const remaining_pm=Math.max(0,2-pmUsed);
     const monthlyData=Array.from({length:nowMonth},(_,mi)=>({
@@ -1924,8 +1924,8 @@ function loadDemo(){
       pm:pmUsed>0&&mi===nowMonth-2?1:0
     }));
     balances[emp.id]={
-      remaining_casual:perm?6:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:2,
-      total_casual:6, total_sick:slTotal||12, total_earned:6, total_pm:2, total_earned_accrued:elAccrued,
+      remaining_casual:perm?12:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:2,
+      total_casual:12, total_sick:slTotal||12, total_earned:6, total_pm:2, total_earned_accrued:elAccrued,
       // Always start at 0 — actual used count comes from miim_approved_leaves only
       used_casual:0, used_sick:0, used_earned:0, used_pm:0,
       monthly:monthlyData, year:nowYear
@@ -2060,11 +2060,11 @@ async function loadEmployees(){
             monthlyData=Array.from({length:nowMonth},(_,mi)=>byMonth[mi+1]||{month:mi+1,p:0,a:0,sl:0,cl:0,el:0,pm:0});
           }catch(e){}
           balances[emp.id]={
-            remaining_casual:  b.remaining_casual  ?? b.casual  ?? 6,
+            remaining_casual:  b.remaining_casual  ?? b.casual  ?? 12,
             remaining_sick:    b.remaining_sick    ?? b.sick     ?? 12,
             remaining_earned:  b.remaining_earned  ?? b.earned   ?? 0,
             remaining_pm:      b.remaining_pm      ?? 2,
-            total_casual:      b.casual            ?? 6,
+            total_casual:      b.casual            ?? 12,
             total_sick:        b.sick              ?? 12,
             total_earned:      b.earned            ?? 0,
             total_pm:          2,
@@ -2528,7 +2528,7 @@ function buildVisualLeaveCards(b, empType, empId){
     }),
     card({
       icon:'🌤️', title:'Casual Leave', titleColor:'#3b82f6',
-      desc:'6 days per year. No carry-over, no encashment.',
+      desc:'12 days per year. No carry-over, no encashment.',
       tag:`Jan–Dec ${yr}`, tagBg:'rgba(59,130,246,.15)', tagColor:'#3b82f6', tagBorder:'rgba(59,130,246,.3)',
       border:'rgba(59,130,246,.35)', barColor:'#3b82f6',
       left: cl, pct: clUsedPct, alwaysShow: false,
@@ -2847,13 +2847,13 @@ function openLeaveModal(empId, dKey, e){
   }catch(e3){}
   const sl=perm?Math.max(0,12-_usl):0;
   const el=perm?Math.max(0,6-_uel):0;
-  const cl=perm?Math.max(0,6-_ucl):0;
+  const cl=perm?Math.max(0,12-_ucl):0;
   const pm=Math.max(0,2-_upm);
 
   const ltypes=[
     {id:'sl',cls:'lt-sl',icon:'🤒',name:'Sick Leave',desc:'1 day per month. Carries over (max 32 days).',bal:sl,total:12,used:_usl,disabled:!perm,period:'Accrued this year'},
     {id:'el',cls:'lt-el',icon:'⭐',name:'Earned Leave',desc:'½ day per month. Encashed with April salary.',bal:el,total:6,used:_uel,disabled:!perm,period:`Jan–Dec ${new Date().getFullYear()}`},
-    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'6 days per year. No carry-over at year end.',bal:cl,total:6,used:_ucl,disabled:!perm,period:`Jan–Dec ${new Date().getFullYear()}`},
+    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'12 days per year. No carry-over at year end.',bal:cl,total:12,used:_ucl,disabled:!perm,period:`Jan–Dec ${new Date().getFullYear()}`},
     {id:'pm',cls:'lt-pm',icon:'🕐',name:'Permission',desc:'Max 2 per month, up to 2 hours each.',bal:pm,total:2,used:_upm,disabled:false,period:`${MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`},
   ];
 
