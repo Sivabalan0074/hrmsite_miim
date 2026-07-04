@@ -1120,7 +1120,7 @@ def get_leave_balance():
         year = request.args.get('year', str(datetime.date.today().year))
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
-        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
         return jsonify(dict(row))
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
@@ -2762,22 +2762,6 @@ def get_photo(emp_id):
         return jsonify({"success": False}), 500
 
 
-def _derive_role_from_desig(desig, dept):
-    """Shared role-derivation logic — same rules used by /api/me/role,
-    reused here so every part of the app agrees on what role an employee has."""
-    d = (desig or "").lower()
-    dep = (dept or "").lower()
-    if "admin" in d or dep == "admin":
-        return "admin"
-    if "hr" in d or dep == "hr":
-        return "hr"
-    if "senior manager" in d:
-        return "sm"
-    if "project manager" in d:
-        return "pm"
-    return "employee"
-
-
 @app.route('/api/me/role', methods=['GET'])
 @require_auth
 def me_role():
@@ -2822,7 +2806,7 @@ def attendance_monthly_summary():
         apply to them.
       - Regular / Regular(PIP) (permanent): CL/SL/EL are paid leave, up to
         each type's accrued quota for the year so far:
-          CL -> 12 days/year, flat (no monthly accrual, no carry-over)
+          CL -> 6 days/year, flat (no monthly accrual, no carry-over)
           SL -> accrues 1/month, capped at 12/year
           EL -> accrues 0.5/month, capped at 6/year
         Any usage beyond the accrued-to-date quota is LOP.
@@ -2910,7 +2894,7 @@ def attendance_monthly_summary():
                 used_before[t] = (row['c'] if row else 0) or 0
 
             accrued = {
-                "cl": 12.0,                                 # flat annual quota, no monthly accrual
+                "cl": 6.0,                                  # flat annual quota, no monthly accrual
                 "sl": min(month, 12) * 1.0,                  # 1/month, capped 12/year
                 "el": min(month * 0.5, 6.0),                 # 0.5/month, capped 6/year
             }
@@ -3099,17 +3083,94 @@ def approval_history():
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
 
+def _role_from_desig_dept(desig, dept, username=''):
+    """Mirrors the designation-based role classification used at login."""
+    _d = (desig or '').lower()
+    _dept = (dept or '').lower()
+    _uname = (username or '').lower()
+    if "admin" in _d or _dept == "admin" or _uname == "admin": return "admin"
+    if "hr" in _d or _dept == "hr": return "hr"
+    if ("senior" in _d and "manager" in _d) or "senior-manager" in _d: return "sm"
+    if ("project" in _d and "manager" in _d) or "project-manager" in _d: return "pm"
+    return "employee"
+
+
+def _approval_chain_for_role(role):
+    """Mirrors getApprovalChain() in attendance.html — keep both in sync.
+    NOTE: 'sm' role leave goes to Admin ONLY — HR does not approve/reject an
+    SM's leave, HR can only view the outcome afterwards (Approval History)."""
+    if role == 'sm': return ['admin']
+    if role == 'hr': return ['sm', 'admin']
+    if role in ('pm', 'employee'): return ['sm', 'hr']
+    return ['hr', 'admin']
+
+
 @app.route('/api/leave/apply', methods=['POST'])
 @require_auth
 def apply_leave_new():
     try:
+        import json as _json_leave
         data = request.json or {}
         conn = _db()
-        cur = conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at) VALUES (?,?,?,?,?,?,'pending',?)",
-                     (data.get('emp_id'), data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), str(datetime.datetime.now())))
+        emp_id = data.get('emp_id')
+        # Look up the applicant's designation/dept so the correct approval chain is stored
+        emp_row = conn.execute("SELECT dept, desig, username FROM employees WHERE id=?", (emp_id,)).fetchone()
+        role = _role_from_desig_dept(emp_row['desig'] if emp_row else '', emp_row['dept'] if emp_row else '', emp_row['username'] if emp_row else '')
+        chain = _approval_chain_for_role(role)
+        cur = conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at,approval_chain,approval_stage) VALUES (?,?,?,?,?,?,'pending',?,?,0)",
+                     (emp_id, data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), str(datetime.datetime.now()), _json_leave.dumps(chain)))
         new_id = cur.lastrowid
         conn.commit(); conn.close()
         return jsonify({"success": True, "id": new_id}), 201
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/leave/<int:leave_id>', methods=['PUT'])
+@require_auth
+def update_leave_new(leave_id):
+    """Edit an existing PENDING leave request (type/dates/reason).
+    Only allowed while status is still 'pending' — once approved or rejected
+    the request is final and must not be edited. This updates the row in
+    place so the person's edit doesn't create a duplicate request."""
+    try:
+        data = request.json or {}
+        conn = _db()
+        row = conn.execute("SELECT status FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "error": "Leave request not found"}), 404
+        if row['status'] != 'pending':
+            conn.close()
+            return jsonify({"success": False, "error": "Only pending leave requests can be edited"}), 400
+        conn.execute(
+            "UPDATE leave_requests SET leave_type=?, from_date=?, to_date=?, days=?, reason=? WHERE id=?",
+            (data.get('leave_type'), data.get('from_date'), data.get('to_date'),
+             data.get('days', 1), data.get('reason', ''), leave_id)
+        )
+        conn.commit(); conn.close()
+        return jsonify({"success": True})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/leave/<int:leave_id>', methods=['DELETE'])
+@require_auth
+def delete_leave_new(leave_id):
+    """Hard-delete a leave request row entirely (used by the 'right-click to
+    delete' option on the Pending Leave Requests list). Unlike reject, this
+    does not write an approval-history entry — the request simply disappears."""
+    try:
+        conn = _db()
+        row = conn.execute("SELECT id FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "error": "Leave request not found"}), 404
+        conn.execute("DELETE FROM leave_requests WHERE id=?", (leave_id,))
+        conn.commit(); conn.close()
+        return jsonify({"success": True})
     except Exception as ex:
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
@@ -3124,7 +3185,7 @@ def get_leave_balance_by_id(emp_id):
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
         if row: return jsonify(dict(row))
-        return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
@@ -3132,39 +3193,25 @@ def get_leave_balance_by_id(emp_id):
 @app.route('/api/leave', methods=['GET'])
 @require_auth
 def get_leave_new():
-    """
-    Returns pending/approved/rejected leave requests, joined with the
-    applicant's username/department/role so the attendance page can route
-    each request to the correct approver (SM/PM/HR/Admin) per Leave Policy
-    V24, and so it survives across browsers/devices instead of relying on
-    localStorage.
-    """
     try:
         status = request.args.get('status')
         emp_id = request.args.get('emp_id')
         conn = _db()
-        query = """
-            SELECT lr.*, e.username AS username, e.dept AS dept, e.desig AS desig
-            FROM leave_requests lr
-            LEFT JOIN employees e ON e.id = lr.emp_id
-        """
-        conds, params = [], []
-        if emp_id:
-            conds.append("lr.emp_id=?"); params.append(emp_id)
-        if status:
-            conds.append("lr.status=?"); params.append(status)
-        if conds:
-            query += " WHERE " + " AND ".join(conds)
-        query += " ORDER BY lr.id DESC"
-        rows = conn.execute(query, tuple(params)).fetchall()
+        base = """SELECT lr.*, e.username as username, e.dept as dept, e.desig as desig
+                   FROM leave_requests lr LEFT JOIN employees e ON e.id = lr.emp_id"""
+        if emp_id and status:
+            rows = conn.execute(base + " WHERE lr.emp_id=? AND lr.status=? ORDER BY lr.id DESC", (emp_id, status)).fetchall()
+        elif status:
+            rows = conn.execute(base + " WHERE lr.status=? ORDER BY lr.id DESC", (status,)).fetchall()
+        elif emp_id:
+            rows = conn.execute(base + " WHERE lr.emp_id=? ORDER BY lr.id DESC", (emp_id,)).fetchall()
+        else:
+            rows = conn.execute(base + " ORDER BY lr.id DESC").fetchall()
         conn.close()
-
-        leaves = []
-        for r in rows:
-            row = dict(r)
-            row['role'] = _derive_role_from_desig(row.get('desig'), row.get('dept'))
-            leaves.append(row)
-        return jsonify({"success": True, "leaves": leaves})
+        # ── Response wrapped as {leaves:[...]} — the frontend reads `data.leaves`,
+        #    a bare array here meant `data.leaves` was always undefined and the
+        #    pending-approval list stayed empty no matter what was in the DB.
+        return jsonify({"success": True, "leaves": [dict(r) for r in rows]})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
@@ -3173,9 +3220,25 @@ def get_leave_new():
 @require_auth
 def action_leave(leave_id, action):
     try:
-        status = 'approved' if action == 'approve' else 'rejected'
         now = str(datetime.datetime.now())
         conn = _db()
+
+        # ── Intermediate stage sign-off: chain isn't finished, stays 'pending' ──
+        if action == 'advance':
+            data = request.json or {}
+            new_stage = data.get('stage')
+            if new_stage is None:
+                conn.close()
+                return jsonify({"success": False, "error": "stage is required"}), 400
+            conn.execute("UPDATE leave_requests SET approval_stage=? WHERE id=?", (new_stage, leave_id))
+            conn.commit(); conn.close()
+            return jsonify({"success": True, "stage": new_stage})
+
+        if action not in ('approve', 'reject'):
+            conn.close()
+            return jsonify({"success": False, "error": "Unknown action"}), 400
+
+        status = 'approved' if action == 'approve' else 'rejected'
         conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, now, leave_id))
 
         # If approved â€” also mark attendance table for each day of leave
@@ -3209,21 +3272,6 @@ def action_leave(leave_id, action):
                                      (emp_id, date_str, att_status, 'LEAVE_AUTO', now))
                     cur += datetime.timedelta(days=1)
 
-        conn.commit(); conn.close()
-        return jsonify({"success": True})
-    except Exception as ex:
-        print(f"[ERROR] {ex}")
-        return jsonify({"success": False, "error": "Internal server error"}), 500
-
-
-@app.route('/api/leave/<int:leave_id>', methods=['DELETE'])
-@require_auth
-def delete_leave(leave_id):
-    """Permanently delete a leave request (e.g. a pending request the
-    applicant or an approver no longer wants on record)."""
-    try:
-        conn = _db()
-        conn.execute("DELETE FROM leave_requests WHERE id=?", (leave_id,))
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:
@@ -3685,13 +3733,23 @@ def init_db():
         emp_id TEXT, leave_type TEXT, from_date TEXT,
         to_date TEXT, days INTEGER DEFAULT 1,
         reason TEXT, status TEXT DEFAULT 'pending',
-        applied_at TEXT, reviewed_at TEXT
+        applied_at TEXT, reviewed_at TEXT,
+        approval_chain TEXT, approval_stage INTEGER DEFAULT 0
     )""")
+    # â”€â”€ Migrate existing leave_requests â€” add multi-stage approval tracking columns â”€â”€
+    for _lcol, _ldef in [
+        ('approval_chain', "TEXT"),
+        ('approval_stage', "INTEGER DEFAULT 0"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE leave_requests ADD COLUMN {_lcol} {_ldef}")
+        except Exception:
+            pass  # column already exists
     conn.execute(f"""CREATE TABLE IF NOT EXISTS leave_balances (
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, year TEXT,
         annual INTEGER DEFAULT 18, sick INTEGER DEFAULT 10,
-        casual INTEGER DEFAULT 12, earned INTEGER DEFAULT 0,
+        casual INTEGER DEFAULT 6, earned INTEGER DEFAULT 0,
         used_annual INTEGER DEFAULT 0, used_sick INTEGER DEFAULT 0,
         used_casual INTEGER DEFAULT 0
     )""")

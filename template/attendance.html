@@ -1459,6 +1459,7 @@ tr.emp-row td {
       <div>
         <div class="modal-title">📋 Pending Leave Requests</div>
         <div class="modal-sub" id="approvalModalSub">Requests awaiting your approval</div>
+        <div style="font-size:10px;color:var(--t3);margin-top:3px;opacity:.75;">💡 Right-click any request to delete it</div>
       </div>
       <div class="modal-close" onclick="closeApprovalModal()">✕</div>
     </div>
@@ -3295,7 +3296,7 @@ function renderApprovalList(){
         <button class="btn-flow${myTurn?' my-turn':''}" style="flex:1;" onclick="openLeaveFlowModal(${req.id})">⚡ View Approval Flow${myTurn?' · Your Turn':''}</button>
       </div>`;
     }
-    return `<div class="appr-item" id="appr-${req.id}">
+    return `<div class="appr-item" id="appr-${req.id}" oncontextmenu="showLeaveReqCtx(event,${req.id})" title="Right-click to delete">
       <div class="appr-item-top">
         <div class="appr-emp-info">
           <div class="appr-avatar">${req.empName.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
@@ -4099,6 +4100,59 @@ function showHistoryCtx(e,id){
   document.body.appendChild(menu);
   _ctxMenu=menu;
   setTimeout(()=>document.addEventListener('click',()=>{if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}},{once:true}),0);
+}
+
+// Right-click context menu on a Pending Leave Request card — available to
+// EVERY employee (not just admins), lets anyone remove a leave request from
+// the shared Pending Leave Requests list entirely (own or someone else's).
+function showLeaveReqCtx(e,reqId){
+  e.preventDefault();
+  if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}
+  const menu=document.createElement('div');
+  menu.style.cssText=`position:fixed;z-index:9999;left:${Math.min(e.clientX,window.innerWidth-190)}px;top:${Math.min(e.clientY,window.innerHeight-60)}px;background:#1e2330;border:1px solid #ef4444;border-radius:8px;padding:4px;box-shadow:0 8px 30px rgba(0,0,0,0.8);min-width:170px;`;
+  menu.innerHTML=`<div onclick="deletePendingLeaveReq(${reqId});_ctxMenu&&(_ctxMenu.remove(),_ctxMenu=null);" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;font-size:12px;color:#ef4444;cursor:pointer;font-family:'Exo 2',sans-serif;font-weight:600;transition:background .15s;" onmouseover="this.style.background='rgba(239,68,68,0.12)'" onmouseout="this.style.background='transparent'">🗑️ Delete this request</div>`;
+  document.body.appendChild(menu);
+  _ctxMenu=menu;
+  setTimeout(()=>document.addEventListener('click',()=>{if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}},{once:true}),0);
+}
+
+// Deletes a pending leave request outright — removes it from the list,
+// clears its "pending" marker off the calendar, and best-effort deletes the
+// row on the backend. This is a hard delete, not a reject (no approval
+// history entry is created).
+async function deletePendingLeaveReq(reqId){
+  const req=pendingLeaves.find(l=>l.id===reqId);
+  if(!req)return;
+  const leaveId=req.leave_id||req.id;
+
+  // Clear the pending marker on the calendar for that day, if any
+  const dKey=req.date;
+  if(attCache[dKey]&&attCache[dKey][req.empId]) attCache[dKey][req.empId].status='';
+  const logKey=`${req.empId}_${dKey}`;
+  delete appliedLeaveLog[logKey];
+
+  // Remove locally
+  pendingLeaves=pendingLeaves.filter(l=>l.id!==reqId);
+  persistPendingLeaves();
+  persistAttCache();
+
+  // Best-effort backend delete (non-blocking)
+  try{
+    await fetch(`/api/leave/${leaveId}`,{method:'DELETE',headers:getHeaders()});
+  }catch(e){}
+
+  updatePendingBadge();
+  renderApprovalList();
+  const stillPending=pendingLeaves.filter(l=>l.status==='pending');
+  const myTurnNow=getMyPendingApprovals().length;
+  const sub=document.getElementById('approvalModalSub');
+  if(sub) sub.textContent=`${stillPending.length} request${stillPending.length!==1?'s':''} total`+
+    (myTurnNow?` · ${myTurnNow} awaiting your approval`:'');
+  if(currentView==='day')renderDayTable();
+  else if(currentView==='week'){if(statusFilter)renderWeekViewFiltered(weekDays(viewDate));else renderWeekView(weekDays(viewDate));}
+  else{if(statusFilter)renderMonthViewFiltered(monthDays(viewDate));else renderMonthView(monthDays(viewDate));}
+  if(expandedEmpId) renderEmployeeDetail(expandedEmpId);
+  showToast('success','🗑️ Request Deleted',`${req.empName} · ${(req.type||'').toUpperCase()} · ${req.date}`);
 }
 
 function openHistoryModal(){
