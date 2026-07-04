@@ -2086,7 +2086,7 @@ async function loadEmployees(){
         empId:    l.emp_id,
         empName:  l.username||'',
         dept:     l.dept||'',
-        empRole:  'employee',
+        empRole:  l.role||'employee',
         type:     mapLeaveType(l.leave_type),
         date:     l.from_date,
         reason:   l.reason||'',

@@ -2762,6 +2762,22 @@ def get_photo(emp_id):
         return jsonify({"success": False}), 500
 
 
+def _derive_role_from_desig(desig, dept):
+    """Shared role-derivation logic — same rules used by /api/me/role,
+    reused here so every part of the app agrees on what role an employee has."""
+    d = (desig or "").lower()
+    dep = (dept or "").lower()
+    if "admin" in d or dep == "admin":
+        return "admin"
+    if "hr" in d or dep == "hr":
+        return "hr"
+    if "senior manager" in d:
+        return "sm"
+    if "project manager" in d:
+        return "pm"
+    return "employee"
+
+
 @app.route('/api/me/role', methods=['GET'])
 @require_auth
 def me_role():
@@ -3116,20 +3132,39 @@ def get_leave_balance_by_id(emp_id):
 @app.route('/api/leave', methods=['GET'])
 @require_auth
 def get_leave_new():
+    """
+    Returns pending/approved/rejected leave requests, joined with the
+    applicant's username/department/role so the attendance page can route
+    each request to the correct approver (SM/PM/HR/Admin) per Leave Policy
+    V24, and so it survives across browsers/devices instead of relying on
+    localStorage.
+    """
     try:
         status = request.args.get('status')
         emp_id = request.args.get('emp_id')
         conn = _db()
-        if emp_id and status:
-            rows = conn.execute("SELECT * FROM leave_requests WHERE emp_id=? AND status=? ORDER BY id DESC", (emp_id, status)).fetchall()
-        elif status:
-            rows = conn.execute("SELECT * FROM leave_requests WHERE status=? ORDER BY id DESC", (status,)).fetchall()
-        elif emp_id:
-            rows = conn.execute("SELECT * FROM leave_requests WHERE emp_id=? ORDER BY id DESC", (emp_id,)).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM leave_requests ORDER BY id DESC").fetchall()
+        query = """
+            SELECT lr.*, e.username AS username, e.dept AS dept, e.desig AS desig
+            FROM leave_requests lr
+            LEFT JOIN employees e ON e.id = lr.emp_id
+        """
+        conds, params = [], []
+        if emp_id:
+            conds.append("lr.emp_id=?"); params.append(emp_id)
+        if status:
+            conds.append("lr.status=?"); params.append(status)
+        if conds:
+            query += " WHERE " + " AND ".join(conds)
+        query += " ORDER BY lr.id DESC"
+        rows = conn.execute(query, tuple(params)).fetchall()
         conn.close()
-        return jsonify([dict(r) for r in rows])
+
+        leaves = []
+        for r in rows:
+            row = dict(r)
+            row['role'] = _derive_role_from_desig(row.get('desig'), row.get('dept'))
+            leaves.append(row)
+        return jsonify({"success": True, "leaves": leaves})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
