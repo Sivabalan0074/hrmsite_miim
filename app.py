@@ -3216,6 +3216,21 @@ def action_leave(leave_id, action):
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+@app.route('/api/leave/<int:leave_id>', methods=['DELETE'])
+@require_auth
+def delete_leave(leave_id):
+    """Permanently delete a leave request (e.g. a pending request the
+    applicant or an approver no longer wants on record)."""
+    try:
+        conn = _db()
+        conn.execute("DELETE FROM leave_requests WHERE id=?", (leave_id,))
+        conn.commit(); conn.close()
+        return jsonify({"success": True})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 @app.route('/attendance.html')
 
 

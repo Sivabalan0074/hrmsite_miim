@@ -3092,13 +3092,14 @@ function renderApprovalList(){
   if(!myPending.length){body.innerHTML=`<div class="appr-empty">✅ No pending leave requests</div>`;return;}
   const ROLE_COLORS={employee:'#22c55e',sm:'#eab308',pm:'#eab308',senior_hr:'#a855f7',hr:'#3b82f6',admin:'#f97316'};
   const ROLE_LABELS={employee:'Employee',sm:'SM',pm:'PM',senior_hr:'Senior HR',hr:'HR',admin:'Admin'};
-  body.innerHTML=myPending.map(req=>{
+  const hint=`<div style="font-size:10px;color:var(--t3);padding:0 2px 8px;opacity:.7;">💡 Right-click any request to delete it</div>`;
+  body.innerHTML=hint+myPending.map(req=>{
     const color=LEAVE_TYPE_COLORS[req.type]||'var(--orange)';
     const label=LEAVE_TYPE_LABELS[req.type]||req.type.toUpperCase();
     const dateObj=parseDK(req.date);
     const roleColor=ROLE_COLORS[req.empRole||'employee']||'#22c55e';
     const roleLabel=ROLE_LABELS[req.empRole||'employee']||req.empRole;
-    return `<div class="appr-item" id="appr-${req.id}">
+    return `<div class="appr-item" id="appr-${req.id}" oncontextmenu="showPendingLeaveCtx(event,${req.id})" style="cursor:context-menu;" title="Right-click to delete">
       <div class="appr-item-top">
         <div class="appr-emp-info">
           <div class="appr-avatar">${req.empName.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
@@ -3770,6 +3771,38 @@ function showHistoryCtx(e,id){
   document.body.appendChild(menu);
   _ctxMenu=menu;
   setTimeout(()=>document.addEventListener('click',()=>{if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}},{once:true}),0);
+}
+
+// Custom context menu for pending leave requests — delete a request permanently
+function showPendingLeaveCtx(e,id){
+  e.preventDefault();
+  if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}
+  const menu=document.createElement('div');
+  menu.style.cssText=`position:fixed;z-index:9999;left:${Math.min(e.clientX,window.innerWidth-180)}px;top:${Math.min(e.clientY,window.innerHeight-60)}px;background:#1e2330;border:1px solid #ef4444;border-radius:8px;padding:4px;box-shadow:0 8px 30px rgba(0,0,0,0.8);min-width:170px;`;
+  menu.innerHTML=`<div onclick="deletePendingLeave(${id});_ctxMenu&&(_ctxMenu.remove(),_ctxMenu=null);" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;font-size:12px;color:#ef4444;cursor:pointer;font-family:'Exo 2',sans-serif;font-weight:600;transition:background .15s;" onmouseover="this.style.background='rgba(239,68,68,0.12)'" onmouseout="this.style.background='transparent'">🗑️ Delete this request</div>`;
+  document.body.appendChild(menu);
+  _ctxMenu=menu;
+  setTimeout(()=>document.addEventListener('click',()=>{if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}},{once:true}),0);
+}
+
+async function deletePendingLeave(id){
+  if(!confirm('Delete this leave request permanently? This cannot be undone.'))return;
+  // Delete on the backend first — leave_requests is the source of truth,
+  // so this must succeed on the server or the request will just come back
+  // on next refresh.
+  try{
+    const res=await fetch(`/api/leave/${id}`,{method:'DELETE',headers:getHeaders()});
+    const data=await res.json().catch(()=>({success:false}));
+    if(!data.success){showToast('error','Delete Failed','Could not delete on server. Please try again.');return;}
+  }catch(e){showToast('error','Delete Failed','Network error — could not reach server.');return;}
+
+  // Remove locally too (in-memory + cache) so the UI updates immediately
+  pendingLeaves=pendingLeaves.filter(l=>l.id!==id);
+  persistPendingLeaves();
+  renderApprovalList();
+  document.getElementById('approvalModalSub').textContent=`${getMyPendingApprovals().length} request${getMyPendingApprovals().length!==1?'s':''} awaiting your approval`;
+  updatePendingBadge();
+  showToast('success','Request Deleted','Leave request removed permanently');
 }
 
 function openHistoryModal(){
