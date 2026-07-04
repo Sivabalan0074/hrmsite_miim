@@ -44,7 +44,7 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--t1);display
 .readonly-banner{display:none;align-items:center;gap:10px;padding:9px 20px;background:rgba(59,130,246,0.07);border-bottom:1px solid rgba(59,130,246,0.2);font-size:12px;color:var(--blue);flex-shrink:0;}
 .readonly-banner.show{display:flex;}
 
-.view-bar{display:flex;align-items:center;gap:10px;padding:8px 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;position:relative;z-index:150;}
+.view-bar{display:flex;align-items:center;gap:10px;padding:8px 20px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;position:relative;z-index:600;}
 .view-tabs{display:flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px;}
 .vtab{background:transparent;border:none;color:var(--t2);padding:5px 16px;border-radius:6px;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .18s;letter-spacing:.5px;}
 .vtab.active{background:var(--orange);color:#fff;box-shadow:0 2px 8px rgba(249,115,22,0.4);}
@@ -355,39 +355,8 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .appr-actions{display:flex;gap:8px;}
 .btn-approve{background:linear-gradient(135deg,var(--green),#16a34a);color:#000;border:none;padding:6px 16px;border-radius:7px;font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
 .btn-reject{background:var(--red-dim);border:1px solid rgba(239,68,68,0.3);color:var(--red);padding:6px 16px;border-radius:7px;font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
-.btn-edit{background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);color:#3b82f6;padding:6px 16px;border-radius:7px;font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
 .btn-approve:hover{opacity:.9;}.btn-reject:hover{background:var(--red);color:#fff;}
 .appr-empty{text-align:center;padding:40px;color:var(--t3);font-size:13px;}
-.btn-flow{background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.35);color:var(--orange);padding:7px 16px;border-radius:7px;font-family:'Exo 2',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;}
-.btn-flow:hover{background:rgba(249,115,22,0.18);}
-.btn-flow.my-turn{background:rgba(234,179,8,0.14);border-color:rgba(234,179,8,0.4);color:var(--yellow);animation:flowPulse 1.8s infinite;}
-@keyframes flowPulse{0%,100%{box-shadow:0 0 0 0 rgba(234,179,8,0.35);}50%{box-shadow:0 0 0 5px rgba(234,179,8,0);}}
-
-/* ── Leave Approval Flow (stage workflow, mirrors Expense Approval style) ── */
-.flow-track{background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:14px 16px 2px;}
-.flow-step{display:flex;gap:12px;position:relative;padding-bottom:20px;}
-.flow-step:last-child{padding-bottom:2px;}
-.flow-step::before{content:'';position:absolute;left:15px;top:32px;bottom:0;width:2px;background:var(--border2);}
-.flow-step:last-child::before{display:none;}
-.flow-step.done::before{background:var(--green);}
-.flow-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:700;z-index:1;}
-.flow-icon.done{background:var(--green);color:#08170c;}
-.flow-icon.current{background:rgba(234,179,8,0.16);border:2px solid var(--yellow);color:var(--yellow);}
-.flow-icon.pending{background:var(--bg2);border:2px solid var(--border2);color:var(--t3);}
-.flow-body{padding-top:2px;}
-.flow-title{font-size:13px;font-weight:700;color:var(--t1);}
-.flow-sub{font-size:11px;color:var(--t2);margin-top:2px;}
-.flow-tag{display:inline-block;margin-top:6px;padding:2px 9px;border-radius:5px;font-size:9px;font-weight:700;letter-spacing:.3px;}
-.flow-tag.done{background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.3);}
-.flow-tag.current{background:rgba(234,179,8,0.15);color:var(--yellow);border:1px solid rgba(234,179,8,0.3);}
-.flow-celebrate{margin-top:16px;text-align:center;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:10px;padding:20px;}
-.flow-celebrate-emoji{font-size:26px;}
-.flow-celebrate-title{color:var(--green);font-weight:700;font-size:14px;margin-top:6px;font-family:'Rajdhani',sans-serif;}
-.flow-celebrate-sub{color:var(--t2);font-size:11px;margin-top:4px;}
-.flow-turn-box{margin-top:16px;text-align:center;background:rgba(234,179,8,0.07);border:1px solid rgba(234,179,8,0.25);border-radius:10px;padding:16px;}
-.flow-turn-msg{font-size:12px;color:var(--t1);font-weight:600;margin-bottom:12px;}
-.flow-turn-actions{display:flex;gap:8px;justify-content:center;}
-.flow-wait-box{margin-top:16px;text-align:center;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;color:var(--t2);}
 
 .policy-modal-box{background:var(--bg3);border:1px solid var(--border2);border-radius:14px;width:92vw;max-width:680px;max-height:88vh;overflow-y:auto;box-shadow:0 40px 100px rgba(0,0,0,0.9);}
 .policy-section{margin-bottom:20px;}
@@ -1426,7 +1395,7 @@ tr.emp-row td {
   <div class="modal-box">
     <div class="modal-header">
       <div>
-        <div class="modal-title" id="leaveModalTitleTxt">📋 Apply Leave / Permission</div>
+        <div class="modal-title">📋 Apply Leave / Permission</div>
         <div class="modal-sub" id="leaveModalEmpName">—</div>
       </div>
       <div class="modal-close" onclick="closeLeaveModal()">✕</div>
@@ -1463,20 +1432,6 @@ tr.emp-row td {
       <div class="modal-close" onclick="closeApprovalModal()">✕</div>
     </div>
     <div class="modal-body" id="approvalModalBody"></div>
-  </div>
-</div>
-
-<!-- LEAVE APPROVAL FLOW MODAL (stage-by-stage workflow view) -->
-<div class="modal-overlay" id="leaveFlowModal" onclick="if(event.target===this)closeLeaveFlowModal()">
-  <div class="approval-modal-box" style="max-width:560px;">
-    <div class="modal-header">
-      <div>
-        <div class="modal-title">⚡ Leave Approval Flow</div>
-        <div class="modal-sub" id="leaveFlowSub"></div>
-      </div>
-      <div class="modal-close" onclick="closeLeaveFlowModal()">✕</div>
-    </div>
-    <div class="modal-body" id="leaveFlowBody"></div>
   </div>
 </div>
 
@@ -1678,56 +1633,24 @@ const ROLE_CONFIG={
 };
 
 /*
-  APPROVAL HIERARCHY (multi-stage — each request must clear every stage in order):
-  ─ employee / pm  → Stage 1: SM of SAME dept   → Stage 2: HR/Senior HR         → Fully Approved
-  ─ sm             → Stage 1: Admin only                                       → Fully Approved
-                      (HR does NOT approve/reject an SM's leave — HR can only
-                       VIEW the outcome afterwards, via Approval History)
-  ─ hr / senior_hr → Stage 1: SM (Design)       → Stage 2: Admin                → Fully Approved
+  APPROVAL HIERARCHY:
+  ─ employee       → approved by: SM/PM of SAME dept  +  senior_hr, hr, admin
+  ─ sm / pm        → approved by: senior_hr, hr, admin
+  ─ senior_hr / hr → approved by: admin only
   ─ admin          → auto-approved (no pending queue)
-
-  Each pendingLeaves item carries:
-    chain: [ 'sm', 'hr' ]   — ordered list of roles that must approve, one after another
-    stage: 0                — index into chain of the role whose turn it currently is
-  A request only becomes fully "approved" once stage === chain.length (every link signed off).
-  Rejecting at ANY stage kills the whole request immediately.
 */
-// Mirrors the backend's designation-based role classification (used at login) —
-// needed so a real employee's leave request is tagged with their TRUE role
-// (sm / pm / hr / admin / employee) instead of defaulting to 'employee' for everyone.
-function deriveRoleFromDesig(desig,dept){
-  const d=(desig||'').toLowerCase();
-  const dp=(dept||'').toLowerCase();
-  if(d.includes('admin')||dp==='admin') return 'admin';
-  if(d.includes('hr')||dp==='hr') return 'hr';
-  if(d.includes('senior')&&d.includes('manager')) return 'sm';
-  if(d.includes('project')&&d.includes('manager')) return 'pm';
-  return 'employee';
-}
-function getApprovalChain(role){
-  if(role==='sm')                        return ['admin'];
-  if(role==='hr'||role==='senior_hr')    return ['sm','admin'];
-  if(role==='pm'||role==='employee')     return ['sm','hr'];
-  if(role==='account_manager')           return ['hr','admin'];
-  return ['hr','admin']; // safe fallback for unknown roles
-}
-// A role "slot" in the chain is satisfied by the matching currentRole (hr slot accepts hr or senior_hr)
-function roleMatchesSlot(slot,role){
-  if(slot==='hr') return role==='hr'||role==='senior_hr';
-  return slot===role;
-}
-function canApproveLeaveOf(req){
-  if(!req) return false;
-  const chain=req.chain||getApprovalChain(req.empRole||'employee');
-  const stage=req.stage||0;
-  if(stage>=chain.length) return false; // already fully approved
-  const neededRole=chain[stage];
-  // admin can always act as a stand-in for the current stage (keeps things moving)
+function canApproveLeaveOf(requesterRole, requesterDept){
+  // admin can approve anyone except themselves (admin auto-approved)
   if(currentRole==='admin') return true;
-  if(!roleMatchesSlot(neededRole,currentRole)) return false;
-  // The SM stage is department-scoped — only the SM of the SAME department as the requester
-  if(neededRole==='sm') return req.dept===currentUserDept;
-  return true;
+  // senior_hr and hr can approve employee, sm, pm
+  if(currentRole==='senior_hr'||currentRole==='hr'){
+    return ['employee','sm','pm'].includes(requesterRole);
+  }
+  // SM and PM can only approve employees in their OWN department
+  if(currentRole==='sm'||currentRole==='pm'){
+    return requesterRole==='employee' && requesterDept===currentUserDept;
+  }
+  return false;
 }
 
 let currentRole='admin';
@@ -1765,7 +1688,6 @@ let expandedEmpId=null;
 let lbViewMode='year';
 
 let leaveModalEmpId=null,leaveModalDKey=null;
-let leaveEditReqId=null; // set while editing an existing PENDING leave request (null = normal apply)
 let selectedLeaveType=null;
 
 let pendingLeaves=[];
@@ -1801,15 +1723,11 @@ function applyRoleUI(){
 }
 
 function updatePendingBadge(){
-  // Visible to EVERYONE (not just approvers) — shows the total count of all
-  // pending leave requests in the system, since the Pending Leave Requests
-  // page is now shared: everyone can see every request (own = Edit only,
-  // others' = view approval flow).
-  const allPending=pendingLeaves.filter(l=>l.status==='pending');
+  const myPending=getMyPendingApprovals();
   const btn=document.getElementById('pendingBadgeBtn');
   const cnt=document.getElementById('pendingCount');
-  if(allPending.length>0){
-    btn.style.display='flex';cnt.textContent=allPending.length;
+  if(myPending.length>0){
+    btn.style.display='flex';cnt.textContent=myPending.length;
   }else{
     btn.style.display='none';
   }
@@ -1818,13 +1736,7 @@ function updatePendingBadge(){
 function getMyPendingApprovals(){
   const cfg=getRoleCfg();
   if(!cfg.canApprove) return [];
-  return pendingLeaves.filter(l=>l.status==='pending' && canApproveLeaveOf(l));
-}
-
-// Find the applicant's OWN still-pending leave request for a given emp+date —
-// used to swap the "Apply Leave" button into an "Edit" button until it's approved.
-function findMyPendingLeave(empId,dKey){
-  return pendingLeaves.find(l=>l.status==='pending' && String(l.empId)===String(empId) && l.date===dKey) || null;
+  return pendingLeaves.filter(l=>l.status==='pending' && canApproveLeaveOf(l.empRole||'employee', l.dept||''));
 }
 
 // ════════════════════════════════════════════════════
@@ -2054,14 +1966,14 @@ function loadDemo(){
   });
 
   pendingLeaves=[
-    // Employee in Design dept → Stage 1: Design SM, Stage 2: HR
-    {id:1,empId:1,empName:'Arun Kumar',dept:'Design',empRole:'employee',type:'sl',date:dk(addDays(TODAY,2)),reason:'Medical checkup',status:'pending',chain:getApprovalChain('employee'),stage:0},
-    // Employee in Simulation dept → Stage 1: Simulation SM, Stage 2: HR
-    {id:2,empId:3,empName:'Karthik R',dept:'Simulation',empRole:'employee',type:'cl',date:dk(addDays(TODAY,5)),reason:'Personal work',status:'pending',chain:getApprovalChain('employee'),stage:0},
-    // Project Manager in Design dept → Stage 1: Design SM (NOT himself), Stage 2: HR
-    {id:3,empId:14,empName:'Chethan R',dept:'Design',empRole:'pm',type:'el',date:dk(addDays(TODAY,3)),reason:'Family function',status:'pending',chain:getApprovalChain('pm'),stage:0},
-    // SM role → Stage 1: HR, Stage 2: Admin
-    {id:4,empId:11,empName:'Ramesh S',dept:'Manufacturing',empRole:'sm',type:'cl',date:dk(addDays(TODAY,4)),reason:'Personal work',status:'pending',chain:getApprovalChain('sm'),stage:0},
+    // Employee in Design dept → SM/PM of Design + Senior HR/HR/Admin can approve
+    {id:1,empId:1,empName:'Arun Kumar',dept:'Design',empRole:'employee',type:'sl',date:dk(addDays(TODAY,2)),reason:'Medical checkup',status:'pending'},
+    // Employee in Simulation dept → SM/PM of Simulation + Senior HR/HR/Admin can approve
+    {id:2,empId:3,empName:'Karthik R',dept:'Simulation',empRole:'employee',type:'cl',date:dk(addDays(TODAY,5)),reason:'Personal work',status:'pending'},
+    // PM role → Senior HR/HR/Admin only (not SM/PM) can approve
+    {id:3,empId:14,empName:'Chethan R',dept:'Manufacturing',empRole:'pm',type:'el',date:dk(addDays(TODAY,3)),reason:'Family function',status:'pending'},
+    // SM role → Senior HR/HR/Admin only can approve
+    {id:4,empId:11,empName:'Ramesh S',dept:'Manufacturing',empRole:'sm',type:'cl',date:dk(addDays(TODAY,4)),reason:'Personal work',status:'pending'},
   ];
 }
 
@@ -2169,26 +2081,18 @@ async function loadEmployees(){
     try{
       const lr=await fetchWithTimeout('/api/leave?status=pending',{headers:getHeaders()},3000);
       const ld=await lr.json();
-      pendingLeaves=(ld.leaves||[]).map(l=>{
-        const role=deriveRoleFromDesig(l.desig||'', l.dept||'');
-        let chain=null;
-        try{ chain = l.approval_chain ? JSON.parse(l.approval_chain) : null; }catch(e){ chain=null; }
-        if(!chain || !chain.length) chain=getApprovalChain(role);
-        return {
-          id:       l.id,
-          empId:    l.emp_id,
-          empName:  l.username||'',
-          dept:     l.dept||'',
-          empRole:  role,
-          type:     mapLeaveType(l.leave_type),
-          date:     l.from_date,
-          reason:   l.reason||'',
-          status:   l.status||'pending',
-          leave_id: l.id,
-          chain:    chain,
-          stage:    l.approval_stage||0
-        };
-      });
+      pendingLeaves=(ld.leaves||[]).map(l=>({
+        id:       l.id,
+        empId:    l.emp_id,
+        empName:  l.username||'',
+        dept:     l.dept||'',
+        empRole:  'employee',
+        type:     mapLeaveType(l.leave_type),
+        date:     l.from_date,
+        reason:   l.reason||'',
+        status:   l.status||'pending',
+        leave_id: l.id
+      }));
     }catch(e){pendingLeaves=[];}
 
     // ── Seed miim_approved_leaves from backend approved leave records ──
@@ -2686,12 +2590,7 @@ function renderEmployeeDetail(empId){
         <div class="emp-detail-name">${emp.username}${emp.id===currentUserId?' <span class="self-you-tag">YOU</span>':''}</div>
         <div class="emp-detail-sub">${emp.desig} · <span class="dept-chip ${DEPT_CHIP[emp.dept]||''}" style="display:inline-block;">${emp.dept}</span> · <span style="color:var(--yellow);">${emp.type}</span></div>
       </div>
-      ${canApplyLeave?(()=>{
-          const _myReq=findMyPendingLeave(emp.id,dk(viewDate));
-          return _myReq
-            ?`<button class="apply-leave-btn" style="flex-shrink:0;" onclick="editPendingLeave(${_myReq.id})">✎ Edit Leave</button>`
-            :`<button class="apply-leave-btn" style="flex-shrink:0;" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}')">📋 Apply Leave</button>`;
-        })():''}
+      ${canApplyLeave?`<button class="apply-leave-btn" style="flex-shrink:0;" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}')">📋 Apply Leave</button>`:''}
       ${(canApplyLeave)?`<button class="req-corr-btn" style="flex-shrink:0;" onclick="openCorrRequestModal(${emp.id},'${emp.username}','${dk(viewDate)}')" title="Request attendance correction">✏ Correction</button>`:''}
       <button class="close-detail-btn" onclick="closeEmployeeDetail()">✕ Close</button>
     </div>
@@ -2733,6 +2632,11 @@ function getVisibleEmployees(){
   if(currentRole==='employee'||currentRole==='member'||currentRole==='account_manager'){
     return employees.filter(e=>e.id===currentUserId);
   }
+  // SM / PM — only see employees within their own department
+  if(currentRole==='sm'||currentRole==='pm'){
+    return employees.filter(e=>e.dept===currentUserDept);
+  }
+  // Admin / HR / Senior HR — see everyone
   return cfg.canMarkDept?employees.filter(e=>e.dept===currentUserDept):employees;
 }
 
@@ -2844,13 +2748,8 @@ function buildDayRow(emp,idx,att,cfg){
   const cbHtml=cfg.canMarkAll?`<input type="checkbox" class="cb" id="cb_${emp.id}" ${isSel?'checked':''} onchange="onCb(${emp.id},this.checked)">`:'';
 
   // ★ CHANGE 2: Apply Leave button — show for editable rows OR the logged-in user's own row
-  //   While the request is still PENDING (not yet approved), this becomes an
-  //   Edit button that updates the same request instead of applying fresh.
-  const myPendingReq=leaveActive?findMyPendingLeave(emp.id,dk(viewDate)):null;
   const leaveBtnHtml=(editable||isOwnRow)
-    ?(myPendingReq
-        ?`<button class="apply-leave-btn has-leave" onclick="event.stopPropagation();editPendingLeave(${myPendingReq.id})">✎ Edit Leave</button>`
-        :`<button class="apply-leave-btn${['cl','sl','el','pm'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`)
+    ?`<button class="apply-leave-btn${['cl','sl','el','pm'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`
     :'';
 
   // Correction request button — visible to employees for own row, managers see all
@@ -2878,21 +2777,6 @@ function buildDayRow(emp,idx,att,cfg){
 // ════════════════════════════════════════════════════
 // APPLY LEAVE MODAL
 // ════════════════════════════════════════════════════
-// Open the leave modal to EDIT an existing PENDING leave request (until it is approved).
-// Reuses the apply modal but pre-fills the saved type/date/reason and, on save,
-// updates the same request in place instead of creating a duplicate.
-function editPendingLeave(reqId){
-  const req=pendingLeaves.find(l=>l.id===reqId);
-  if(!req)return;
-  closeApprovalModal();
-  leaveEditReqId=req.id;
-  openLeaveModal(req.empId, req.date);
-  document.getElementById('leaveReason').value=req.reason||'';
-  document.getElementById('leaveApplyBtn').textContent='💾 Update Leave Request';
-  const titleEl=document.getElementById('leaveModalTitleTxt');
-  if(titleEl)titleEl.textContent='✏️ Edit Leave Request';
-}
-
 function openLeaveModal(empId, dKey, e){
   if(e)e.stopPropagation();
   leaveModalEmpId=empId;
@@ -2906,8 +2790,6 @@ function openLeaveModal(empId, dKey, e){
   document.getElementById('leaveReason').value='';
   document.getElementById('leaveApplyBtn').disabled=true;
   document.getElementById('leaveApplyBtn').textContent='Apply Leave';
-  const _titleEl=document.getElementById('leaveModalTitleTxt');
-  if(_titleEl)_titleEl.textContent='📋 Apply Leave / Permission';
 
   // ── Visual balance cards at top of modal ──
   const balCardsEl=document.getElementById('leaveModalBalCards');
@@ -3087,58 +2969,6 @@ async function applyLeave(){
   if(!dKey){showToast('error','Date required','Please select a date');return;}
   const emp=employees.find(e=>e.id===leaveModalEmpId);
 
-  // ── EDIT MODE: updating an existing PENDING leave request in place ─────────
-  // (allowed only until the request is approved — once approved/rejected it
-  // disappears from pendingLeaves and this branch is never reached for it)
-  if(leaveEditReqId!==null){
-    const req=pendingLeaves.find(l=>l.id===leaveEditReqId);
-    if(!req){leaveEditReqId=null;closeLeaveModal();return;}
-    const oldDate=req.date;
-
-    // Clear the old attCache slot if the date moved
-    if(oldDate!==dKey && attCache[oldDate] && attCache[oldDate][leaveModalEmpId]){
-      attCache[oldDate][leaveModalEmpId].status='';
-    }
-    if(!attCache[dKey])attCache[dKey]={};
-    if(!attCache[dKey][leaveModalEmpId])attCache[dKey][leaveModalEmpId]={status:'',checkin:'',checkout:''};
-    attCache[dKey][leaveModalEmpId].status=selectedLeaveType;
-    attCache[dKey][leaveModalEmpId].checkin='';
-    attCache[dKey][leaveModalEmpId].checkout='';
-
-    // Update the request fields directly — status stays 'pending', so the
-    // leave balance is still untouched (it's only ever deducted on approval).
-    req.type=selectedLeaveType;
-    req.date=dKey;
-    req.reason=reason||'';
-    persistPendingLeaves();
-    persistAttCache();
-
-    // Update the SAME record on the backend by its id (PUT), not a new POST —
-    // avoids leaving a stale duplicate row behind if the date was changed.
-    try{
-      const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Annual'};
-      const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
-      const leaveId=req.leave_id||req.id;
-      await fetch(`/api/leave/${leaveId}`,{
-        method:'PUT',headers:getHeaders(),
-        body:JSON.stringify({leave_type:backendType,from_date:dKey,to_date:dKey,reason:reason||''})
-      });
-    }catch(e){}
-
-    leaveEditReqId=null;
-    markChanged();
-    closeLeaveModal();
-    if(currentView==='day')renderDayTable();
-    else if(currentView==='week'){if(statusFilter)renderWeekViewFiltered(weekDays(viewDate));else renderWeekView(weekDays(viewDate));}
-    else{if(statusFilter)renderMonthViewFiltered(monthDays(viewDate));else renderMonthView(monthDays(viewDate));}
-    updateSummaryForDay(dk(viewDate));
-    renderCal();
-    renderApprovalList();
-    updatePendingBadge();
-    showToast('success','✏️ Leave Request Updated',`${emp?.username||''} · ${dKey} (${selectedLeaveType.toUpperCase()})`);
-    return;
-  }
-
   // ── Determine if auto-approved or needs approval ──────────────────────────
   // Rule: Admin applying for themselves → auto-approve (deduct balance immediately)
   //       Anyone else → goes into pending queue; balance deducted ONLY after approval
@@ -3200,9 +3030,7 @@ async function applyLeave(){
       type: selectedLeaveType,
       date: dKey,
       reason: reason || '',
-      status: 'pending',
-      chain: getApprovalChain(applicantRole),
-      stage: 0
+      status: 'pending'
     });
     persistPendingLeaves();
     updatePendingBadge();
@@ -3230,10 +3058,11 @@ async function applyLeave(){
   if(isAdminSelfApply){
     showToast('success',`✅ ${selectedLeaveType.toUpperCase()} – Auto Approved`,`${emp?.username||'Employee'} · ${dKey}`);
   } else {
-    // Tell the user who will approve their leave first (stage 1 of the chain)
-    const chain=getApprovalChain(applicantRole);
-    const stageLabel={sm:`SM (${applicantDept})`,hr:'HR',admin:'Admin'};
-    const approverHint=chain.map(r=>stageLabel[r]||r).join(' → ');
+    // Tell the user who will approve their leave
+    let approverHint='';
+    if(applicantRole==='employee') approverHint=`SM/PM (${applicantDept}) + HR`;
+    else if(applicantRole==='sm'||applicantRole==='pm') approverHint='Senior HR / HR / Admin';
+    else if(applicantRole==='senior_hr'||applicantRole==='hr') approverHint='Admin';
     showToast('success',`${selectedLeaveType.toUpperCase()} Applied – Pending`,`${emp?.username||''} · ${dKey} → Awaiting ${approverHint}`);
   }
 }
@@ -3241,7 +3070,6 @@ async function applyLeave(){
 function closeLeaveModal(){
   document.getElementById('leaveModal').classList.remove('open');
   selectedLeaveType=null;leaveModalEmpId=null;
-  leaveEditReqId=null;
 }
 
 // ════════════════════════════════════════════════════
@@ -3251,50 +3079,25 @@ const LEAVE_TYPE_LABELS={sl:'🤒 Sick Leave',el:'⭐ Earned Leave',cl:'🌴 Cas
 const LEAVE_TYPE_COLORS={sl:'#eab308',el:'#a855f7',cl:'#3b82f6',pm:'#f97316'};
 
 function openApprovalModal(){
-  const allPending=pendingLeaves.filter(l=>l.status==='pending');
-  const myTurn=getMyPendingApprovals().length;
-  document.getElementById('approvalModalSub').textContent=
-    `${allPending.length} request${allPending.length!==1?'s':''} total`+
-    (myTurn?` · ${myTurn} awaiting your approval`:'');
+  const myPending=getMyPendingApprovals();
+  document.getElementById('approvalModalSub').textContent=`${myPending.length} request${myPending.length!==1?'s':''} awaiting your approval`;
   renderApprovalList();
   document.getElementById('approvalModal').classList.add('open');
 }
 function closeApprovalModal(){document.getElementById('approvalModal').classList.remove('open');}
 
-// Pending Leave Requests page is now SHARED — every role sees every pending
-// request from every employee. Own requests only expose Edit (no approve/
-// reject on yourself). Other people's requests don't show raw Approve /
-// Reject buttons on the card anymore — instead they open the stage-by-stage
-// "Leave Approval Flow" view (like the Expense Approval flow), where the
-// Approve / Reject buttons only appear for whoever's turn it currently is.
 function renderApprovalList(){
-  const allPending=pendingLeaves.filter(l=>l.status==='pending');
+  const myPending=getMyPendingApprovals();
   const body=document.getElementById('approvalModalBody');
-  if(!allPending.length){body.innerHTML=`<div class="appr-empty">✅ No pending leave requests</div>`;return;}
+  if(!myPending.length){body.innerHTML=`<div class="appr-empty">✅ No pending leave requests</div>`;return;}
   const ROLE_COLORS={employee:'#22c55e',sm:'#eab308',pm:'#eab308',senior_hr:'#a855f7',hr:'#3b82f6',admin:'#f97316'};
   const ROLE_LABELS={employee:'Employee',sm:'SM',pm:'PM',senior_hr:'Senior HR',hr:'HR',admin:'Admin'};
-  body.innerHTML=allPending.map(req=>{
+  body.innerHTML=myPending.map(req=>{
     const color=LEAVE_TYPE_COLORS[req.type]||'var(--orange)';
     const label=LEAVE_TYPE_LABELS[req.type]||req.type.toUpperCase();
     const dateObj=parseDK(req.date);
     const roleColor=ROLE_COLORS[req.empRole||'employee']||'#22c55e';
     const roleLabel=ROLE_LABELS[req.empRole||'employee']||req.empRole;
-    const chain=req.chain||getApprovalChain(req.empRole||'employee');
-    const stage=req.stage||0;
-    const stageChainLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'};
-    const stageProgress=`Stage ${stage+1}/${chain.length} · ${chain.map((r,i)=>i<stage?`✓${stageChainLabel[r]||r}`:i===stage?`→${stageChainLabel[r]||r}`:(stageChainLabel[r]||r)).join(' · ')}`;
-    const isOwn=String(req.empId)===String(currentUserId);
-    const myTurn=!isOwn && canApproveLeaveOf(req);
-    let actionsHtml;
-    if(isOwn){
-      actionsHtml=`<div class="appr-actions">
-        <button class="btn-edit" style="flex:1;" onclick="editPendingLeave(${req.id})">✎ Edit</button>
-      </div>`;
-    }else{
-      actionsHtml=`<div class="appr-actions">
-        <button class="btn-flow${myTurn?' my-turn':''}" style="flex:1;" onclick="openLeaveFlowModal(${req.id})">⚡ View Approval Flow${myTurn?' · Your Turn':''}</button>
-      </div>`;
-    }
     return `<div class="appr-item" id="appr-${req.id}">
       <div class="appr-item-top">
         <div class="appr-emp-info">
@@ -3302,10 +3105,8 @@ function renderApprovalList(){
           <div>
             <div class="appr-emp-name">${req.empName}
               <span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;background:${roleColor}22;color:${roleColor};border:1px solid ${roleColor}44;">${roleLabel}</span>
-              ${isOwn?`<span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;background:rgba(249,115,22,0.15);color:var(--orange);border:1px solid rgba(249,115,22,0.35);">YOU</span>`:''}
             </div>
             <div class="appr-emp-meta">${req.dept}</div>
-            <div class="appr-emp-meta" style="margin-top:2px;font-size:9px;color:var(--t3);">${stageProgress}</div>
           </div>
         </div>
         <span class="appr-type-badge" style="background:${color}22;color:${color};border:1px solid ${color}44;">${label}</span>
@@ -3316,154 +3117,27 @@ function renderApprovalList(){
         <div class="appr-detail-item"><div class="appr-detail-label">Applied on</div><div class="appr-detail-val">${fmtShort(TODAY)}</div></div>
       </div>
       ${req.reason?`<div class="appr-reason">💬 ${req.reason}</div>`:''}
-      ${actionsHtml}
+      <div class="appr-actions">
+        <button class="btn-approve" onclick="handleApproval(${req.id},'approved')">✓ Approve</button>
+        <button class="btn-reject" onclick="handleApproval(${req.id},'rejected')">✕ Reject</button>
+      </div>
     </div>`;
   }).join('');
-}
-
-// ════════════════════════════════════════════════════
-// LEAVE APPROVAL FLOW MODAL (stage-by-stage, like Expense Approval)
-// ════════════════════════════════════════════════════
-function openLeaveFlowModal(reqId){
-  const req=pendingLeaves.find(l=>l.id===reqId);
-  if(!req)return;
-  const dateObj=parseDK(req.date);
-  document.getElementById('leaveFlowSub').textContent=`${req.empName} · ${(LEAVE_TYPE_LABELS[req.type]||req.type.toUpperCase())} · ${fmtShort(dateObj)}`;
-  renderLeaveFlow(req);
-  document.getElementById('leaveFlowModal').classList.add('open');
-}
-function closeLeaveFlowModal(){document.getElementById('leaveFlowModal').classList.remove('open');}
-
-function renderLeaveFlow(req){
-  const body=document.getElementById('leaveFlowBody');
-  const chain=req.chain||getApprovalChain(req.empRole||'employee');
-  const stage=req.stage||0;
-  const stageChainLabel={sm:`SM (${req.dept}) Approval`,hr:'HR Department',admin:'Admin Final Approval'};
-  // Match this request's own approval-history entries so we can show WHO approved each stage
-  const hist=approvalHistory.filter(h=>h.empName===req.empName && h.leaveDate===req.date && h.leaveType===req.type);
-  function approverFor(i){
-    const isFinal=i===chain.length-1;
-    const h=hist.find(h=>h.action===`approved (stage ${i+1}/${chain.length})` || (isFinal && h.action==='approved'));
-    return h?(h.actionByName||h.actionBy):null;
-  }
-  let steps=`<div class="flow-step done">
-      <div class="flow-icon done">✓</div>
-      <div class="flow-body">
-        <div class="flow-title">Submitted</div>
-        <div class="flow-sub">Leave request submitted successfully.</div>
-        <span class="flow-tag done">COMPLETE</span>
-      </div>
-    </div>`;
-  chain.forEach((role,i)=>{
-    const lbl=stageChainLabel[role]||role;
-    if(i<stage){
-      const approver=approverFor(i)||'—';
-      steps+=`<div class="flow-step done">
-        <div class="flow-icon done">✓</div>
-        <div class="flow-body">
-          <div class="flow-title">${lbl}</div>
-          <div class="flow-sub">Approved by ${approver}</div>
-          <span class="flow-tag done">APPROVED BY ${approver.toUpperCase()}</span>
-        </div>
-      </div>`;
-    }else if(i===stage){
-      steps+=`<div class="flow-step current">
-        <div class="flow-icon current">${i+1}</div>
-        <div class="flow-body">
-          <div class="flow-title">${lbl}</div>
-          <div class="flow-sub">Awaiting review</div>
-          <span class="flow-tag current">PENDING</span>
-        </div>
-      </div>`;
-    }else{
-      steps+=`<div class="flow-step">
-        <div class="flow-icon pending">${i+1}</div>
-        <div class="flow-body">
-          <div class="flow-title">${lbl}</div>
-          <div class="flow-sub">Not yet reached</div>
-        </div>
-      </div>`;
-    }
-  });
-  const isOwn=String(req.empId)===String(currentUserId);
-  const fullyApproved=stage>=chain.length;
-  let footer='';
-  if(fullyApproved){
-    footer=`<div class="flow-celebrate">
-      <div class="flow-celebrate-emoji">🎉</div>
-      <div class="flow-celebrate-title">Fully Approved</div>
-      <div class="flow-celebrate-sub">This leave has been approved at all stages.</div>
-    </div>`;
-  }else if(!isOwn && canApproveLeaveOf(req)){
-    footer=`<div class="flow-turn-box">
-      <div class="flow-turn-msg">🔔 It's your turn to review this request</div>
-      <div class="flow-turn-actions">
-        <button class="btn-approve" onclick="handleApproval(${req.id},'approved');closeLeaveFlowModal();">✓ Approve</button>
-        <button class="btn-reject" onclick="handleApproval(${req.id},'rejected');closeLeaveFlowModal();">✕ Reject</button>
-      </div>
-    </div>`;
-  }else{
-    const nextLbl=stageChainLabel[chain[stage]]||chain[stage];
-    footer=`<div class="flow-wait-box">⏳ Awaiting approval from <strong>${nextLbl}</strong></div>`;
-  }
-  body.innerHTML=`<div class="flow-track">${steps}</div>${footer}${req.reason?`<div class="appr-reason" style="margin-top:14px;">💬 ${req.reason}</div>`:''}`;
 }
 
 async function handleApproval(reqId,action){
   const req=pendingLeaves.find(l=>l.id===reqId);
   if(!req)return;
   const leaveId=req.leave_id||req.id;
-  const chain=req.chain||getApprovalChain(req.empRole||'employee');
-  const stage=req.stage||0;
 
-  // ── Intermediate stage: this approver signs off, but the chain isn't finished yet ──
-  if(action==='approved' && stage+1<chain.length){
-    req.stage=stage+1;
-    const nextRole=chain[req.stage];
-    const nextLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'}[nextRole]||nextRole;
-    // Persist the stage advance to the backend (non-blocking) so a reload doesn't lose progress
-    try{
-      await fetch(`/api/leave/${leaveId}/advance`,{
-        method:'POST',headers:getHeaders(),
-        body:JSON.stringify({stage:req.stage,advanced_by:currentRole})
-      });
-    }catch(e){}
-    // Log the partial approval in history but keep status pending — do NOT touch balance/attendance yet
-    const now=new Date();
-    const timeStr=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    const dateStr=`${now.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.getMonth()]} ${now.getFullYear()}`;
-    approvalHistory.unshift({
-      id: Date.now(),
-      empName: req.empName, dept: req.dept, leaveType: req.type, leaveDate: req.date,
-      action: `approved (stage ${stage+1}/${chain.length})`,
-      actionBy: currentRole,
-      actionByName: employees.find(e=>e.id===currentUserId)?.username || currentRole,
-      actionAt: `${dateStr} ${timeStr}`,
-      reason: req.reason||''
-    });
-    persistPendingLeaves();
-    persistApprovalHistory();
-    updatePendingBadge();
-    renderApprovalList();
-    const stillPending=pendingLeaves.filter(l=>l.status==='pending');
-    const myTurnNow=getMyPendingApprovals().length;
-    document.getElementById('approvalModalSub').textContent=
-      `${stillPending.length} request${stillPending.length!==1?'s':''} total`+
-      (myTurnNow?` · ${myTurnNow} awaiting your approval`:'');
-    showToast('success','✓ Forwarded for next approval',`${req.empName} · ${req.type.toUpperCase()} → Awaiting ${nextLabel}`);
-    return;
-  }
-
-  // ── Final stage (or rejection at any stage) ──
   // Update attCache based on action
   const dKey=req.date;
   if(action==='approved'){
-    // Balance was NOT deducted on apply — deduct now that the chain is fully cleared
+    // Balance was NOT deducted on apply — deduct now on approval
     deductLeaveBalance(req.empId, req.type);
     const logKey=`${req.empId}_${dKey}`;
     appliedLeaveLog[logKey]=req.type;
     if(attCache[dKey]&&attCache[dKey][req.empId]) attCache[dKey][req.empId].approved=true;
-    req.stage=chain.length; // mark chain fully cleared
   } else if(action==='rejected'){
     // Balance was never deducted — just clear the attendance status
     if(attCache[dKey]&&attCache[dKey][req.empId])attCache[dKey][req.empId].status='';
@@ -3471,7 +3145,7 @@ async function handleApproval(reqId,action){
     delete appliedLeaveLog[logKey];
   }
 
-  // Try backend (non-blocking) — only called once the request reaches a final state
+  // Try backend (non-blocking)
   try{
     const endpoint=action==='approved'?'approve':'reject';
     await fetch(`/api/leave/${leaveId}/${endpoint}`,{
@@ -3549,11 +3223,8 @@ async function handleApproval(reqId,action){
 
   updatePendingBadge();
   renderApprovalList();
-  const stillPending=pendingLeaves.filter(l=>l.status==='pending');
-  const myTurnNow=getMyPendingApprovals().length;
-  document.getElementById('approvalModalSub').textContent=
-    `${stillPending.length} request${stillPending.length!==1?'s':''} total`+
-    (myTurnNow?` · ${myTurnNow} awaiting your approval`:'');
+  const remaining=getMyPendingApprovals();
+  document.getElementById('approvalModalSub').textContent=`${remaining.length} request${remaining.length!==1?'s':''} awaiting your approval`;
   if(currentView==='day')renderDayTable();
   else if(currentView==='week'){if(statusFilter)renderWeekViewFiltered(weekDays(viewDate));else renderWeekView(weekDays(viewDate));}
   else{if(statusFilter)renderMonthViewFiltered(monthDays(viewDate));else renderMonthView(monthDays(viewDate));}
