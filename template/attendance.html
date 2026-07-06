@@ -1673,8 +1673,8 @@ const ROLE_CONFIG={
   admin:    {label:'Admin',    badgeCls:'rb-admin',    canMarkAll:true, canMarkDept:false, readOnly:false, canApprove:true},
   senior_hr:{label:'Senior HR',badgeCls:'rb-senior_hr',canMarkAll:true, canMarkDept:false, readOnly:false, canApprove:true},
   hr:       {label:'HR',       badgeCls:'rb-hr',       canMarkAll:true, canMarkDept:false, readOnly:false, canApprove:true},
-  sm:       {label:'SM',       badgeCls:'rb-sm',       canMarkAll:false,canMarkDept:false, readOnly:true,  canApprove:true},
-  pm:       {label:'PM',       badgeCls:'rb-pm',       canMarkAll:false,canMarkDept:false, readOnly:true,  canApprove:true},
+  sm:       {label:'SM',       badgeCls:'rb-sm',       canMarkAll:false,canMarkDept:true, readOnly:true,  canApprove:true},
+  pm:       {label:'PM',       badgeCls:'rb-pm',       canMarkAll:false,canMarkDept:true, readOnly:true,  canApprove:true},
   employee: {label:'Employee', badgeCls:'rb-employee', canMarkAll:false,canMarkDept:false, readOnly:true,  canApprove:false},
   account_manager: {label:'Account Manager', badgeCls:'rb-employee', canMarkAll:false,canMarkDept:false, readOnly:true,  canApprove:false, selfOnly:true},
 };
@@ -1829,11 +1829,21 @@ function applyRoleUI(){
   document.getElementById('summaryBar').style.display=cfg.readOnly?'none':'';
   document.getElementById('footerEl').style.display=cfg.readOnly?'none':'';
   document.getElementById('mainSaveBtn').style.display=cfg.readOnly?'none':'';
-  const showTb=!cfg.readOnly&&currentView==='day';
+  // Filter toolbar (search + department + type) is a read-only convenience —
+  // show it for EVERY role in Day view, not just editors. Bulk-edit controls
+  // stay separately gated by cfg.canMarkAll just below, so read-only roles
+  // still can't edit — they can only search/filter within what they're
+  // allowed to see (PM/SM: own dept, Employee: just themselves).
+  const showTb=currentView==='day';
   document.getElementById('toolbarEl').style.display=showTb?'flex':'none';
   document.getElementById('bulkBarEl').style.display=cfg.canMarkAll?'flex':'none';
   const ds=document.getElementById('deptFilter');
-  if(cfg.canMarkDept){ds.value=currentUserDept;ds.disabled=true;}
+  if(cfg.canMarkDept||cfg.selfOnly||currentRole==='employee'||currentRole==='member'){
+    // These roles can only ever see their own department (or just themselves)
+    // no matter what — lock the filter to it instead of letting them pick a
+    // department that would just show an empty table.
+    ds.value=currentUserDept;ds.disabled=true;
+  }
   else ds.disabled=false;
   // Show Approval History button for admin, senior_hr, hr, sm, pm (all who can approve)
   const histBtn=document.getElementById('historyBtn');
