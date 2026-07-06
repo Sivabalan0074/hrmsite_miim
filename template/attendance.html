@@ -2899,7 +2899,12 @@ function openLeaveModal(empId, dKey, e){
   leaveModalEmpId=empId;
   leaveModalDKey=dKey;
   selectedLeaveType=null;
-  const emp=employees.find(x=>x.id===empId);
+  // BUG FIX: empId can arrive as a string (e.g. from a pending leave request
+  // object) while employees[].id is numeric — a strict === lookup then
+  // silently returns undefined, which made isPermanent('') = false and
+  // incorrectly greyed out Sick/Earned/Casual Leave (showing them as "Not
+  // applicable") even for permanent employees. Compare as strings instead.
+  const emp=employees.find(x=>String(x.id)===String(empId));
   const b=balances[empId]||{};
   const perm=isPermanent(emp?.type||'');
   document.getElementById('leaveModalEmpName').textContent=emp?`${emp.username} · ${emp.dept} · ${emp.type}`:'';
@@ -3086,7 +3091,7 @@ async function applyLeave(){
   const dKey=document.getElementById('leaveDate').value||leaveModalDKey;
   const reason=document.getElementById('leaveReason').value;
   if(!dKey){showToast('error','Date required','Please select a date');return;}
-  const emp=employees.find(e=>e.id===leaveModalEmpId);
+  const emp=employees.find(e=>String(e.id)===String(leaveModalEmpId));
 
   // ── EDIT MODE: updating an existing PENDING leave request in place ─────────
   // (allowed only until the request is approved — once approved/rejected it
