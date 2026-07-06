@@ -3008,6 +3008,25 @@ def get_corrections():
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route('/api/attendance/corrections/<int:corr_id>', methods=['DELETE'])
+@require_auth
+def delete_correction(corr_id):
+    """Hard-delete a row from attendance_corrections (used by the
+    'right-click to delete' option on the Correction History list)."""
+    try:
+        conn = _db()
+        row = conn.execute("SELECT id FROM attendance_corrections WHERE id=?", (corr_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "error": "Correction record not found"}), 404
+        conn.execute("DELETE FROM attendance_corrections WHERE id=?", (corr_id,))
+        conn.commit(); conn.close()
+        return jsonify({"success": True})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 @app.route('/api/attendance/corrections/<int:corr_id>/<action>', methods=['POST'])
 @require_auth
 def review_correction(corr_id, action):
