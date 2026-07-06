@@ -1120,7 +1120,7 @@ def get_leave_balance():
         year = request.args.get('year', str(datetime.date.today().year))
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
-        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
         return jsonify(dict(row))
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
@@ -2894,7 +2894,7 @@ def attendance_monthly_summary():
                 used_before[t] = (row['c'] if row else 0) or 0
 
             accrued = {
-                "cl": 6.0,                                  # flat annual quota, no monthly accrual
+                "cl": 12.0,                                 # flat annual quota, no monthly accrual
                 "sl": min(month, 12) * 1.0,                  # 1/month, capped 12/year
                 "el": min(month * 0.5, 6.0),                 # 0.5/month, capped 6/year
             }
@@ -3006,6 +3006,38 @@ def get_corrections():
         return jsonify({"corrections": [dict(r) for r in rows], "success": True})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route('/api/admin/reset-attendance-data', methods=['POST'])
+@require_role('admin')
+def reset_attendance_data():
+    """Admin-only: wipe ALL recorded attendance & leave data so tracking can
+    start fresh, without touching the employees table (names/logins/depts
+    stay intact). Deletes rows from every attendance/leave-related table."""
+    tables = [
+        'attendance',
+        'leave_requests',
+        'attendance_corrections',
+        'approval_history',
+        'attendance_essl_corrections',
+        'leave_balances',
+    ]
+    cleared, errors = [], []
+    try:
+        conn = _db()
+        for t in tables:
+            try:
+                conn.execute(f"DELETE FROM {t}")
+                cleared.append(t)
+            except Exception as tex:
+                # Table may not exist on every install (e.g. attendance_essl_corrections
+                # is created lazily) — skip it rather than failing the whole reset.
+                errors.append(f"{t}: {tex}")
+        conn.commit(); conn.close()
+        return jsonify({"success": True, "cleared": cleared, "skipped": errors})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
 @app.route('/api/attendance/corrections/<int:corr_id>', methods=['DELETE'])
@@ -3204,7 +3236,7 @@ def get_leave_balance_by_id(emp_id):
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
         if row: return jsonify(dict(row))
-        return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
@@ -3768,7 +3800,7 @@ def init_db():
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, year TEXT,
         annual INTEGER DEFAULT 18, sick INTEGER DEFAULT 10,
-        casual INTEGER DEFAULT 6, earned INTEGER DEFAULT 0,
+        casual INTEGER DEFAULT 12, earned INTEGER DEFAULT 0,
         used_annual INTEGER DEFAULT 0, used_sick INTEGER DEFAULT 0,
         used_casual INTEGER DEFAULT 0
     )""")
