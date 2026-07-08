@@ -867,7 +867,11 @@ body{font-family:DM Sans,sans-serif;background:var(--bg);color:var(--text);min-h
 .app{display:flex;min-height:100vh;width:100%}
 
 /* ── SIDEBAR ── */
-.sidebar{width:220px;background:var(--sidebar);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}.sidebar.emp-hidden{display:none!important;width:0!important;}#employeePageOverlay .sidebar,#employeePageOverlay aside.sidebar{display:none!important;width:0!important;}
+/* top/height offset by 52px (topbar's height) — the topbar above is also
+   sticky top:0 with z-index:100, so a sidebar sitting at top:0 would scroll
+   up and disappear behind it before "sticking". Starting it right below the
+   topbar keeps it fully visible and truly fixed in place while the page scrolls. */
+.sidebar{width:220px;background:var(--sidebar);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;flex-shrink:0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}.sidebar.emp-hidden{display:none!important;width:0!important;}#employeePageOverlay .sidebar,#employeePageOverlay aside.sidebar{display:none!important;width:0!important;}
 .sb-top{padding:1rem;border-bottom:1px solid var(--sidebar-border)}
 .sb-brand{display:flex;align-items:center;gap:.6rem;margin-bottom:1.1rem}
 .logo-box{width:36px;height:36px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-size:11px;font-weight:800;color:#fff;border:2px solid var(--accent2);flex-shrink:0}
