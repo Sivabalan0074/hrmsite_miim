@@ -3492,6 +3492,198 @@ def _approval_chain_for_role(role):
     return ['hr', 'admin']
 
 
+def _send_leave_applied_notification(employee_name, empid, dept, desig, leave_type, from_date, to_date, days, reason, applied_at, recipients):
+    """Notify HR dept + the applicant's department Senior Manager that a
+    PM/normal-employee leave request has been submitted. Best-effort only —
+    any failure here must never block the leave application itself."""
+    if not recipients:
+        return
+    try:
+        import os as _os_lv
+        import requests as _requests_lv
+        RESEND_API_KEY = _os_lv.environ.get('RESEND_API_KEY', '')
+        if not RESEND_API_KEY:
+            print("[WARN _send_leave_applied_notification] RESEND_API_KEY not configured, skipping email")
+            return
+        _FROM_EMAIL = _os_lv.environ.get('MIIM_FROM_EMAIL', 'noreply@miim.co.in')
+
+        html_body = f"""
+        <html>
+        <body style="margin:0;padding:0;background:#0f0f0f;font-family:Arial,sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0f0f;padding:40px 0;">
+            <tr><td align="center">
+              <table width="520" cellpadding="0" cellspacing="0"
+                     style="background:#1a1a1a;border-radius:14px;border:1px solid #2a2a2a;overflow:hidden;">
+
+                <!-- Header / Logo -->
+                <tr>
+                  <td style="background:linear-gradient(135deg,#1a0a00,#2a1200);
+                              padding:28px 32px;border-bottom:2px solid #f97316;">
+                    <div style="font-family:'Arial Black',Arial,sans-serif;
+                                font-size:22px;font-weight:900;
+                                letter-spacing:3px;color:#f97316;
+                                text-transform:uppercase;">MIIM</div>
+                    <div style="font-size:12px;color:#888;letter-spacing:2px;margin-top:4px;">
+                      Mission Impossible Industrial Management
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Body -->
+                <tr>
+                  <td style="padding:32px;">
+                    <h2 style="color:#f97316;font-size:20px;margin:0 0 16px;">
+                      New Leave Application
+                    </h2>
+                    <p style="color:#ccc;font-size:14px;line-height:1.7;margin:0 0 24px;">
+                      An employee has applied for leave. Details below:
+                    </p>
+
+                    <table width="100%" cellpadding="0" cellspacing="0"
+                           style="background:#111;border-radius:8px;border:1px solid #2a2a2a;
+                                  margin:0 0 24px;overflow:hidden;">
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid #1e1e1e;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Employee Name</span><br/>
+                          <span style="font-size:15px;font-weight:700;color:#fff;">{employee_name}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid #1e1e1e;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Employee ID</span><br/>
+                          <span style="font-size:14px;color:#a5b4fc;font-family:monospace;">{empid}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid #1e1e1e;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Designation</span><br/>
+                          <span style="font-size:14px;color:#fff;">{desig}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid #1e1e1e;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Department</span><br/>
+                          <span style="font-size:14px;color:#fff;">{dept}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid #1e1e1e;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Leave Type</span><br/>
+                          <span style="font-size:14px;color:#fbbf24;">{leave_type}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid #1e1e1e;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Leave Dates</span><br/>
+                          <span style="font-size:14px;color:#fff;">{from_date} &rarr; {to_date} ({days} day(s))</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid #1e1e1e;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Reason</span><br/>
+                          <span style="font-size:14px;color:#ccc;">{reason or '-'}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:12px 16px;">
+                          <span style="font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;">Applied On</span><br/>
+                          <span style="font-size:14px;color:#ccc;">{applied_at}</span>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="color:#555;font-size:12px;line-height:1.6;margin:0;">
+                      Please review and take action on this request in the MIIM HR System.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="background:#111;padding:16px 32px;border-top:1px solid #1e1e1e;
+                              text-align:center;">
+                    <p style="margin:0;font-size:11px;color:#555;letter-spacing:1px;">
+                      &copy; 2026 MIIM &middot; Mission Impossible Industrial Management<br/>
+                      NO.31, CHINNAN CHETTIYAR STREET, VELANDIPALAYAM, COIMBATORE &ndash; 641025
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td></tr>
+          </table>
+        </body>
+        </html>
+        """
+
+        text_body = (
+            f"New Leave Application\n\n"
+            f"Employee: {employee_name} ({empid})\n"
+            f"Designation: {desig}\n"
+            f"Department: {dept}\n"
+            f"Leave Type: {leave_type}\n"
+            f"Dates: {from_date} to {to_date} ({days} day(s))\n"
+            f"Reason: {reason or '-'}\n"
+            f"Applied On: {applied_at}\n"
+        )
+
+        resp = _requests_lv.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": f"MIIM HR System <{_FROM_EMAIL}>",
+                "to": recipients,
+                "subject": f"MIIM \u2014 Leave Application: {employee_name} ({from_date} to {to_date})",
+                "text": text_body,
+                "html": html_body
+            },
+            timeout=15
+        )
+        if resp.status_code not in (200, 201):
+            print(f"[ERROR _send_leave_applied_notification] Resend API error {resp.status_code}: {resp.text}")
+        else:
+            print(f"[INFO _send_leave_applied_notification] Mail sent to {recipients} via Resend API")
+    except Exception as ex:
+        print(f"[ERROR _send_leave_applied_notification] {type(ex).__name__}: {ex}")
+
+
+def _leave_notification_recipients(conn, dept):
+    """Collect email addresses for: (1) every active HR-department employee,
+    and (2) the active Senior Manager(s) of the applicant's own department.
+    Used when a PM/normal employee applies for leave."""
+    emails = []
+    try:
+        hr_rows = conn.execute(
+            "SELECT company_email, desig, dept FROM employees WHERE status='active'"
+        ).fetchall()
+        for r in hr_rows:
+            _dept = (r['dept'] or '').strip().lower()
+            _desig = (r['desig'] or '').strip().lower()
+            _email = (r['company_email'] or '').strip()
+            if not _email or '@' not in _email:
+                continue
+            is_hr = (_dept == 'hr') or ('hr' in _desig and 'hour' not in _desig)
+            is_sm_of_dept = (
+                (_dept == (dept or '').strip().lower())
+                and ('senior' in _desig and 'manager' in _desig)
+            )
+            if is_hr or is_sm_of_dept:
+                emails.append(_email)
+    except Exception as ex:
+        print(f"[ERROR _leave_notification_recipients] {ex}")
+    # de-dupe, preserve order
+    seen = set()
+    out = []
+    for e in emails:
+        if e.lower() not in seen:
+            seen.add(e.lower())
+            out.append(e)
+    return out
+
+
 @app.route('/api/leave/apply', methods=['POST'])
 @require_auth
 def apply_leave_new():
@@ -3501,13 +3693,29 @@ def apply_leave_new():
         conn = _db()
         emp_id = data.get('emp_id')
         # Look up the applicant's designation/dept so the correct approval chain is stored
-        emp_row = conn.execute("SELECT dept, desig, username FROM employees WHERE id=?", (emp_id,)).fetchone()
+        emp_row = conn.execute("SELECT dept, desig, username, empid, company_email FROM employees WHERE id=?", (emp_id,)).fetchone()
         role = _role_from_desig_dept(emp_row['desig'] if emp_row else '', emp_row['dept'] if emp_row else '', emp_row['username'] if emp_row else '')
         chain = _approval_chain_for_role(role)
+        applied_at = str(datetime.datetime.now())
         cur = conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at,approval_chain,approval_stage) VALUES (?,?,?,?,?,?,'pending',?,?,0)",
-                     (emp_id, data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), str(datetime.datetime.now()), _json_leave.dumps(chain)))
+                     (emp_id, data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), applied_at, _json_leave.dumps(chain)))
         new_id = cur.lastrowid
-        conn.commit(); conn.close()
+
+        # â”€â”€ PM / normal-employee leave â†’ notify HR dept + own-department Senior Manager â”€â”€
+        if role in ('pm', 'employee') and emp_row:
+            recipients = _leave_notification_recipients(conn, emp_row['dept'])
+            conn.commit(); conn.close()
+            if recipients:
+                threading.Thread(
+                    target=_send_leave_applied_notification,
+                    args=(emp_row['username'], emp_row['empid'], emp_row['dept'], emp_row['desig'],
+                          data.get('leave_type'), data.get('from_date'), data.get('to_date'),
+                          data.get('days', 1), data.get('reason', ''), applied_at, recipients),
+                    daemon=True
+                ).start()
+        else:
+            conn.commit(); conn.close()
+
         return jsonify({"success": True, "id": new_id}), 201
     except Exception as ex:
         print(f"[ERROR] {ex}")
