@@ -2819,16 +2819,35 @@ def _next_month_first(d):
     return datetime.date(d.year, d.month + 1, 1)
 
 
+
+# Sick Leave carry-over policy start: the FY (Apr-start year) from which SL
+# balance began being tracked in this system. Employees who joined years ago
+# should NOT have their SL balance computed all the way back to their join
+# date (that inflated everyone to the 32-day cap from day one) — this FY
+# should show the fresh 12-day annual allotment, and only unused days from
+# THIS point on should carry into future years.
+SL_POLICY_START_YEAR = 2026  # FY Apr 2026 - Mar 2027 is year one of tracked carry-over
+
+
+def _sl_fy_start_year(d):
+    """Given a date, return the calendar year its financial year (Apr-Mar) starts in."""
+    return d.year if d.month >= 4 else d.year - 1
+
+
 def _sl_balance_asof(conn, emp_id, joindate, asof_date):
-    """Sick Leave (SL) policy V24: accrues 1/month, running balance carries
-    over year to year, capped at a 32-day bucket (unlike CL which lapses
-    at FY-end, and EL which is encashed at FY-end). This simulates the
-    running balance month by month from the employee's join date (or a
-    safe fallback) up to `asof_date` (inclusive of that month's accrual),
-    subtracting actual SL taken each month, so carry-over across financial
-    years is reflected correctly.
-    Returns the SL balance (float, days remaining) as of the end of the
-    month containing asof_date.
+    """Sick Leave (SL) policy V26: a full 12-day allotment is granted at the
+    START of each financial year (not prorated monthly like Earned Leave) —
+    so a fresh FY correctly shows 12 available, not a partial/inflated number.
+    Any days left unused at FY-end carry into the next FY, running-total
+    capped at 32 days (same safety cap as before, so it can't grow forever).
+
+    Tracking starts at SL_POLICY_START_YEAR (Apr 2026) regardless of the
+    employee's original join date, so long-tenured employees aren't given
+    retroactive carry-over from years before this system tracked leave —
+    everyone's first tracked FY starts clean at 12. Employees who join AFTER
+    the policy start date still correctly start from their own join FY.
+
+    Returns the SL balance (float, days remaining) as of `asof_date`.
     """
     try:
         jd_raw = str(joindate or '')[:10]
@@ -2839,25 +2858,27 @@ def _sl_balance_asof(conn, emp_id, joindate, asof_date):
     if asof_date < jd:
         return 0.0
 
-    rows = conn.execute(
-        "SELECT substr(date,1,7) AS ym, COUNT(*) AS c FROM attendance "
-        "WHERE emp_id=? AND status='sl' AND date<=? GROUP BY ym",
-        (emp_id, asof_date.isoformat())
-    ).fetchall()
-    used_by_month = {r['ym']: r['c'] for r in rows}
+    target_fy_year = _sl_fy_start_year(asof_date)
+    start_fy_year = max(SL_POLICY_START_YEAR, _sl_fy_start_year(jd))
+    if target_fy_year < start_fy_year:
+        return 0.0
 
     balance = 0.0
-    cur = datetime.date(jd.year, jd.month, 1)
-    end = datetime.date(asof_date.year, asof_date.month, 1)
-    # Safety cap on iterations (e.g. bad/garbage joindate) — ~40 years of months
-    guard = 0
-    while cur <= end and guard < 500:
-        ym = cur.strftime('%Y-%m')
-        balance = min(32.0, balance + 1.0)
-        balance = max(0.0, balance - used_by_month.get(ym, 0))
-        cur = _next_month_first(cur)
-        guard += 1
+    y = start_fy_year
+    while y <= target_fy_year:
+        fy_start = datetime.date(y, 4, 1)
+        fy_end = datetime.date(y + 1, 3, 31)
+        usage_end = min(asof_date, fy_end) if y == target_fy_year else fy_end
+        used_row = conn.execute(
+            "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='sl' AND date>=? AND date<=?",
+            (emp_id, fy_start.isoformat(), usage_end.isoformat())
+        ).fetchone()
+        used = (used_row['c'] if used_row else 0) or 0
+        balance = max(0.0, min(32.0, balance + 12.0) - used)
+        y += 1
     return balance
+
+
 
 
 @app.route('/api/leave/report', methods=['GET'])
