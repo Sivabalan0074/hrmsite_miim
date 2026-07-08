@@ -3511,14 +3511,36 @@ async function handleApproval(reqId,action){
     delete appliedLeaveLog[logKey];
   }
 
-  // Try backend (non-blocking) — only called once the request reaches a final state
-  try{
-    const endpoint=action==='approved'?'approve':'reject';
-    await fetch(`/api/leave/${leaveId}/${endpoint}`,{
+  // Persist to backend — this is the call that actually writes the attendance
+  // record the dashboard's Leave Balance Report counts from. It used to be
+  // fire-and-forget with a silent catch, so a failed/timed-out request here
+  // looked identical to a success in the UI (toast still said "Approved",
+  // Approval History still logged it) while the dashboard's numbers never
+  // moved. Now we check the response and retry once before giving up.
+  const endpoint=action==='approved'?'approve':'reject';
+  async function _persistLeaveAction(){
+    const res=await fetch(`/api/leave/${leaveId}/${endpoint}`,{
       method:'POST',headers:getHeaders(),
       body:JSON.stringify({reviewed_by:currentRole,reject_note:action==='rejected'?'Rejected by manager':''})
     });
-  }catch(e){}
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j=await res.json().catch(()=>({}));
+    if(j && j.success===false) throw new Error(j.error||'backend returned success:false');
+    if(j && j.attendance_synced===false) throw new Error(j.warning||'attendance not synced');
+    return j;
+  }
+  try{
+    await _persistLeaveAction();
+  }catch(e){
+    console.error(`[leave ${endpoint}] first attempt failed for leaveId=${leaveId}:`,e);
+    try{
+      await _persistLeaveAction(); // one retry — covers transient network blips
+    }catch(e2){
+      console.error(`[leave ${endpoint}] retry also failed for leaveId=${leaveId}:`,e2);
+      showToast('error','⚠️ Saved locally, but dashboard sync failed',
+        `${req.empName}'s ${action} was NOT recorded on the server — leave balance report won't update. Please retry.`);
+    }
+  }
 
   // ── Remove from pendingLeaves completely (approved OR rejected) ──
   pendingLeaves=pendingLeaves.filter(l=>l.id!==reqId);
