@@ -3665,20 +3665,86 @@ def action_leave(leave_id, action):
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+def _sync_approval_history_to_attendance(conn, now):
+    """
+    SECOND-PASS REPAIR — covers approvals made through attendance.html's old
+    buggy approval flow: the pending-leave object's `id` was a client-side
+    Date.now() timestamp, never the same as the real leave_requests.id the
+    backend assigned on /api/leave/apply. So every /api/leave/<id>/approve
+    call silently matched zero rows (SQLite UPDATE with no matching id just
+    does nothing) — the leave_requests row stayed 'pending' forever, and the
+    live attendance-sync never ran. `_sync_leave_to_attendance`'s backfill
+    (above) only looks at status='approved' rows, so it found nothing to fix.
+
+    However, every one of those approvals WAS reliably logged to
+    approval_history independently of that broken id (it's just an insert of
+    the visible fields — employee name, leave type, leave date, action).
+    So this pass replays exact 'approved' entries from approval_history
+    directly onto the attendance table, matching by employee username + leave
+    date instead of the broken id link.
+
+    Only the exact action string 'approved' is replayed — intermediate
+    'approved (stage n/m)' sign-offs are skipped, since the leave wasn't
+    fully approved at that point yet.
+    Idempotent — already-correct attendance rows are left untouched.
+    """
+    rows = conn.execute(
+        "SELECT emp_name, leave_type, leave_date FROM approval_history WHERE action='approved'"
+    ).fetchall()
+    valid_types = {'sl', 'cl', 'el', 'pm'}
+    synced, failed = [], []
+    for r in rows:
+        try:
+            uname = (r['emp_name'] or '').strip()
+            ltype = (r['leave_type'] or '').strip().lower()
+            ldate = (r['leave_date'] or '').strip()[:10]
+            if not uname or ltype not in valid_types or not ldate:
+                continue
+            emp = conn.execute("SELECT id FROM employees WHERE lower(username)=lower(?)", (uname,)).fetchone()
+            if not emp:
+                failed.append({"emp_name": uname, "date": ldate, "error": "employee not found"})
+                continue
+            emp_id = emp['id']
+            existing = conn.execute("SELECT id, status FROM attendance WHERE emp_id=? AND date=?", (emp_id, ldate)).fetchone()
+            if existing:
+                if existing['status'] != ltype:
+                    conn.execute(
+                        "UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='APPROVAL_HISTORY_REPAIR',updated_at=? WHERE id=?",
+                        (ltype, now, existing['id'])
+                    )
+                    synced.append({"emp_name": uname, "date": ldate})
+            else:
+                conn.execute(
+                    "INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,'--','--',?,?,?)",
+                    (emp_id, ldate, ltype, 'APPROVAL_HISTORY_REPAIR', now)
+                )
+                synced.append({"emp_name": uname, "date": ldate})
+        except Exception as ex:
+            failed.append({"emp_name": r['emp_name'], "date": r['leave_date'], "error": str(ex)})
+    return synced, failed
+
+
 @app.route('/api/leave/backfill-attendance', methods=['POST'])
 @require_auth
 @require_role('admin')
 def backfill_leave_attendance():
     """
-    ONE-TIME REPAIR TOOL — admin only.
-    Scans every leave_requests row with status='approved' and makes sure its
-    attendance rows exist (using the exact same logic the live approve action
-    uses). Fixes historical leaves that were approved before the attendance
-    sync bug was patched — those show correctly in Approval History but were
-    never counted in the Leave Balance Report because their attendance rows
-    were never written.
-    Safe to run more than once (it's idempotent — already-correct rows are
-    left untouched).
+    ONE-TIME REPAIR TOOL — admin only. Runs two passes:
+
+    Pass 1: every leave_requests row with status='approved' gets its
+    attendance rows verified/written (same logic the live approve action
+    uses). Covers leaves approved through the correct flow before the
+    attendance-sync bug was patched.
+
+    Pass 2: replays approval_history entries directly onto the attendance
+    table (see _sync_approval_history_to_attendance). Covers leaves approved
+    through attendance.html's OLDER buggy flow, where the local request id
+    never matched the real backend leave_requests.id, so the row never
+    actually reached status='approved' in the DB at all — pass 1 alone can't
+    find these, since there's nothing with status='approved' to backfill.
+
+    Safe to run more than once (idempotent — already-correct rows are left
+    untouched either way).
     """
     try:
         now = str(datetime.datetime.now())
@@ -3691,16 +3757,22 @@ def backfill_leave_attendance():
                 fixed.append(r['id'])
             else:
                 failed.append({"leave_id": r['id'], "error": err})
+
+        history_synced, history_failed = _sync_approval_history_to_attendance(conn, now)
+
         conn.commit(); conn.close()
         return jsonify({
             "success": True,
             "total_approved_leaves": len(rows),
             "synced": len(fixed),
-            "failed": failed
+            "failed": failed,
+            "history_synced": len(history_synced),
+            "history_failed": history_failed
         })
     except Exception as ex:
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
+
 
 
 @app.route('/attendance.html')

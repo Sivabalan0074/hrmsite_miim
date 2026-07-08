@@ -9544,7 +9544,8 @@ async function runLeaveBackfill(){
     if (res.ok && data.success){
       const failedNote = (data.failed && data.failed.length) ? ` (${data.failed.length} failed — check console)` : '';
       if (data.failed && data.failed.length) console.warn('[Leave Backfill] failures:', data.failed);
-      showToast(`🔧 Synced ${data.synced}/${data.total_approved_leaves} approved leave(s)${failedNote}`, 'success');
+      const histNote = data.history_synced ? ` + ${data.history_synced} from Approval History` : '';
+      showToast(`🔧 Synced ${data.synced}/${data.total_approved_leaves} approved leave(s)${histNote}${failedNote}`, 'success');
       loadLeaveReport();
     } else {
       showToast('Backfill failed: ' + (data.error || `Server returned ${res.status}`), 'error');

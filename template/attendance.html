@@ -3248,14 +3248,43 @@ async function applyLeave(){
     updatePendingBadge();
   }
 
-  // Also try backend (non-blocking)
+  // ── Backend sync ──────────────────────────────────────────────────────────
+  // CRITICAL: this used to be fire-and-forget and ignored the response, which
+  // meant the local pendingLeaves entry's `id` (a client-side Date.now()
+  // timestamp) was the ONLY id ever used later when approving/rejecting.
+  // That id never matches the real leave_requests.id the backend assigned,
+  // so /api/leave/<fakeId>/approve always hit a non-existent row — the
+  // approval "succeeded" locally and in Approval History, but the server-side
+  // status never actually flipped to 'approved' and no attendance row was
+  // ever written, so the Leave Balance Report stayed at 0 forever no matter
+  // how many times "Fix Missing Attendance" was run (there was nothing
+  // approved in the DB to fix). Now we capture the real id and attach it.
   try{
     const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Annual'};
     const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
-    await fetch('/api/leave/apply',{
+    const _applyRes=await fetch('/api/leave/apply',{
       method:'POST',headers:getHeaders(),
       body:JSON.stringify({emp_id:leaveModalEmpId,leave_type:backendType,from_date:dKey,to_date:dKey,reason:reason||''})
     });
+    const _applyData=await _applyRes.json().catch(()=>null);
+    const _backendId=_applyData&&_applyData.success?_applyData.id:null;
+    if(_backendId){
+      if(isAdminSelfApply){
+        // Admin self-apply is auto-approved locally — mirror that on the
+        // backend immediately too, so its attendance row gets written and it
+        // shows up correctly in the Leave Balance Report right away.
+        try{
+          await fetch(`/api/leave/${_backendId}/approve`,{method:'POST',headers:getHeaders(),
+            body:JSON.stringify({reviewed_by:currentRole})});
+        }catch(e){}
+      } else {
+        // Attach the real backend id to the just-created pending entry so
+        // handleApproval() (which prefers req.leave_id over req.id) targets
+        // the correct row when this request is later approved/rejected.
+        const _p=pendingLeaves.find(l=>l.empId===leaveModalEmpId&&l.date===dKey&&l.status==='pending');
+        if(_p){ _p.leave_id=_backendId; persistPendingLeaves(); }
+      }
+    }
   }catch(e){}
 
   markChanged();
