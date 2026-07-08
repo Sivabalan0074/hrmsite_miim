@@ -3556,6 +3556,48 @@ def get_leave_new():
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
 
+def _sync_leave_to_attendance(conn, leave_id, now):
+    """Write/refresh attendance rows for one APPROVED leave request.
+    Shared by the live approve action and the one-time backfill endpoint
+    below, so both use identical logic. Returns (ok: bool, error: str|None).
+    """
+    try:
+        row = conn.execute("SELECT emp_id, leave_type, from_date, to_date FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
+        if not row:
+            return False, f"leave_requests row {leave_id} not found"
+        emp_id = row['emp_id']
+        leave_type = (row['leave_type'] or '').lower().strip()
+        lt_map = {
+            'sick leave': 'sl', 'sick': 'sl', 'sl': 'sl',
+            'casual leave': 'cl', 'casual': 'cl', 'cl': 'cl',
+            'earned leave': 'el', 'earned': 'el', 'el': 'el',
+            'paid leave': 'el', 'paid': 'el', 'pl': 'el',
+            'annual leave': 'el', 'annual': 'el',
+            'permission': 'pm', 'pm': 'pm',
+        }
+        att_status = lt_map.get(leave_type, 'cl')
+        from_dt = datetime.datetime.strptime(str(row['from_date'])[:10], '%Y-%m-%d').date()
+        to_dt   = datetime.datetime.strptime(str(row['to_date'])[:10], '%Y-%m-%d').date()
+        cur = from_dt
+        while cur <= to_dt:
+            date_str = str(cur)
+            existing = conn.execute("SELECT id, status FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
+            if existing:
+                # Don't clobber a row that's already correctly marked with this leave
+                # code (idempotent — safe to re-run the backfill any number of times).
+                if existing['status'] != att_status:
+                    conn.execute("UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='LEAVE_AUTO',updated_at=? WHERE id=?",
+                                 (att_status, now, existing['id']))
+            else:
+                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,'--','--',?,?,?)",
+                             (emp_id, date_str, att_status, 'LEAVE_AUTO', now))
+            cur += datetime.timedelta(days=1)
+        return True, None
+    except Exception as att_ex:
+        print(f"[LEAVE SYNC] attendance sync FAILED for leave_id={leave_id}: {att_ex}")
+        return False, str(att_ex)
+
+
 @app.route('/api/leave/<int:leave_id>/<action>', methods=['POST'])
 @require_auth
 def action_leave(leave_id, action):
@@ -3581,39 +3623,60 @@ def action_leave(leave_id, action):
         status = 'approved' if action == 'approve' else 'rejected'
         conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, now, leave_id))
 
-        # If approved â€” also mark attendance table for each day of leave
+        # If approved -- also mark attendance table for each day of leave.
+        # Isolated via the shared helper: if it throws (bad date format, row
+        # vanished, etc.) we log it loudly and flag it in the response,
+        # instead of it silently failing while everything else (Approval
+        # History, the toast) still says "Approved".
+        attendance_synced = True
+        attendance_error = None
         if status == 'approved':
-            row = conn.execute("SELECT emp_id, leave_type, from_date, to_date FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
-            if row:
-                emp_id = row['emp_id']
-                leave_type = (row['leave_type'] or '').lower().strip()
-                # Normalize leave type to attendance status code
-                lt_map = {
-                    'sick leave': 'sl', 'sick': 'sl', 'sl': 'sl',
-                    'casual leave': 'cl', 'casual': 'cl', 'cl': 'cl',
-                    'earned leave': 'el', 'earned': 'el', 'el': 'el',
-                    'paid leave': 'el', 'paid': 'el', 'pl': 'el',
-                    'annual leave': 'el', 'annual': 'el',
-                    'permission': 'pm', 'pm': 'pm',
-                }
-                att_status = lt_map.get(leave_type, 'cl')
-                # Loop each date from_date to to_date
-                from_dt = datetime.datetime.strptime(str(row['from_date'])[:10], '%Y-%m-%d').date()
-                to_dt   = datetime.datetime.strptime(str(row['to_date'])[:10], '%Y-%m-%d').date()
-                cur = from_dt
-                while cur <= to_dt:
-                    date_str = str(cur)
-                    existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
-                    if existing:
-                        conn.execute("UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='LEAVE_AUTO',updated_at=? WHERE id=?",
-                                     (att_status, now, existing['id']))
-                    else:
-                        conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,'--','--',?,?,?)",
-                                     (emp_id, date_str, att_status, 'LEAVE_AUTO', now))
-                    cur += datetime.timedelta(days=1)
+            attendance_synced, attendance_error = _sync_leave_to_attendance(conn, leave_id, now)
 
         conn.commit(); conn.close()
-        return jsonify({"success": True})
+        resp: dict[str, object] = {"success": True}
+        if status == 'approved' and not attendance_synced:
+            resp["attendance_synced"] = False
+            resp["warning"] = attendance_error
+        return jsonify(resp)
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/leave/backfill-attendance', methods=['POST'])
+@require_auth
+@require_role('admin')
+def backfill_leave_attendance():
+    """
+    ONE-TIME REPAIR TOOL — admin only.
+    Scans every leave_requests row with status='approved' and makes sure its
+    attendance rows exist (using the exact same logic the live approve action
+    uses). Fixes historical leaves that were approved before the attendance
+    sync bug was patched — those show correctly in Approval History but were
+    never counted in the Leave Balance Report because their attendance rows
+    were never written.
+    Safe to run more than once (it's idempotent — already-correct rows are
+    left untouched).
+    """
+    try:
+        now = str(datetime.datetime.now())
+        conn = _db()
+        rows = conn.execute("SELECT id FROM leave_requests WHERE status='approved'").fetchall()
+        fixed, failed = [], []
+        for r in rows:
+            ok, err = _sync_leave_to_attendance(conn, r['id'], now)
+            if ok:
+                fixed.append(r['id'])
+            else:
+                failed.append({"leave_id": r['id'], "error": err})
+        conn.commit(); conn.close()
+        return jsonify({
+            "success": True,
+            "total_approved_leaves": len(rows),
+            "synced": len(fixed),
+            "failed": failed
+        })
     except Exception as ex:
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
