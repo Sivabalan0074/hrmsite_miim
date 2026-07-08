@@ -2803,6 +2803,63 @@ def _fy_bounds(year, month):
     return fy_start, fy_label, month_in_fy
 
 
+def _fy_from_start_year(fy_start_year):
+    """Given the calendar year the FY starts in (e.g. 2026 -> Apr2026-Mar2027),
+    return (fy_start 'YYYY-MM-DD', fy_end 'YYYY-MM-DD', fy_label)."""
+    fy_start = f"{fy_start_year:04d}-04-01"
+    fy_end = f"{fy_start_year+1:04d}-03-31"
+    fy_label = f"Apr {fy_start_year}\u2013Mar {fy_start_year+1}"
+    return fy_start, fy_end, fy_label
+
+
+def _next_month_first(d):
+    """Given a date that is the 1st of a month, return the 1st of the next month."""
+    if d.month == 12:
+        return datetime.date(d.year + 1, 1, 1)
+    return datetime.date(d.year, d.month + 1, 1)
+
+
+def _sl_balance_asof(conn, emp_id, joindate, asof_date):
+    """Sick Leave (SL) policy V24: accrues 1/month, running balance carries
+    over year to year, capped at a 32-day bucket (unlike CL which lapses
+    at FY-end, and EL which is encashed at FY-end). This simulates the
+    running balance month by month from the employee's join date (or a
+    safe fallback) up to `asof_date` (inclusive of that month's accrual),
+    subtracting actual SL taken each month, so carry-over across financial
+    years is reflected correctly.
+    Returns the SL balance (float, days remaining) as of the end of the
+    month containing asof_date.
+    """
+    try:
+        jd_raw = str(joindate or '')[:10]
+        jd = datetime.date.fromisoformat(jd_raw) if jd_raw else datetime.date(2000, 1, 1)
+    except Exception:
+        jd = datetime.date(2000, 1, 1)
+
+    if asof_date < jd:
+        return 0.0
+
+    rows = conn.execute(
+        "SELECT substr(date,1,7) AS ym, COUNT(*) AS c FROM attendance "
+        "WHERE emp_id=? AND status='sl' AND date<=? GROUP BY ym",
+        (emp_id, asof_date.isoformat())
+    ).fetchall()
+    used_by_month = {r['ym']: r['c'] for r in rows}
+
+    balance = 0.0
+    cur = datetime.date(jd.year, jd.month, 1)
+    end = datetime.date(asof_date.year, asof_date.month, 1)
+    # Safety cap on iterations (e.g. bad/garbage joindate) — ~40 years of months
+    guard = 0
+    while cur <= end and guard < 500:
+        ym = cur.strftime('%Y-%m')
+        balance = min(32.0, balance + 1.0)
+        balance = max(0.0, balance - used_by_month.get(ym, 0))
+        cur = _next_month_first(cur)
+        guard += 1
+    return balance
+
+
 @app.route('/api/leave/report', methods=['GET'])
 @require_auth
 def leave_balance_report():
@@ -2810,17 +2867,67 @@ def leave_balance_report():
     Department-wise leave balance & usage report — for every active employee
     (optionally filtered to one department), shows how much CL/SL/EL/PM
     they've used and how much they have left, computed straight from the
-    real attendance records for the current financial year (Apr-Mar).
-    Query params: dept (optional; omit or 'all' for every department)
+    real attendance records — for a chosen financial year (Apr-Mar).
+
+    Query params:
+      dept (optional; omit or 'all' for every department)
+      fy   (optional; the calendar year the FY starts in, e.g. 2026 for
+            "Apr 2026 - Mar 2027". Defaults to the current financial year.)
+
+    MIIM Leave Policy V24, applied per leave type:
+      CL (Casual Leave)  -> 12/year flat quota. Lapses at year-end (no
+                             carry-over into the next FY).
+      SL (Sick Leave)    -> accrues 1/month (12/year). Carries over into
+                             future years, capped at a running 32-day
+                             bucket. "total" below already includes any
+                             carried-over balance.
+      EL (Earned Leave)  -> accrues 0.5/month (6/year). Encashed in the
+                             April salary run, so it does not carry into
+                             the next FY (same as lapsing, for leave-day
+                             purposes).
+      PM (Permission)    -> 2/month, resets every month (not cumulative).
+                             Shown here as the FY-to-date total (2 x months
+                             elapsed in the selected FY).
     """
     try:
         dept_filter = request.args.get('dept', '').strip()
+        fy_param = request.args.get('fy', '').strip()
+
         today = datetime.date.today()
-        fy_start, fy_label, month_in_fy = _fy_bounds(today.year, today.month)
-        month_start = today.strftime('%Y-%m-01')
+        cur_fy_start, cur_fy_label, cur_month_in_fy = _fy_bounds(today.year, today.month)
+        cur_fy_start_year = int(cur_fy_start[:4])
+
+        if fy_param:
+            try:
+                fy_start_year = int(fy_param)
+            except ValueError:
+                fy_start_year = cur_fy_start_year
+        else:
+            fy_start_year = cur_fy_start_year
+
+        fy_start, fy_end, fy_label = _fy_from_start_year(fy_start_year)
+        fy_start_date = datetime.date.fromisoformat(fy_start)
+        fy_end_date = datetime.date.fromisoformat(fy_end)
+
+        if fy_start_year > cur_fy_start_year:
+            # A future FY that hasn't started yet — nothing accrued/used.
+            month_in_fy = 0
+            usage_end = fy_start  # no usage possible before it even starts
+            sl_asof_date = fy_start_date - datetime.timedelta(days=1)  # end of prior FY
+        elif fy_start_year == cur_fy_start_year:
+            month_in_fy = cur_month_in_fy
+            usage_end = today.isoformat()
+            sl_asof_date = today
+        else:
+            month_in_fy = 12
+            usage_end = fy_end
+            sl_asof_date = fy_end_date
+
+        # SL balance carried INTO this FY (i.e. balance as of the day before FY start)
+        sl_carry_in_date = fy_start_date - datetime.timedelta(days=1)
 
         conn = _db()
-        q = "SELECT id, username, dept, desig, type FROM employees WHERE status='active'"
+        q = "SELECT id, username, dept, desig, type, joindate FROM employees WHERE status='active'"
         params = []
         if dept_filter and dept_filter.lower() != 'all':
             q += " AND dept=?"
@@ -2828,39 +2935,134 @@ def leave_balance_report():
         q += " ORDER BY dept, username"
         emps = conn.execute(q, tuple(params)).fetchall()
 
-        cl_total, sl_accrued, el_accrued, pm_month_total = 12, min(month_in_fy, 12), round(min(month_in_fy * 0.5, 6.0), 1), 2
+        cl_total = 12
+        el_accrued = round(min(month_in_fy * 0.5, 6.0), 1)
+        pm_fy_total = 2 * month_in_fy
 
         result = []
         for e in emps:
             emp_id = e['id']
             is_perm = (e['type'] or '') in ('Regular', 'Regular(PIP)')
             counts = {"cl": 0, "sl": 0, "el": 0}
-            rows = conn.execute(
-                "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el') GROUP BY status",
-                (emp_id, fy_start, today.isoformat())
-            ).fetchall()
-            for r in rows:
-                counts[r['status']] = r['c']
-            pm_row = conn.execute(
-                "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='pm' AND date>=?",
-                (emp_id, month_start)
-            ).fetchone()
-            pm_used = (pm_row['c'] if pm_row else 0) or 0
+            if month_in_fy > 0:
+                rows = conn.execute(
+                    "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el') GROUP BY status",
+                    (emp_id, fy_start, usage_end)
+                ).fetchall()
+                for r in rows:
+                    counts[r['status']] = r['c']
+            pm_used = 0
+            if month_in_fy > 0:
+                pm_row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='pm' AND date>=? AND date<=?",
+                    (emp_id, fy_start, usage_end)
+                ).fetchone()
+                pm_used = (pm_row['c'] if pm_row else 0) or 0
+
+            # SL: running balance (with carry-over, capped 32) as of end of selected FY / today
+            sl_remaining = round(_sl_balance_asof(conn, emp_id, e['joindate'], sl_asof_date), 1) if is_perm else 0
+            sl_carried_in = round(_sl_balance_asof(conn, emp_id, e['joindate'], sl_carry_in_date), 1) if is_perm else 0
+            sl_used = counts['sl']
+            sl_total = round(sl_used + sl_remaining, 1)
 
             result.append({
                 "id": emp_id, "username": e['username'], "dept": e['dept'],
                 "desig": e['desig'], "type": e['type'], "is_permanent": is_perm,
                 "cl": {"used": counts['cl'], "total": cl_total if is_perm else 0,
-                       "remaining": max(0, cl_total - counts['cl']) if is_perm else 0},
-                "sl": {"used": counts['sl'], "total": sl_accrued if is_perm else 0,
-                       "remaining": max(0, sl_accrued - counts['sl']) if is_perm else 0},
+                       "remaining": max(0, cl_total - counts['cl']) if is_perm else 0,
+                       "carried_over": 0},
+                "sl": {"used": sl_used, "total": sl_total if is_perm else 0,
+                       "remaining": sl_remaining if is_perm else 0,
+                       "carried_over": sl_carried_in if is_perm else 0},
                 "el": {"used": counts['el'], "total": el_accrued if is_perm else 0,
-                       "remaining": max(0, el_accrued - counts['el']) if is_perm else 0},
-                "pm": {"used": pm_used, "total": pm_month_total,
-                       "remaining": max(0, pm_month_total - pm_used)},
+                       "remaining": max(0, round(el_accrued - counts['el'], 1)) if is_perm else 0,
+                       "carried_over": 0},
+                "pm": {"used": pm_used, "total": pm_fy_total,
+                       "remaining": max(0, pm_fy_total - pm_used),
+                       "carried_over": 0},
             })
         conn.close()
-        return jsonify({"success": True, "fy_label": fy_label, "employees": result})
+        return jsonify({
+            "success": True,
+            "fy_label": fy_label,
+            "fy_start_year": fy_start_year,
+            "is_current_fy": (fy_start_year == cur_fy_start_year),
+            "employees": result
+        })
+    except Exception as ex:
+        print(f"[API Error] {ex}"); return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/leave/report/monthly', methods=['GET'])
+@require_auth
+def leave_report_monthly():
+    """
+    Month-by-month (Apr -> Mar) breakdown of CL/SL/EL/PM taken by ONE
+    employee for a chosen financial year — powers both the "click a row"
+    drill-down on the Department Leave Report, and an employee's own
+    month-wise leave summary under My Attendance.
+    Query params:
+      emp_id -- required
+      fy     -- optional, calendar year the FY starts in; defaults to current FY
+    """
+    try:
+        emp_id = request.args.get('emp_id')
+        if not emp_id:
+            return jsonify({"success": False, "error": "emp_id is required"}), 400
+        fy_param = request.args.get('fy', '').strip()
+
+        today = datetime.date.today()
+        cur_fy_start, _, _ = _fy_bounds(today.year, today.month)
+        cur_fy_start_year = int(cur_fy_start[:4])
+        try:
+            fy_start_year = int(fy_param) if fy_param else cur_fy_start_year
+        except ValueError:
+            fy_start_year = cur_fy_start_year
+
+        fy_start, fy_end, fy_label = _fy_from_start_year(fy_start_year)
+
+        conn = _db()
+        emp = conn.execute("SELECT username, dept, desig, type, joindate FROM employees WHERE id=?", (emp_id,)).fetchone()
+
+        rows = conn.execute(
+            "SELECT substr(date,1,7) AS ym, status, COUNT(*) AS c FROM attendance "
+            "WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el','pm') "
+            "GROUP BY ym, status",
+            (emp_id, fy_start, fy_end)
+        ).fetchall()
+        by_month = {}
+        for r in rows:
+            by_month.setdefault(r['ym'], {"cl": 0, "sl": 0, "el": 0, "pm": 0})[r['status']] = r['c']
+
+        _MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
+        months = []
+        cur = datetime.date(fy_start_year, 4, 1)
+        totals = {"cl": 0, "sl": 0, "el": 0, "pm": 0}
+        for i in range(12):
+            ym = cur.strftime('%Y-%m')
+            counts = by_month.get(ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0})
+            cal_year = cur.year
+            months.append({
+                "ym": ym, "label": f"{_MONTHS[i]} {cal_year}",
+                "cl": counts['cl'], "sl": counts['sl'], "el": counts['el'], "pm": counts['pm'],
+                "is_future": cur > today
+            })
+            for k in totals:
+                totals[k] += counts[k]
+            cur = _next_month_first(cur)
+
+        conn.close()
+        return jsonify({
+            "success": True,
+            "emp_id": emp_id,
+            "username": emp['username'] if emp else '',
+            "dept": emp['dept'] if emp else '',
+            "desig": emp['desig'] if emp else '',
+            "fy_label": fy_label,
+            "fy_start_year": fy_start_year,
+            "months": months,
+            "totals": totals
+        })
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"success": False, "error": "Internal server error"}), 500
 

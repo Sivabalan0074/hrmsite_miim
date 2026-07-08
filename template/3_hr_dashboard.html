@@ -4401,13 +4401,16 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
       </div>
       <button onclick="closeLeaveReportModal()" style="background:none;border:none;color:#8a8f9c;font-size:20px;cursor:pointer;line-height:1;padding:4px;">✕</button>
     </div>
-    <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;">
+    <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <label style="font-size:11px;color:#8a8f9c;text-transform:uppercase;letter-spacing:.5px;">Department</label>
       <select id="leaveReportDeptFilter" onchange="loadLeaveReport()" style="background:#1b1e29;border:1px solid rgba(255,255,255,.12);color:#f5f5f5;padding:7px 12px;border-radius:8px;font-size:13px;min-width:180px;">
         <option value="all">All Departments</option>
       </select>
+      <label style="font-size:11px;color:#8a8f9c;text-transform:uppercase;letter-spacing:.5px;">Financial Year</label>
+      <select id="leaveReportFyFilter" onchange="loadLeaveReport()" style="background:#1b1e29;border:1px solid rgba(255,255,255,.12);color:#f5f5f5;padding:7px 12px;border-radius:8px;font-size:13px;min-width:160px;"></select>
       <span id="leaveReportCount" style="margin-left:auto;font-size:11px;color:#8a8f9c;"></span>
     </div>
+    <div style="padding:8px 22px 0;font-size:10.5px;color:#666;">💡 Click any employee row to see their month-wise leave for the selected year.</div>
     <div style="overflow:auto;padding:0 22px 22px;flex:1;">
       <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead>
@@ -4422,6 +4425,35 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
         </thead>
         <tbody id="leaveReportTbody">
           <tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- EMPLOYEE MONTH-WISE LEAVE DRILL-DOWN MODAL -->
+<div id="empMonthlyLeaveOverlay" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,.7);align-items:center;justify-content:center;">
+  <div style="background:#12141c;border:1px solid rgba(255,255,255,.08);border-radius:14px;width:min(620px,92vw);max-height:86vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:'DM Sans',sans-serif;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.08);">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#f5f5f5;" id="empMonthlyLeaveName">📅 Month-wise Leave</div>
+        <div style="font-size:11px;color:#8a8f9c;margin-top:2px;" id="empMonthlyLeaveFy"></div>
+      </div>
+      <button onclick="closeEmpMonthlyLeaveModal()" style="background:none;border:none;color:#8a8f9c;font-size:20px;cursor:pointer;line-height:1;padding:4px;">✕</button>
+    </div>
+    <div style="overflow:auto;padding:14px 20px 20px;flex:1;">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:8px 6px;color:#8a8f9c;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Month</th>
+            <th style="text-align:center;padding:8px 6px;color:#eab308;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">SL</th>
+            <th style="text-align:center;padding:8px 6px;color:#a855f7;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">EL</th>
+            <th style="text-align:center;padding:8px 6px;color:#3b82f6;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">CL</th>
+            <th style="text-align:center;padding:8px 6px;color:#f97316;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">PM</th>
+          </tr>
+        </thead>
+        <tbody id="empMonthlyLeaveTbody">
+          <tr><td colspan="5" style="text-align:center;padding:24px;color:#8a8f9c;">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -4504,6 +4536,86 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
               </div>
             </div>
           </div><!-- end myAttDetailSection -->
+
+          <!-- ── MY MONTH-WISE LEAVE (inline, not a modal) ── -->
+          <div id="myMonthlyLeaveSection" style="margin-top:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+              <div style="font-family:Rajdhani,sans-serif;font-size:1rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#f97316;display:flex;align-items:center;gap:8px;">
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11H1v10h8V11zM23 3h-8v18h8V3zM17 15H9v6h8v-6z"/></svg>
+                My Leave — Month-wise
+              </div>
+              <select id="myLeaveFyFilter" onchange="_loadMyMonthlyLeave()" style="background:#1b1e29;border:1px solid rgba(255,255,255,.12);color:#f5f5f5;padding:6px 10px;border-radius:8px;font-size:12px;"></select>
+            </div>
+            <div style="background:#141414;border:1px solid #222;border-radius:12px;overflow:hidden;">
+              <div style="overflow:auto;max-height:340px;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                  <thead>
+                    <tr style="position:sticky;top:0;background:#141414;">
+                      <th style="text-align:left;padding:8px 10px;color:#8a8f9c;font-weight:600;border-bottom:1px solid #222;">Month</th>
+                      <th style="text-align:center;padding:8px 10px;color:#eab308;font-weight:600;border-bottom:1px solid #222;">SL</th>
+                      <th style="text-align:center;padding:8px 10px;color:#a855f7;font-weight:600;border-bottom:1px solid #222;">EL</th>
+                      <th style="text-align:center;padding:8px 10px;color:#3b82f6;font-weight:600;border-bottom:1px solid #222;">CL</th>
+                      <th style="text-align:center;padding:8px 10px;color:#f97316;font-weight:600;border-bottom:1px solid #222;">PM</th>
+                    </tr>
+                  </thead>
+                  <tbody id="myMonthlyLeaveTbody">
+                    <tr><td colspan="5" style="text-align:center;padding:20px;color:#888;">Loading…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── MY LEAVE POLICY (inline reference, not a modal) ── -->
+          <div id="myLeavePolicySection" style="margin-top:20px;">
+            <div style="font-family:Rajdhani,sans-serif;font-size:1rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#f97316;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+              <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              MIIM Leave Policy <span style="color:#666;font-weight:600;">V24</span>
+            </div>
+            <div style="background:#141414;border:1px solid #222;border-radius:12px;padding:16px;">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#ca8a04;margin-bottom:10px;">⏳ Probationary &amp; Intern</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:16px;">
+                <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
+                  <div style="color:#eab308;font-weight:700;margin-bottom:6px;">⏳ Probationary</div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Leave allowed</span><span style="color:#e5e5e5;">1 day/month</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Extra leave</span><span style="color:#ef4444;">→ LOP</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>CL/SL/EL</span><span style="color:#ef4444;">Not applicable</span></div>
+                </div>
+                <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
+                  <div style="color:#22c55e;font-weight:700;margin-bottom:6px;">🎓 Intern</div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Leave allowed</span><span style="color:#e5e5e5;">1 day/month</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Extra leave</span><span style="color:#ef4444;">→ LOP</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>CL/SL/EL</span><span style="color:#ef4444;">Not applicable</span></div>
+                </div>
+              </div>
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#22c55e;margin-bottom:10px;">🟢 Permanent Employees</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
+                  <div style="color:#3b82f6;font-weight:700;margin-bottom:6px;">🏖️ Casual Leave (CL)</div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Quota</span><span style="color:#3b82f6;font-weight:700;">12 days/year</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Carry-over</span><span style="color:#ef4444;">Lapsed year-end</span></div>
+                </div>
+                <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
+                  <div style="color:#eab308;font-weight:700;margin-bottom:6px;">🤒 Sick Leave (SL)</div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Accrual</span><span style="color:#eab308;font-weight:700;">1/month → 12/yr</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Max bucket</span><span style="color:#22c55e;">32 days cap (carries over)</span></div>
+                </div>
+                <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
+                  <div style="color:#a855f7;font-weight:700;margin-bottom:6px;">⭐ Earned Leave (EL)</div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Accrual</span><span style="color:#a855f7;font-weight:700;">0.5/month → 6/yr</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Encashment</span><span style="color:#e5e5e5;">April salary</span></div>
+                </div>
+                <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
+                  <div style="color:#f97316;font-weight:700;margin-bottom:6px;">🔔 Permission (PM)</div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Allowed</span><span style="color:#f97316;font-weight:700;">2/month · 2hrs</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Carry-over</span><span style="color:#ef4444;">Monthly reset</span></div>
+                </div>
+              </div>
+              <div style="margin-top:14px;padding:10px 14px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.25);border-radius:8px;font-size:11px;color:#ca8a04;">
+                ⚠️ <b>Notice Period:</b> All leaves = LOP during notice period.
+              </div>
+            </div>
+          </div>
 
         </div>
       </div><!-- end panel-general -->
@@ -9399,6 +9511,7 @@ function openLeaveReportModal(){
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   populateLeaveReportDeptFilter();
+  populateLeaveReportFyFilter();
   loadLeaveReport();
 }
 function closeLeaveReportModal(){
@@ -9406,8 +9519,33 @@ function closeLeaveReportModal(){
   document.body.style.overflow = '';
 }
 document.addEventListener('keydown', function(e){
-  if (e.key === 'Escape') { const ov=document.getElementById('leaveReportModalOverlay'); if(ov && ov.style.display!=='none') closeLeaveReportModal(); }
+  if (e.key === 'Escape') {
+    const eov=document.getElementById('empMonthlyLeaveOverlay');
+    if (eov && eov.style.display!=='none') { closeEmpMonthlyLeaveModal(); return; }
+    const ov=document.getElementById('leaveReportModalOverlay'); if(ov && ov.style.display!=='none') closeLeaveReportModal();
+  }
 });
+
+// Financial Year runs Apr -> Mar. Populate a handful of years (2 years ahead
+// isn't meaningful, so we show current FY + a few past years) so HR/Admin
+// can look at how leave (esp. SL carry-over) tracked over time.
+function _leaveReportCurrentFyStartYear(){
+  var t = new Date();
+  return (t.getMonth() + 1) >= 4 ? t.getFullYear() : t.getFullYear() - 1;
+}
+function populateLeaveReportFyFilter(){
+  const sel = document.getElementById('leaveReportFyFilter');
+  if (!sel || sel.dataset.loaded) return;
+  const curFy = _leaveReportCurrentFyStartYear();
+  for (let y = curFy; y >= curFy - 5; y--){
+    const opt = document.createElement('option');
+    opt.value = String(y);
+    opt.textContent = 'Apr ' + y + ' – Mar ' + (y+1) + (y===curFy ? ' (Current)' : '');
+    sel.appendChild(opt);
+  }
+  sel.value = String(curFy);
+  sel.dataset.loaded = '1';
+}
 
 async function populateLeaveReportDeptFilter(){
   const sel = document.getElementById('leaveReportDeptFilter');
@@ -9427,19 +9565,25 @@ async function populateLeaveReportDeptFilter(){
   }catch(e){}
 }
 
+var _leaveReportEmpById = {};
+
 async function loadLeaveReport(){
   const tbody = document.getElementById('leaveReportTbody');
   const dept = document.getElementById('leaveReportDeptFilter').value || 'all';
+  const fySel = document.getElementById('leaveReportFyFilter');
+  const fy = fySel && fySel.value ? fySel.value : String(_leaveReportCurrentFyStartYear());
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>';
   try{
-    const res = await fetch('/api/leave/report?dept=' + encodeURIComponent(dept), { headers: _dedHdrs() });
+    const res = await fetch('/api/leave/report?dept=' + encodeURIComponent(dept) + '&fy=' + encodeURIComponent(fy), { headers: _dedHdrs() });
     const data = await res.json();
     if (!data.success){
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#ef4444;">Could not load report.</td></tr>';
       return;
     }
-    document.getElementById('leaveReportFyLabel').textContent = 'Financial Year: ' + (data.fy_label||'');
+    document.getElementById('leaveReportFyLabel').textContent = 'Financial Year: ' + (data.fy_label||'') + (data.is_current_fy===false ? ' (past year)' : '');
     const emps = data.employees || [];
+    _leaveReportEmpById = {};
+    emps.forEach(e=>{ _leaveReportEmpById[e.id] = e; });
     document.getElementById('leaveReportCount').textContent = emps.length + ' employee' + (emps.length!==1?'s':'');
     if (!emps.length){
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">No employees found.</td></tr>';
@@ -9448,26 +9592,31 @@ async function loadLeaveReport(){
     // Group by department for readability
     const byDept = {};
     emps.forEach(e=>{ (byDept[e.dept||'—'] = byDept[e.dept||'—']||[]).push(e); });
-    const pill = (used, total, color) => total>0
-      ? `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
+    const pill = (leaveObj, color) => {
+      const used = leaveObj.used, total = leaveObj.total;
+      if (!(total>0)) return `<span style="color:#555;">—</span>`;
+      const carry = leaveObj.carried_over || 0;
+      const carryNote = carry>0 ? `<span style="font-size:9px;color:#666;">(${carry} carried)</span>` : '';
+      return `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
            <span style="font-weight:700;color:${color};">${used}<span style="color:#666;font-weight:400;"> / ${total}</span></span>
            <span style="font-size:10px;color:#8a8f9c;">${Math.max(0,total-used)} left</span>
-         </div>`
-      : `<span style="color:#555;">—</span>`;
+           ${carryNote}
+         </div>`;
+    };
     let html = '';
     Object.keys(byDept).sort().forEach(dept=>{
       html += `<tr><td colspan="6" style="padding:14px 8px 6px;font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid rgba(255,255,255,.06);">${dept} <span style="color:#8a8f9c;font-weight:400;">(${byDept[dept].length})</span></td></tr>`;
       byDept[dept].forEach(e=>{
-        html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04);">
+        html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;" onclick="openEmpMonthlyLeaveModal(${e.id})" onmouseover="this.style.background='rgba(255,255,255,.03)'" onmouseout="this.style.background='transparent'">
           <td style="padding:9px 8px;">
             <div style="font-weight:600;color:#f0f0f0;">${e.username}</div>
             <div style="font-size:10px;color:#8a8f9c;">${e.desig||''} · ${e.type||''}</div>
           </td>
           <td style="padding:9px 8px;color:#8a8f9c;">${e.dept||''}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.sl.used, e.sl.total, '#eab308')}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.el.used, e.el.total, '#a855f7')}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.cl.used, e.cl.total, '#3b82f6')}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.pm.used, e.pm.total, '#f97316')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.sl, '#eab308')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.el, '#a855f7')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.cl, '#3b82f6')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.pm, '#f97316')}</td>
         </tr>`;
       });
     });
@@ -9475,6 +9624,55 @@ async function loadLeaveReport(){
   }catch(e){
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#ef4444;">Network error loading report.</td></tr>';
   }
+}
+
+// ── Employee month-wise leave drill-down (opens when a report row is clicked) ──
+async function openEmpMonthlyLeaveModal(empId){
+  const overlay = document.getElementById('empMonthlyLeaveOverlay');
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  const emp = _leaveReportEmpById[empId] || {};
+  document.getElementById('empMonthlyLeaveName').textContent = '📅 ' + (emp.username || 'Employee') + ' — Month-wise Leave';
+  const tbody = document.getElementById('empMonthlyLeaveTbody');
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:#8a8f9c;">Loading…</td></tr>';
+  const fySel = document.getElementById('leaveReportFyFilter');
+  const fy = fySel && fySel.value ? fySel.value : String(_leaveReportCurrentFyStartYear());
+  try{
+    const res = await fetch('/api/leave/report/monthly?emp_id=' + encodeURIComponent(empId) + '&fy=' + encodeURIComponent(fy), { headers: _dedHdrs(empId) });
+    const data = await res.json();
+    if (!data.success){
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:#ef4444;">Could not load month-wise leave.</td></tr>';
+      return;
+    }
+    document.getElementById('empMonthlyLeaveFy').textContent = 'Financial Year: ' + (data.fy_label||'');
+    let html = '';
+    (data.months||[]).forEach(m=>{
+      const anyLeave = (m.cl+m.sl+m.el+m.pm) > 0;
+      const rowStyle = m.is_future ? 'opacity:.35;' : '';
+      html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04);${rowStyle}">
+        <td style="padding:7px 6px;color:#e5e5e5;">${m.label}</td>
+        <td style="padding:7px 6px;text-align:center;color:${m.sl>0?'#eab308':'#555'};font-weight:${m.sl>0?700:400};">${m.sl||'—'}</td>
+        <td style="padding:7px 6px;text-align:center;color:${m.el>0?'#a855f7':'#555'};font-weight:${m.el>0?700:400};">${m.el||'—'}</td>
+        <td style="padding:7px 6px;text-align:center;color:${m.cl>0?'#3b82f6':'#555'};font-weight:${m.cl>0?700:400};">${m.cl||'—'}</td>
+        <td style="padding:7px 6px;text-align:center;color:${m.pm>0?'#f97316':'#555'};font-weight:${m.pm>0?700:400};">${m.pm||'—'}</td>
+      </tr>`;
+    });
+    const t = data.totals || {cl:0,sl:0,el:0,pm:0};
+    html += `<tr style="border-top:2px solid rgba(255,255,255,.12);">
+      <td style="padding:9px 6px;color:#f97316;font-weight:700;">TOTAL</td>
+      <td style="padding:9px 6px;text-align:center;color:#eab308;font-weight:700;">${t.sl}</td>
+      <td style="padding:9px 6px;text-align:center;color:#a855f7;font-weight:700;">${t.el}</td>
+      <td style="padding:9px 6px;text-align:center;color:#3b82f6;font-weight:700;">${t.cl}</td>
+      <td style="padding:9px 6px;text-align:center;color:#f97316;font-weight:700;">${t.pm}</td>
+    </tr>`;
+    tbody.innerHTML = html;
+  }catch(e){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:#ef4444;">Network error loading month-wise leave.</td></tr>';
+  }
+}
+function closeEmpMonthlyLeaveModal(){
+  document.getElementById('empMonthlyLeaveOverlay').style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 // Restrict "Leave Report" access to Admin / HR (and Senior Developer, treated as full-access here)
@@ -10669,8 +10867,76 @@ var _WD_ABB       = ['Su','Mo','Tu','We','Th','Fr','Sa'];
     if (lbl) lbl.textContent = _MONTH_NAMES[_dashAttMonth] + ' ' + _dashAttYear;
     _renderDashLeaveBalance();
     _initTeamAtt();
+    _initMyMonthlyLeave();
   }, 400);
 })();
+
+// ════════════════════════════════════════════════════
+// MY MONTH-WISE LEAVE (inline table under My Attendance Detail — NOT a modal)
+// ════════════════════════════════════════════════════
+function _myLeaveCurrentFyStartYear(){
+  var t = new Date();
+  return (t.getMonth() + 1) >= 4 ? t.getFullYear() : t.getFullYear() - 1;
+}
+function _initMyMonthlyLeave(){
+  var sel = document.getElementById('myLeaveFyFilter');
+  if (sel && !sel.dataset.loaded){
+    var curFy = _myLeaveCurrentFyStartYear();
+    for (var y = curFy; y >= curFy - 3; y--){
+      var opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = 'Apr ' + y + ' – Mar ' + (y+1) + (y===curFy ? ' (Current)' : '');
+      sel.appendChild(opt);
+    }
+    sel.value = String(curFy);
+    sel.dataset.loaded = '1';
+  }
+  _loadMyMonthlyLeave();
+}
+async function _loadMyMonthlyLeave(){
+  var tbody = document.getElementById('myMonthlyLeaveTbody');
+  if (!tbody) return;
+  var user = {};
+  try { user = JSON.parse(sessionStorage.getItem('miim_user') || '{}'); } catch(e){}
+  var empId = user.id || user.emp_id || user.empid || null;
+  if (!empId){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#888;">Could not identify your employee record.</td></tr>';
+    return;
+  }
+  var sel = document.getElementById('myLeaveFyFilter');
+  var fy = sel && sel.value ? sel.value : String(_myLeaveCurrentFyStartYear());
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#888;">Loading…</td></tr>';
+  try{
+    var res = await fetch('/api/leave/report/monthly?emp_id=' + encodeURIComponent(empId) + '&fy=' + encodeURIComponent(fy), { headers: _dedHdrs(empId) });
+    var data = await res.json();
+    if (!data.success){
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#ef4444;">Could not load your leave detail.</td></tr>';
+      return;
+    }
+    var html = '';
+    (data.months||[]).forEach(function(m){
+      var rowStyle = m.is_future ? 'opacity:.35;' : '';
+      html += '<tr style="border-bottom:1px solid #1e1e1e;'+rowStyle+'">'
+        + '<td style="padding:7px 10px;color:#ddd;">'+m.label+'</td>'
+        + '<td style="padding:7px 10px;text-align:center;color:'+(m.sl>0?'#eab308':'#555')+';font-weight:'+(m.sl>0?700:400)+';">'+(m.sl||'—')+'</td>'
+        + '<td style="padding:7px 10px;text-align:center;color:'+(m.el>0?'#a855f7':'#555')+';font-weight:'+(m.el>0?700:400)+';">'+(m.el||'—')+'</td>'
+        + '<td style="padding:7px 10px;text-align:center;color:'+(m.cl>0?'#3b82f6':'#555')+';font-weight:'+(m.cl>0?700:400)+';">'+(m.cl||'—')+'</td>'
+        + '<td style="padding:7px 10px;text-align:center;color:'+(m.pm>0?'#f97316':'#555')+';font-weight:'+(m.pm>0?700:400)+';">'+(m.pm||'—')+'</td>'
+        + '</tr>';
+    });
+    var t = data.totals || {cl:0,sl:0,el:0,pm:0};
+    html += '<tr style="border-top:2px solid #333;">'
+      + '<td style="padding:9px 10px;color:#f97316;font-weight:700;">TOTAL</td>'
+      + '<td style="padding:9px 10px;text-align:center;color:#eab308;font-weight:700;">'+t.sl+'</td>'
+      + '<td style="padding:9px 10px;text-align:center;color:#a855f7;font-weight:700;">'+t.el+'</td>'
+      + '<td style="padding:9px 10px;text-align:center;color:#3b82f6;font-weight:700;">'+t.cl+'</td>'
+      + '<td style="padding:9px 10px;text-align:center;color:#f97316;font-weight:700;">'+t.pm+'</td>'
+      + '</tr>';
+    tbody.innerHTML = html;
+  }catch(e){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#ef4444;">Network error loading your leave detail.</td></tr>';
+  }
+}
 
 // ════════════════════════════════════════════════════
 // LEAVE BALANCE CARDS (Image 1 style)
