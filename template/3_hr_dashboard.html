@@ -4399,7 +4399,12 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
         <div style="font-size:16px;font-weight:700;color:#f5f5f5;display:flex;align-items:center;gap:8px;">📊 Leave Balance Report</div>
         <div style="font-size:11px;color:#8a8f9c;margin-top:2px;" id="leaveReportFyLabel">Financial Year</div>
       </div>
-      <button onclick="closeLeaveReportModal()" style="background:none;border:none;color:#8a8f9c;font-size:20px;cursor:pointer;line-height:1;padding:4px;">✕</button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="leaveReportBackfillBtn" onclick="runLeaveBackfill()" title="One-time repair: writes attendance rows for any already-approved leave that was approved before the auto-sync fix, so it shows up correctly below." style="display:none;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:#f97316;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:7px 12px;cursor:pointer;align-items:center;gap:6px;white-space:nowrap;">
+          🔧 Fix Missing Attendance
+        </button>
+        <button onclick="closeLeaveReportModal()" style="background:none;border:none;color:#8a8f9c;font-size:20px;cursor:pointer;line-height:1;padding:4px;">✕</button>
+      </div>
     </div>
     <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <label style="font-size:11px;color:#8a8f9c;text-transform:uppercase;letter-spacing:.5px;">Department</label>
@@ -9513,6 +9518,41 @@ function openLeaveReportModal(){
   populateLeaveReportDeptFilter();
   populateLeaveReportFyFilter();
   loadLeaveReport();
+  // Only admins get the one-time "Fix Missing Attendance" repair button —
+  // it's a maintenance tool, not something HR/regular users need to see.
+  const backfillBtn = document.getElementById('leaveReportBackfillBtn');
+  if (backfillBtn) backfillBtn.style.display = (getCurrentRole() === 'admin') ? 'inline-flex' : 'none';
+}
+
+// ── Admin-only: one-time repair for leaves that were approved BEFORE the
+// live attendance-sync fix existed. Those show correctly in Approval History
+// but were never written to the attendance table, so the Leave Balance
+// Report above never counted them. Safe to click more than once — the
+// backend only touches rows that are missing/incorrect (idempotent).
+async function runLeaveBackfill(){
+  const btn = document.getElementById('leaveReportBackfillBtn');
+  if (!btn) return;
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Fixing…';
+  try{
+    const _me = _getCurrentUser();
+    const res = await fetch('/api/leave/backfill-attendance', { method: 'POST', headers: _dedHdrs(_me && _me.id) });
+    const data = await res.json().catch(()=>({}));
+    if (res.ok && data.success){
+      const failedNote = (data.failed && data.failed.length) ? ` (${data.failed.length} failed — check console)` : '';
+      if (data.failed && data.failed.length) console.warn('[Leave Backfill] failures:', data.failed);
+      showToast(`🔧 Synced ${data.synced}/${data.total_approved_leaves} approved leave(s)${failedNote}`, 'success');
+      loadLeaveReport();
+    } else {
+      showToast('Backfill failed: ' + (data.error || `Server returned ${res.status}`), 'error');
+    }
+  }catch(e){
+    showToast('Backfill failed: network error — please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+  }
 }
 function closeLeaveReportModal(){
   document.getElementById('leaveReportModalOverlay').style.display = 'none';
