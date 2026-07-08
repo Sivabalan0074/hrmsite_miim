@@ -2966,9 +2966,19 @@ def leave_balance_report():
             is_perm = (e['type'] or '') in ('Regular', 'Regular(PIP)')
             counts = {"cl": 0, "sl": 0, "el": 0}
             if month_in_fy > 0:
+                # NOTE: bound by fy_end here, not `usage_end` (which is capped
+                # to today for the current FY). Once a leave is approved it's
+                # already written to the attendance table and should count
+                # against the balance right away — even if the leave date
+                # itself is still in the future. Capping to today caused this
+                # query to silently skip already-approved future-dated leave
+                # (e.g. a sick leave approved for later this month), which is
+                # exactly why the month-wise breakdown (which does scan the
+                # full FY) and this report used to disagree on the same
+                # employee's totals.
                 rows = conn.execute(
                     "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el') GROUP BY status",
-                    (emp_id, fy_start, usage_end)
+                    (emp_id, fy_start, fy_end)
                 ).fetchall()
                 for r in rows:
                     counts[r['status']] = r['c']
@@ -2976,7 +2986,7 @@ def leave_balance_report():
             if month_in_fy > 0:
                 pm_row = conn.execute(
                     "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='pm' AND date>=? AND date<=?",
-                    (emp_id, fy_start, usage_end)
+                    (emp_id, fy_start, fy_end)
                 ).fetchone()
                 pm_used = (pm_row['c'] if pm_row else 0) or 0
 
