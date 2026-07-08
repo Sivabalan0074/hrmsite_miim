@@ -2786,6 +2786,85 @@ def me_role():
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+def _fy_bounds(year, month):
+    """MIIM's leave year runs April -> March (financial year), not calendar
+    year. Given a calendar (year, month), return:
+      fy_start      -- 'YYYY-MM-DD' of April 1st that starts this FY
+      fy_label      -- e.g. 'Apr 2026 - Mar 2027' for display
+      month_in_fy   -- 1..12 where April=1 ... March=12 (for accrual math)
+    """
+    if month >= 4:
+        fy_start_year = year
+    else:
+        fy_start_year = year - 1
+    fy_start = f"{fy_start_year:04d}-04-01"
+    fy_label = f"Apr {fy_start_year}\u2013Mar {fy_start_year+1}"
+    month_in_fy = (month - 4) % 12 + 1
+    return fy_start, fy_label, month_in_fy
+
+
+@app.route('/api/leave/report', methods=['GET'])
+@require_auth
+def leave_balance_report():
+    """
+    Department-wise leave balance & usage report — for every active employee
+    (optionally filtered to one department), shows how much CL/SL/EL/PM
+    they've used and how much they have left, computed straight from the
+    real attendance records for the current financial year (Apr-Mar).
+    Query params: dept (optional; omit or 'all' for every department)
+    """
+    try:
+        dept_filter = request.args.get('dept', '').strip()
+        today = datetime.date.today()
+        fy_start, fy_label, month_in_fy = _fy_bounds(today.year, today.month)
+        month_start = today.strftime('%Y-%m-01')
+
+        conn = _db()
+        q = "SELECT id, username, dept, desig, type FROM employees WHERE status='active'"
+        params = []
+        if dept_filter and dept_filter.lower() != 'all':
+            q += " AND dept=?"
+            params.append(dept_filter)
+        q += " ORDER BY dept, username"
+        emps = conn.execute(q, tuple(params)).fetchall()
+
+        cl_total, sl_accrued, el_accrued, pm_month_total = 12, min(month_in_fy, 12), round(min(month_in_fy * 0.5, 6.0), 1), 2
+
+        result = []
+        for e in emps:
+            emp_id = e['id']
+            is_perm = (e['type'] or '') in ('Regular', 'Regular(PIP)')
+            counts = {"cl": 0, "sl": 0, "el": 0}
+            rows = conn.execute(
+                "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el') GROUP BY status",
+                (emp_id, fy_start, today.isoformat())
+            ).fetchall()
+            for r in rows:
+                counts[r['status']] = r['c']
+            pm_row = conn.execute(
+                "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='pm' AND date>=?",
+                (emp_id, month_start)
+            ).fetchone()
+            pm_used = (pm_row['c'] if pm_row else 0) or 0
+
+            result.append({
+                "id": emp_id, "username": e['username'], "dept": e['dept'],
+                "desig": e['desig'], "type": e['type'], "is_permanent": is_perm,
+                "cl": {"used": counts['cl'], "total": cl_total if is_perm else 0,
+                       "remaining": max(0, cl_total - counts['cl']) if is_perm else 0},
+                "sl": {"used": counts['sl'], "total": sl_accrued if is_perm else 0,
+                       "remaining": max(0, sl_accrued - counts['sl']) if is_perm else 0},
+                "el": {"used": counts['el'], "total": el_accrued if is_perm else 0,
+                       "remaining": max(0, el_accrued - counts['el']) if is_perm else 0},
+                "pm": {"used": pm_used, "total": pm_month_total,
+                       "remaining": max(0, pm_month_total - pm_used)},
+            })
+        conn.close()
+        return jsonify({"success": True, "fy_label": fy_label, "employees": result})
+    except Exception as ex:
+        print(f"[API Error] {ex}"); return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 @app.route('/api/attendance/monthly-summary', methods=['GET'])
 @require_auth
 def attendance_monthly_summary():
@@ -2832,7 +2911,7 @@ def attendance_monthly_summary():
         year, month = int(period[:4]), int(period[5:7])
         total_days = calendar.monthrange(year, month)[1]
         period_start = f"{period}-01"
-        year_start = f"{year:04d}-01-01"
+        fy_start, fy_label, month_in_fy = _fy_bounds(year, month)
 
         conn = _db()
 
@@ -2889,14 +2968,14 @@ def attendance_monthly_summary():
             for t in used_before:
                 row = conn.execute(
                     "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status=? AND date>=? AND date<?",
-                    (emp_id, t, year_start, period_start)
+                    (emp_id, t, fy_start, period_start)
                 ).fetchone()
                 used_before[t] = (row['c'] if row else 0) or 0
 
             accrued = {
-                "cl": 12.0,                                 # flat annual quota, no monthly accrual
-                "sl": min(month, 12) * 1.0,                  # 1/month, capped 12/year
-                "el": min(month * 0.5, 6.0),                 # 0.5/month, capped 6/year
+                "cl": 12.0,                                        # flat annual quota, no monthly accrual
+                "sl": min(month_in_fy, 12) * 1.0,                   # 1/month, capped 12/year (Apr-Mar)
+                "el": min(month_in_fy * 0.5, 6.0),                  # 0.5/month, capped 6/year (Apr-Mar)
             }
             for t in ('cl', 'sl', 'el'):
                 remaining_before_month = max(0.0, accrued[t] - used_before[t])
@@ -2928,6 +3007,7 @@ def attendance_monthly_summary():
             "emp_type": emp_type,
             "is_permanent": is_permanent,
             "is_notice_period": is_notice_period,
+            "fy_label": fy_label,
             "lop_leave_days": lop_leave_days,
             "lop_breakdown": lop_breakdown,
             "days_worked": days_worked
@@ -3011,6 +3091,13 @@ def get_corrections():
 @app.route('/api/admin/reset-attendance-data', methods=['POST'])
 @require_role('admin')
 def reset_attendance_data():
+    """DISABLED — this destructive endpoint has been removed from the UI
+    and is intentionally blocked server-side too, so it can't be triggered
+    even via a direct API call."""
+    return jsonify({"success": False, "error": "This feature has been disabled."}), 403
+
+
+def _reset_attendance_data_UNUSED():
     """Admin-only: wipe ALL recorded attendance & leave data so tracking can
     start fresh, without touching the employees table (names/logins/depts
     stay intact). Deletes rows from every attendance/leave-related table."""

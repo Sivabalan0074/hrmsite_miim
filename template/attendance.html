@@ -1294,7 +1294,7 @@ tr.emp-row td {
     <button class="policy-btn" id="historyBtn" onclick="openHistoryModal()" style="display:none;">📜 Approval History</button>
     <button class="policy-btn" id="corrHistoryBtn" onclick="openCorrHistoryModal()" style="display:none;">🕐 Check-In/Out History</button>
     <button class="policy-btn" onclick="openPolicy()">📋 Leave Policy V24</button>
-    <button class="policy-btn" id="resetDataBtn" onclick="openResetDataConfirm()" style="display:none;color:#ef4444;border-color:rgba(239,68,68,0.4);">🗑️ Reset Attendance Data</button>
+    
   </div>
 </div>
 
@@ -1659,6 +1659,21 @@ tr.emp-row td {
 // ════════════════════════════════════════════════════
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTHS_S=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// MIIM's leave year runs April → March (financial year), not calendar year.
+// Use this everywhere a leave/attendance calc needs "this year's" boundaries
+// so Jan/Feb/Mar (the tail end of a FY) are correctly included, not zeroed out.
+function getFYInfo(refDate){
+  const d = refDate || new Date();
+  const cy = d.getFullYear(), cm = d.getMonth()+1; // calendar year/month (1-12)
+  const startYear = cm>=4 ? cy : cy-1;
+  const monthInFY = ((cm-4)%12+12)%12 + 1; // April=1 ... March=12
+  return { startYear, endYear: startYear+1, monthInFY, label: `Apr ${startYear}–Mar ${startYear+1}` };
+}
+// True if calendar (y,m) falls inside the financial year that starts in `fyStartYear` (April).
+function inFY(y, m, fyStartYear){
+  return (y===fyStartYear && m>=4) || (y===fyStartYear+1 && m<=3);
+}
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
@@ -1780,46 +1795,6 @@ let pendingLeaves=[];
 // attendance/leave data so tracking can start fresh, WITHOUT touching
 // the employee master list. Double-confirmed because it's irreversible.
 // ════════════════════════════════════════════════════
-function openResetDataConfirm(){
-  if(currentRole!=='admin'){showToast('error','Not allowed','Only Admin can reset attendance data.');return;}
-  const ok1=confirm(
-    '⚠️ This will PERMANENTLY DELETE:\n\n'+
-    '• All attendance (present/absent/off) records\n'+
-    '• All leave requests (pending, approved, rejected)\n'+
-    '• All check-in/check-out corrections & their history\n'+
-    '• All leave approval history\n\n'+
-    'Employee list & logins will NOT be touched.\n\n'+
-    'This CANNOT be undone. Continue?'
-  );
-  if(!ok1)return;
-  const typed=prompt('Type RESET (in capitals) to confirm you want to wipe all attendance & leave data:');
-  if(typed!=='RESET'){showToast('error','Cancelled','Reset was not confirmed.');return;}
-  performResetAttendanceData();
-}
-
-async function performResetAttendanceData(){
-  showToast('success','⏳ Resetting…','Clearing attendance & leave data, please wait.');
-  try{
-    const res=await fetch('/api/admin/reset-attendance-data',{method:'POST',headers:getHeaders()});
-    const d=await res.json().catch(()=>({success:false}));
-    if(!d.success){
-      showToast('error','Server reset failed', d.error||'Could not clear backend data. Local data was not cleared either.');
-      return;
-    }
-  }catch(e){
-    showToast('error','Server unreachable','Could not reach the server — nothing was deleted.');
-    return;
-  }
-
-  // Clear all local caches so the UI reflects the wipe immediately
-  ['miim_att_cache','miim_att_updated','miim_balances_cache','miim_pending_leaves',
-   'miim_approval_history','miim_approved_leaves','miim_corr_history','miim_month_summary']
-   .forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
-
-  showToast('success','✅ Reset Complete','All attendance & leave data cleared. Starting fresh.');
-  setTimeout(()=>location.reload(), 1200);
-}
-
 function applyRoleUI(){
   const cfg=getRoleCfg();
   const badge=document.getElementById('userRoleBadge');
@@ -1854,9 +1829,6 @@ function applyRoleUI(){
   // Correction approval badge — admin only
   const corrBadge=document.getElementById('corrBadgeBtn');
   if(corrBadge) corrBadge.style.display='none'; // will be shown by loadPendingCorrections if admin
-  // Reset Attendance Data — admin only (destructive, wipes attendance/leave records)
-  const resetBtn=document.getElementById('resetDataBtn');
-  if(resetBtn) resetBtn.style.display=currentRole==='admin'?'inline-flex':'none';
   updatePendingBadge();
 }
 
@@ -2558,6 +2530,7 @@ function buildVisualLeaveCards(b, empType, empId){
   const nowM=new Date().getMonth()+1;
   const yr=new Date().getFullYear();
   const mnS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][new Date().getMonth()];
+  const fy = getFYInfo();
 
   // ── Policy totals (fixed, not accrued-so-far) ──
   const SL_YEAR_TOTAL = 12;   // 1/month × 12
@@ -2567,7 +2540,8 @@ function buildVisualLeaveCards(b, empType, empId){
   const PM_YEAR_TOTAL  = 24;
 
   // ── Used counts: att_cache (primary) + approved_leaves (secondary, no double-count) ──
-  // Only April (month 4) onwards — no earlier months
+  // Scoped to the current financial year (April → March), so Jan/Feb/Mar of
+  // next calendar year still counts towards the FY that started last April.
   // att_cache = ground truth (what was actually saved/marked)
   let usl=0, uel=0, ucl=0, upmMonth=0, upmYear=0, uslMonth=0, uelMonth=0, uclMonth=0;
   const _seen = new Set(); // track date+type to avoid double-count
@@ -2579,7 +2553,7 @@ function buildVisualLeaveCards(b, empType, empId){
     Object.keys(cache).forEach(dKey=>{
       const lvYr=parseInt(dKey.slice(0,4));
       const lvMo=parseInt(dKey.slice(5,7));
-      if(isNaN(lvYr)||lvYr!==yr||isNaN(lvMo)||lvMo<4) return; // April+ only
+      if(isNaN(lvYr)||isNaN(lvMo)||!inFY(lvYr,lvMo,fy.startYear)) return; // this financial year only
       const rec = cache[dKey][empIdStr] || cache[dKey][Number(empId)];
       if(!rec||!rec.status) return;
       const st = rec.status;
@@ -2601,7 +2575,7 @@ function buildVisualLeaveCards(b, empType, empId){
       if(String(lv.empId)!==empIdStr) return;
       const lvYr=parseInt((lv.date||'').slice(0,4));
       const lvMo=parseInt((lv.date||'').slice(5,7));
-      if(isNaN(lvYr)||lvYr!==yr||isNaN(lvMo)||lvMo<4) return; // April+ only
+      if(isNaN(lvYr)||isNaN(lvMo)||!inFY(lvYr,lvMo,fy.startYear)) return; // this financial year only
       const t=lv.type||'';
       if(t!=='sl'&&t!=='el'&&t!=='cl'&&t!=='pm') return;
       const key=lv.date+'_'+t;
@@ -2620,8 +2594,8 @@ function buildVisualLeaveCards(b, empType, empId){
   const cl  = perm ? Math.max(0, CL_YEAR_TOTAL - ucl) : 0;
   const pm  = Math.max(0, PM_MONTH_TOTAL - upmMonth);
 
-  // ── Accrued so far (for badge only) ──
-  const elAcc = Math.round(nowM * 0.5 * 10) / 10; // how much EL accrued this year so far
+  // ── Accrued so far (for badge only) — months elapsed in THIS financial year ──
+  const elAcc = Math.round(fy.monthInFY * 0.5 * 10) / 10; // how much EL accrued this FY so far
 
   // ── Progress bar: used / policy total ──
   const slUsedPct = Math.min(100, Math.round(usl / SL_YEAR_TOTAL * 100));
@@ -2661,7 +2635,7 @@ function buildVisualLeaveCards(b, empType, empId){
     card({
       icon:'🤒', title:'Sick Leave', titleColor:'#eab308',
       desc:'1 day/month. Carries over up to 2½ years (max 32→12).',
-      tag:`${nowM} months accrued`, tagBg:'rgba(234,179,8,.15)', tagColor:'#eab308', tagBorder:'rgba(234,179,8,.3)',
+      tag:`${fy.monthInFY} months accrued`, tagBg:'rgba(234,179,8,.15)', tagColor:'#eab308', tagBorder:'rgba(234,179,8,.3)',
       border:'rgba(234,179,8,.35)', barColor:'#eab308',
       left: sl, pct: slUsedPct, alwaysShow: false,
       rows:[
@@ -2685,7 +2659,7 @@ function buildVisualLeaveCards(b, empType, empId){
     card({
       icon:'🌤️', title:'Casual Leave', titleColor:'#3b82f6',
       desc:'12 days per year. No carry-over, no encashment.',
-      tag:`Jan–Dec ${yr}`, tagBg:'rgba(59,130,246,.15)', tagColor:'#3b82f6', tagBorder:'rgba(59,130,246,.3)',
+      tag:`${fy.label}`, tagBg:'rgba(59,130,246,.15)', tagColor:'#3b82f6', tagBorder:'rgba(59,130,246,.3)',
       border:'rgba(59,130,246,.35)', barColor:'#3b82f6',
       left: cl, pct: clUsedPct, alwaysShow: false,
       rows:[
@@ -2991,6 +2965,7 @@ function openLeaveModal(empId, dKey, e){
   // ── Compute balance from att_cache (primary) + approved_leaves (secondary) ──
   // April+ only, correct empId only
   const _yr2=new Date().getFullYear(), _nowM2=new Date().getMonth()+1;
+  const _fy2=getFYInfo();
   let _usl=0,_uel=0,_ucl=0,_upm=0;
   const _modalSeen=new Set();
   const _empIdStr=String(empId);
@@ -2998,7 +2973,7 @@ function openLeaveModal(empId, dKey, e){
     const _cache=JSON.parse(localStorage.getItem('miim_att_cache')||'{}');
     Object.keys(_cache).forEach(dKey2=>{
       const _ly=parseInt(dKey2.slice(0,4)),_lm=parseInt(dKey2.slice(5,7));
-      if(isNaN(_ly)||_ly!==_yr2||isNaN(_lm)||_lm<4)return;
+      if(isNaN(_ly)||isNaN(_lm)||!inFY(_ly,_lm,_fy2.startYear))return;
       const _rec=_cache[dKey2][_empIdStr]||_cache[dKey2][empId];
       if(!_rec||!_rec.status)return;
       const _st=_rec.status;
@@ -3016,7 +2991,7 @@ function openLeaveModal(empId, dKey, e){
     JSON.parse(localStorage.getItem('miim_approved_leaves')||'[]').forEach(lv=>{
       if(String(lv.empId)!==_empIdStr)return;
       const _ly=parseInt((lv.date||'').slice(0,4)),_lm=parseInt((lv.date||'').slice(5,7));
-      if(isNaN(_ly)||_ly!==_yr2||isNaN(_lm)||_lm<4)return;
+      if(isNaN(_ly)||isNaN(_lm)||!inFY(_ly,_lm,_fy2.startYear))return;
       const _t=lv.type||'';
       if(_t!=='sl'&&_t!=='el'&&_t!=='cl'&&_t!=='pm')return;
       const _key=lv.date+'_'+_t;
@@ -3035,8 +3010,8 @@ function openLeaveModal(empId, dKey, e){
 
   const ltypes=[
     {id:'sl',cls:'lt-sl',icon:'🤒',name:'Sick Leave',desc:'1 day per month. Carries over (max 32 days).',bal:sl,total:12,used:_usl,disabled:!perm,period:'Accrued this year'},
-    {id:'el',cls:'lt-el',icon:'⭐',name:'Earned Leave',desc:'½ day per month. Encashed with April salary.',bal:el,total:6,used:_uel,disabled:!perm,period:`Jan–Dec ${new Date().getFullYear()}`},
-    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'12 days per year. No carry-over at year end.',bal:cl,total:12,used:_ucl,disabled:!perm,period:`Jan–Dec ${new Date().getFullYear()}`},
+    {id:'el',cls:'lt-el',icon:'⭐',name:'Earned Leave',desc:'½ day per month. Encashed with April salary.',bal:el,total:6,used:_uel,disabled:!perm,period:_fy2.label},
+    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'12 days per year. No carry-over at year end.',bal:cl,total:12,used:_ucl,disabled:!perm,period:_fy2.label},
     {id:'pm',cls:'lt-pm',icon:'🕐',name:'Permission',desc:'Max 2 per month, up to 2 hours each.',bal:pm,total:2,used:_upm,disabled:false,period:`${MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`},
   ];
 

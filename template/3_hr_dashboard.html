@@ -4129,6 +4129,21 @@ button[onclick*="openSendChoice"]:hover { transform:translateY(-1px) !important;
 </style>
 
 <script>
+/* ── MIIM's leave year runs April → March (financial year), not calendar
+   year. Use this everywhere a leave calc needs "this year's" boundaries so
+   Jan/Feb/Mar (the tail end of a FY) are correctly included. ── */
+if (typeof window.getFYInfo === 'undefined') {
+  window.getFYInfo = function(refDate){
+    var d = refDate || new Date();
+    var cy = d.getFullYear(), cm = d.getMonth()+1;
+    var startYear = cm>=4 ? cy : cy-1;
+    var monthInFY = ((cm-4)%12+12)%12 + 1;
+    return { startYear: startYear, endYear: startYear+1, monthInFY: monthInFY, label: 'Apr '+startYear+'\u2013Mar '+(startYear+1) };
+  };
+  window.inFY = function(y, m, fyStartYear){
+    return (y===fyStartYear && m>=4) || (y===fyStartYear+1 && m<=3);
+  };
+}
 /* ── EARLY STUBS: prevent ReferenceError from inline onclick / early IIFEs ── */
 if (typeof getCurrentRole === 'undefined') {
   window.getCurrentRole = function() {
@@ -4319,6 +4334,10 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
         <div class="settings-sub-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
         Salary Structure
       </div>
+      <div class="settings-sub-item" id="nav-leave-report-flyout" onclick="highlightSubItem(this);closeDashboardFlyout();openLeaveReportModal();">
+        <div class="settings-sub-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 14l2 2 4-4"/></svg></div>
+        Leave Report
+      </div>
       <div class="settings-sub-item" id="nav-accounts-flyout" onclick="highlightSubItem(this);closeDashboardFlyout();navigateToAccounts();">
         <div class="settings-sub-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M6 15h.01M10 15h4"/></svg></div>
         Accounts
@@ -4369,6 +4388,43 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
 <div class="exp-modal-overlay" id="expModalOverlay">
   <div class="exp-modal-panel">
     <iframe class="exp-modal-iframe" id="expModalIframe" src="" title="Expenses Dashboard"></iframe>
+  </div>
+</div>
+
+<!-- LEAVE REPORT MODAL OVERLAY (self-contained, no iframe) -->
+<div id="leaveReportModalOverlay" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.65);align-items:center;justify-content:center;">
+  <div style="background:#12141c;border:1px solid rgba(255,255,255,.08);border-radius:14px;width:min(1100px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:'DM Sans',sans-serif;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.08);">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#f5f5f5;display:flex;align-items:center;gap:8px;">📊 Leave Balance Report</div>
+        <div style="font-size:11px;color:#8a8f9c;margin-top:2px;" id="leaveReportFyLabel">Financial Year</div>
+      </div>
+      <button onclick="closeLeaveReportModal()" style="background:none;border:none;color:#8a8f9c;font-size:20px;cursor:pointer;line-height:1;padding:4px;">✕</button>
+    </div>
+    <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px;">
+      <label style="font-size:11px;color:#8a8f9c;text-transform:uppercase;letter-spacing:.5px;">Department</label>
+      <select id="leaveReportDeptFilter" onchange="loadLeaveReport()" style="background:#1b1e29;border:1px solid rgba(255,255,255,.12);color:#f5f5f5;padding:7px 12px;border-radius:8px;font-size:13px;min-width:180px;">
+        <option value="all">All Departments</option>
+      </select>
+      <span id="leaveReportCount" style="margin-left:auto;font-size:11px;color:#8a8f9c;"></span>
+    </div>
+    <div style="overflow:auto;padding:0 22px 22px;flex:1;">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead>
+          <tr style="position:sticky;top:0;background:#12141c;">
+            <th style="text-align:left;padding:10px 8px;color:#8a8f9c;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Employee</th>
+            <th style="text-align:left;padding:10px 8px;color:#8a8f9c;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Dept</th>
+            <th style="text-align:center;padding:10px 8px;color:#eab308;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Sick Leave</th>
+            <th style="text-align:center;padding:10px 8px;color:#a855f7;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Earned Leave</th>
+            <th style="text-align:center;padding:10px 8px;color:#3b82f6;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Casual Leave</th>
+            <th style="text-align:center;padding:10px 8px;color:#f97316;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Permission</th>
+          </tr>
+        </thead>
+        <tbody id="leaveReportTbody">
+          <tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -9328,6 +9384,108 @@ function closeAttModal() {
   window.addEventListener('message', function(e) {
     if (e.data === 'closeAttendanceModal') closeAttModal();
   });
+// ════════════════════════════════════════════════════
+// LEAVE REPORT MODAL — department-wise leave balance/usage
+// ════════════════════════════════════════════════════
+var _leaveReportEmployeesCache = null;
+
+function openLeaveReportModal(){
+  const overlay = document.getElementById('leaveReportModalOverlay');
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  populateLeaveReportDeptFilter();
+  loadLeaveReport();
+}
+function closeLeaveReportModal(){
+  document.getElementById('leaveReportModalOverlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') { const ov=document.getElementById('leaveReportModalOverlay'); if(ov && ov.style.display!=='none') closeLeaveReportModal(); }
+});
+
+async function populateLeaveReportDeptFilter(){
+  const sel = document.getElementById('leaveReportDeptFilter');
+  if (!sel || sel.dataset.loaded) return;
+  try{
+    const res = await fetch('/api/leave/report?dept=all', { headers: _dedHdrs() });
+    const data = await res.json();
+    if (data.success){
+      const depts = Array.from(new Set((data.employees||[]).map(e=>e.dept).filter(Boolean))).sort();
+      depts.forEach(d=>{
+        const opt = document.createElement('option');
+        opt.value = d; opt.textContent = d;
+        sel.appendChild(opt);
+      });
+      sel.dataset.loaded = '1';
+    }
+  }catch(e){}
+}
+
+async function loadLeaveReport(){
+  const tbody = document.getElementById('leaveReportTbody');
+  const dept = document.getElementById('leaveReportDeptFilter').value || 'all';
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>';
+  try{
+    const res = await fetch('/api/leave/report?dept=' + encodeURIComponent(dept), { headers: _dedHdrs() });
+    const data = await res.json();
+    if (!data.success){
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#ef4444;">Could not load report.</td></tr>';
+      return;
+    }
+    document.getElementById('leaveReportFyLabel').textContent = 'Financial Year: ' + (data.fy_label||'');
+    const emps = data.employees || [];
+    document.getElementById('leaveReportCount').textContent = emps.length + ' employee' + (emps.length!==1?'s':'');
+    if (!emps.length){
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">No employees found.</td></tr>';
+      return;
+    }
+    // Group by department for readability
+    const byDept = {};
+    emps.forEach(e=>{ (byDept[e.dept||'—'] = byDept[e.dept||'—']||[]).push(e); });
+    const pill = (used, total, color) => total>0
+      ? `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
+           <span style="font-weight:700;color:${color};">${used}<span style="color:#666;font-weight:400;"> / ${total}</span></span>
+           <span style="font-size:10px;color:#8a8f9c;">${Math.max(0,total-used)} left</span>
+         </div>`
+      : `<span style="color:#555;">—</span>`;
+    let html = '';
+    Object.keys(byDept).sort().forEach(dept=>{
+      html += `<tr><td colspan="6" style="padding:14px 8px 6px;font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid rgba(255,255,255,.06);">${dept} <span style="color:#8a8f9c;font-weight:400;">(${byDept[dept].length})</span></td></tr>`;
+      byDept[dept].forEach(e=>{
+        html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04);">
+          <td style="padding:9px 8px;">
+            <div style="font-weight:600;color:#f0f0f0;">${e.username}</div>
+            <div style="font-size:10px;color:#8a8f9c;">${e.desig||''} · ${e.type||''}</div>
+          </td>
+          <td style="padding:9px 8px;color:#8a8f9c;">${e.dept||''}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.sl.used, e.sl.total, '#eab308')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.el.used, e.el.total, '#a855f7')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.cl.used, e.cl.total, '#3b82f6')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.pm.used, e.pm.total, '#f97316')}</td>
+        </tr>`;
+      });
+    });
+    tbody.innerHTML = html;
+  }catch(e){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#ef4444;">Network error loading report.</td></tr>';
+  }
+}
+
+// Restrict "Leave Report" nav item to Admin / HR / Senior HR
+(function applyLeaveReportNavVisibility(){
+  function _hide(){
+    var role = getCurrentRole();
+    var allowed = (role === 'admin' || role === 'hr' || role === 'senior_hr');
+    var el = document.getElementById('nav-leave-report-flyout');
+    if (!el) return;
+    el.style.display = allowed ? '' : 'none';
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _hide);
+  else _hide();
+  setTimeout(_hide, 300);
+})();
+
 function openHolidayModal() {
   if(window._rb3Hide) window._rb3Hide();
   if(window._rb3Hide) window._rb3Hide();
@@ -10316,8 +10474,8 @@ async function _loadMyLeaveBalance() {
     }
   } catch(e) {}
 
-  // Read STRICTLY from miim_approved_leaves only — no backend/cache fallback
   var isPerm = empType === 'Regular' || empType === 'Regular(PIP)';
+  var fy = getFYInfo();
   var approvedSl=0, approvedCl=0, approvedEl=0, approvedPmMonth=0, approvedPmYear=0;
   try {
     var rawApproved = JSON.parse(localStorage.getItem('miim_approved_leaves') || '[]');
@@ -10325,7 +10483,7 @@ async function _loadMyLeaveBalance() {
       if (String(lv.empId) !== String(empId)) return;
       var lvYr = parseInt((lv.date||'').slice(0,4));
       var lvMo = parseInt((lv.date||'').slice(5,7));
-      if (lvYr !== yr) return;
+      if (!inFY(lvYr, lvMo, fy.startYear)) return;
       if (lv.type==='sl') approvedSl++;
       else if (lv.type==='cl') approvedCl++;
       else if (lv.type==='el') approvedEl++;
@@ -10335,7 +10493,7 @@ async function _loadMyLeaveBalance() {
   var slTotal = 12;
   var slUsed = approvedSl;
   var slRem = isPerm ? Math.max(0, slTotal - approvedSl) : 0;
-  var elAccrued = Math.round(nowM * 0.5 * 10) / 10;
+  var elAccrued = Math.round(fy.monthInFY * 0.5 * 10) / 10;
   var elUsed = approvedEl;
   var elRem = isPerm ? Math.max(0, 6 - approvedEl) : 0;
   var clUsed = approvedCl;
@@ -10369,13 +10527,13 @@ async function _loadMyLeaveBalance() {
 
   var cardsHtml = isPerm
     ? '<div class="myleave-grid">'
-      + card('sl','🤒','Sick Leave','1 day/month. Carries over up to 2½ years (max 32).',nowM+' months accrued',slPct,
+      + card('sl','🤒','Sick Leave','1 day/month. Carries over up to 2½ years (max 32).',fy.monthInFY+' months accrued',slPct,
           row('THIS MONTH','0/1') + row('THIS YEAR',slUsed+'/'+slTotal),
           slRem, '📅 Carries over (max 32 days)')
       + card('el','⭐','Earned Leave','½ day/month. Encashed with April salary.',elAccrued+' months accrued',elPct,
           row('THIS MONTH','0/0.5') + row('THIS YEAR',elUsed+'/6'),
           elRem, '🌟 Encashed with April salary')
-      + card('cl','🌴','Casual Leave','12 days per year. No carry-over, no encashment.','Jan–Dec '+yr,clPct,
+      + card('cl','🌴','Casual Leave','12 days per year. No carry-over, no encashment.',fy.label,clPct,
           row('THIS YEAR',clUsed+'/12'),
           clRem, '⚠️ No carry-over to next year')
       + card('pm','🕐','Permission','Max 2/month. Each up to 2 hours.',MONTHS_F[nowM-1]+' '+yr,pmPct,
@@ -10519,6 +10677,7 @@ function _renderDashLeaveBalance() {
   var empId = user.id || user.emp_id || null;
   var yr = new Date().getFullYear();
   var nowM = new Date().getMonth() + 1;
+  var fy = getFYInfo();
   var empType = user.type || user.emp_type || 'Regular';
   var isPerm = (empType === 'Regular' || empType === 'Regular(PIP)');
   var MONTH_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -10540,7 +10699,7 @@ function _renderDashLeaveBalance() {
     Object.keys(attCache).forEach(function(dKey) {
       var lvYr = parseInt(dKey.slice(0,4));
       var lvMo = parseInt(dKey.slice(5,7));
-      if (isNaN(lvYr) || lvYr !== yr) return;
+      if (isNaN(lvYr) || isNaN(lvMo) || !inFY(lvYr, lvMo, fy.startYear)) return;
       var rec = attCache[dKey][empIdStr] || attCache[dKey][Number(empId)];
       if (!rec || !rec.status) return;
       var st = rec.status;
@@ -10562,7 +10721,7 @@ function _renderDashLeaveBalance() {
       if (String(lv.empId) !== empIdStr) return;
       var lvYr = parseInt((lv.date||'').slice(0,4));
       var lvMo = parseInt((lv.date||'').slice(5,7));
-      if (isNaN(lvYr) || lvYr !== yr) return;
+      if (isNaN(lvYr) || isNaN(lvMo) || !inFY(lvYr, lvMo, fy.startYear)) return;
       var t = lv.type || '';
       if (t!=='sl' && t!=='cl' && t!=='el' && t!=='pm') return;
       var key = lv.date + '_' + t;
@@ -10577,7 +10736,7 @@ function _renderDashLeaveBalance() {
 
   var slTotal   = 12;   // policy: 1/month x 12
   var EL_TOTAL  = 6;    // policy: 0.5/month x 12
-  var elAccrued = Math.round(nowM * 0.5 * 10) / 10; // for badge only
+  var elAccrued = Math.round(fy.monthInFY * 0.5 * 10) / 10; // for badge only
   var remSick   = isPerm ? Math.max(0, slTotal  - approvedSl)   : 0;
   var remCasual = isPerm ? Math.max(0, 12       - approvedCl)   : 0;
   var remEarned = isPerm ? Math.max(0, EL_TOTAL - approvedEl)   : 0;
@@ -10613,9 +10772,9 @@ function _renderDashLeaveBalance() {
   }
 
   container.innerHTML=[
-    mc({icon:'\uD83E\uDD12',title:'Sick Leave',tc:'#eab308',desc:'1 day/month. Carries over up to 2\u00bd years (max 32\u219212).',tag:nowM+' months accrued',tbg:'rgba(234,179,8,.15)',tbd:'rgba(234,179,8,.3)',br:'rgba(234,179,8,.35)',bc:'#eab308',left:remSick,pct:slPct,always:false,rows:[{k:'THIS MONTH',v:approvedSlMonth+'/'+(isPerm?1:'\u2014')},{k:'THIS YEAR',v:approvedSl+'/'+slTotal}],note:'\uD83D\uDCC5 Carries over (max 32 days)'}),
+    mc({icon:'\uD83E\uDD12',title:'Sick Leave',tc:'#eab308',desc:'1 day/month. Carries over up to 2\u00bd years (max 32\u219212).',tag:fy.monthInFY+' months accrued',tbg:'rgba(234,179,8,.15)',tbd:'rgba(234,179,8,.3)',br:'rgba(234,179,8,.35)',bc:'#eab308',left:remSick,pct:slPct,always:false,rows:[{k:'THIS MONTH',v:approvedSlMonth+'/'+(isPerm?1:'\u2014')},{k:'THIS YEAR',v:approvedSl+'/'+slTotal}],note:'\uD83D\uDCC5 Carries over (max 32 days)'}),
     mc({icon:'\u2B50',title:'Earned Leave',tc:'#a855f7',desc:'\u00bd day/month. Encashed with April salary. No carry-over.',tag:elAccrued+' months accrued',tbg:'rgba(168,85,247,.15)',tbd:'rgba(168,85,247,.3)',br:'rgba(168,85,247,.35)',bc:'#a855f7',left:remEarned,pct:elPct,always:false,rows:[{k:'THIS MONTH',v:approvedElMonth+'/'+(isPerm?0.5:'\u2014')},{k:'THIS YEAR',v:approvedEl+'/'+EL_TOTAL}],note:'\uD83C\uDF1F Encashed with April salary'}),
-    mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'12 days per year. No carry-over, no encashment.',tag:'Jan\u2013Dec '+yr,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/12'}],note:'\u26A0\uFE0F No carry-over to next year'}),
+    mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'12 days per year. No carry-over, no encashment.',tag:fy.label,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/12'}],note:'\u26A0\uFE0F No carry-over to next year'}),
     mc({icon:'\u23F1\uFE0F',title:'Permission',tc:'#f97316',desc:'Max 2 permissions/month. Each up to 2 hours.',tag:MONTH_S[nowM-1]+' '+yr,tbg:'rgba(249,115,22,.15)',tbd:'rgba(249,115,22,.3)',br:'rgba(249,115,22,.35)',bc:'#f97316',left:remPerm,pct:pmPct,always:true,rows:[{k:'THIS MONTH',v:approvedPmMonth+'/2'},{k:'THIS YEAR',v:approvedPmYear+'/24'}],note:null})
   ].join('');
 }
