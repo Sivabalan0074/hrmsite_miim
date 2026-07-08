@@ -9529,6 +9529,51 @@ function openLeaveReportModal(){
 // but were never written to the attendance table, so the Leave Balance
 // Report above never counted them. Safe to click more than once — the
 // backend only touches rows that are missing/incorrect (idempotent).
+// Repair pass: attendance.html's approve/reject flow used to POST the
+// approval-history entry with camelCase keys (empName, leaveType, leaveDate,
+// actionBy, actionByName) while the server only reads snake_case
+// (emp_name, leave_type, leave_date, actioned_by, actioned_by_name) — so
+// every one of those rows landed in the DB with those fields BLANK. That in
+// turn meant _sync_approval_history_to_attendance (pass 2 of the backfill,
+// below) had nothing usable to match on, so leaves approved through that
+// older flow never made it into the attendance table / leave balance report.
+// The browser's own localStorage cache (miim_approval_history, written by
+// attendance.html, shared across pages on this origin) still has the full,
+// correct data, so replay it here with the correct field names before running
+// the backfill. The server-side dedup guard on /api/approval-history makes
+// this safe to run more than once.
+async function _repairLocalApprovalHistory(hdrs){
+  try{
+    const localHist = JSON.parse(localStorage.getItem('miim_approval_history') || '[]');
+    const toRepair = localHist.filter(h => h && h.action === 'approved' && h.empName && h.leaveType && h.leaveDate);
+    let count = 0;
+    for (const h of toRepair){
+      try{
+        await fetch('/api/approval-history', {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({
+            emp_id: h.empId || null,
+            emp_name: h.empName,
+            dept: h.dept || '',
+            leave_type: h.leaveType,
+            leave_date: h.leaveDate,
+            action: h.action,
+            actioned_by: h.actionBy || '',
+            actioned_by_name: h.actionByName || '',
+            reason: h.reason || ''
+          })
+        });
+        count++;
+      }catch(e){ /* keep going even if one entry fails */ }
+    }
+    return count;
+  }catch(e){
+    console.warn('[Leave Backfill] local history repair skipped:', e);
+    return 0;
+  }
+}
+
 async function runLeaveBackfill(){
   const btn = document.getElementById('leaveReportBackfillBtn');
   if (!btn) return;
@@ -9539,6 +9584,7 @@ async function runLeaveBackfill(){
     const _me = _getCurrentUser();
     const _hdrs = _dedHdrs(_me && _me.id);
     _hdrs['X-User-Role'] = 'admin'; // this button is admin-gated already; don't let _dedHdrs' default ('hr') fallback break the server-side admin check
+    await _repairLocalApprovalHistory(_hdrs);
     const res = await fetch('/api/leave/backfill-attendance', { method: 'POST', headers: _hdrs });
     const data = await res.json().catch(()=>({}));
     if (res.ok && data.success){

@@ -3433,8 +3433,24 @@ def approval_history():
         conn = _db()
         if request.method == 'POST':
             data = request.json or {}
-            conn.execute("INSERT INTO approval_history (emp_id,emp_name,dept,leave_type,leave_date,action,actioned_by,actioned_by_name,reason,actioned_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                         (data.get('emp_id'), data.get('emp_name', ''), data.get('dept', ''), data.get('leave_type', ''), data.get('leave_date', ''), data.get('action', ''), data.get('actioned_by', ''), data.get('actioned_by_name', ''), data.get('reason', ''), str(datetime.datetime.now())))
+            emp_name = data.get('emp_name', '') or ''
+            leave_type = data.get('leave_type', '') or ''
+            leave_date = data.get('leave_date', '') or ''
+            action = data.get('action', '') or ''
+            # Dedup guard: the same approval can legitimately get re-posted
+            # (e.g. a client-side repair pass replaying locally-cached history
+            # to fix rows that were previously saved with blank fields due to
+            # a camelCase/snake_case key mismatch on the client). Without this
+            # check, every re-post/retry adds a duplicate row.
+            existing = None
+            if emp_name and leave_type and leave_date and action:
+                existing = conn.execute(
+                    "SELECT id FROM approval_history WHERE emp_name=? AND leave_type=? AND leave_date=? AND action=? LIMIT 1",
+                    (emp_name, leave_type, leave_date, action)
+                ).fetchone()
+            if not existing:
+                conn.execute("INSERT INTO approval_history (emp_id,emp_name,dept,leave_type,leave_date,action,actioned_by,actioned_by_name,reason,actioned_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                             (data.get('emp_id'), emp_name, data.get('dept', ''), leave_type, leave_date, action, data.get('actioned_by', ''), data.get('actioned_by_name', ''), data.get('reason', ''), str(datetime.datetime.now())))
             conn.commit(); conn.close()
             return jsonify({"success": True})
         rows = conn.execute("SELECT * FROM approval_history ORDER BY actioned_at DESC LIMIT 50").fetchall()

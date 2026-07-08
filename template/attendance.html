@@ -3627,13 +3627,30 @@ async function handleApproval(reqId,action){
   persistAttCache();
   persistApprovalHistory();
   // Save approval to DB (non-blocking)
+  // NOTE: the server's INSERT reads snake_case keys (emp_name, leave_type,
+  // leave_date, actioned_by, actioned_by_name) but `lastEntry` uses camelCase
+  // (empName, leaveType, leaveDate, actionBy, actionByName) — sending it as-is
+  // saved those fields as BLANK in the DB every time (only action/dept/reason
+  // matched by coincidence). That's why "Fix Missing Attendance" on the HR
+  // dashboard could never find these rows to backfill into attendance/leave
+  // balance. Mapping to the correct keys here fixes it going forward.
   try{
     const lastEntry=approvalHistory[0];
     if(lastEntry){
       fetch('/api/approval-history',{
         method:'POST',
         headers:getHeaders(),
-        body:JSON.stringify({...lastEntry})
+        body:JSON.stringify({
+          emp_id: req.empId,
+          emp_name: lastEntry.empName,
+          dept: lastEntry.dept,
+          leave_type: lastEntry.leaveType,
+          leave_date: lastEntry.leaveDate,
+          action: lastEntry.action,
+          actioned_by: lastEntry.actionBy,
+          actioned_by_name: lastEntry.actionByName,
+          reason: lastEntry.reason
+        })
       }).catch(()=>{});
     }
   }catch(x){}
