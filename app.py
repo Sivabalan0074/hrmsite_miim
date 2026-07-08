@@ -4203,6 +4203,19 @@ def init_db():
         status TEXT DEFAULT 'present', marked_by TEXT,
         hours REAL DEFAULT 0
     )""")
+    # Add updated_at column if it doesn't exist (for existing DBs) — required by
+    # _sync_leave_to_attendance()/the leave-approval attendance sync, which was
+    # silently failing on every call because this column was missing.
+    try:
+        conn.execute("ALTER TABLE attendance ADD COLUMN updated_at TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+    try:
+        conn.execute("ALTER TABLE attendance ADD COLUMN note TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
     conn.execute(f"""CREATE TABLE IF NOT EXISTS holidays (
         id INTEGER PRIMARY KEY {_AUTOINC},
         date TEXT, name TEXT, type TEXT DEFAULT 'National',

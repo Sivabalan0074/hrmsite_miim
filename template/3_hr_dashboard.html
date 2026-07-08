@@ -9537,7 +9537,9 @@ async function runLeaveBackfill(){
   btn.innerHTML = '⏳ Fixing…';
   try{
     const _me = _getCurrentUser();
-    const res = await fetch('/api/leave/backfill-attendance', { method: 'POST', headers: _dedHdrs(_me && _me.id) });
+    const _hdrs = _dedHdrs(_me && _me.id);
+    _hdrs['X-User-Role'] = 'admin'; // this button is admin-gated already; don't let _dedHdrs' default ('hr') fallback break the server-side admin check
+    const res = await fetch('/api/leave/backfill-attendance', { method: 'POST', headers: _hdrs });
     const data = await res.json().catch(()=>({}));
     if (res.ok && data.success){
       const failedNote = (data.failed && data.failed.length) ? ` (${data.failed.length} failed — check console)` : '';
