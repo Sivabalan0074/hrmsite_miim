@@ -18418,5 +18418,49 @@ function _clearDeletedGuests(){
 }
 </script>
 
+<style id="miim-sidebar-scroll-fix">
+/* ══════════════════════════════════════════════════════════
+   FINAL OVERRIDE — sidebar must stay fixed in place; only the
+   main content area (right side) should ever scroll.
+
+   This file has two different, conflicting sidebar layouts left
+   over from earlier versions: an old one where the sidebar was
+   position:absolute with .main using margin-left:270px to make
+   room for it, and a newer attempt using position:sticky. Mixed
+   together, neither worked correctly and the sidebar ended up
+   scrolling away with the page. This block is deliberately placed
+   last (and uses !important) so it wins over both older rules
+   without having to hunt down and delete every one of them.
+
+   Scoped to desktop widths (matches this file's existing 768px
+   breakpoint) so it doesn't fight with the separate mobile
+   hamburger slide-in sidebar behavior defined elsewhere.
+   ══════════════════════════════════════════════════════════ */
+@media (min-width: 769px) {
+  html, body { height: 100% !important; overflow: hidden !important; }
+  .layout {
+    position: relative !important;
+    height: calc(100vh - 52px) !important; /* 52px = .topbar height */
+    overflow: hidden !important;
+  }
+  #sidebar.sidebar {
+    position: relative !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+    height: 100% !important;
+    width: 220px !important;
+    flex-shrink: 0 !important;
+    overflow-y: auto !important;
+    margin: 0 !important;
+  }
+  .layout > main.main {
+    margin-left: 0 !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+}
+</style>
 </body>
 </html>
