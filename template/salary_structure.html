@@ -623,6 +623,7 @@
       </div>
       <div class="ss-fg" style="justify-content:flex-end;margin-left:auto">
         <label style="opacity:0;user-select:none">.</label>
+        <button class="btn-ss-print-all" id="btnApplyAllSetSalary" onclick="applyAllSetSalaries()" title="For every employee who has a Set Salary saved but no salary structure yet for the selected month, create it automatically" style="border-color:var(--green);color:var(--green);background:rgba(34,197,94,.1)">⚡ Apply Set Salaries (This Month)</button>
         <button class="btn-ss-print-all" onclick="printAllSalarySlips()">🖨️ Print All Slips</button>
         <button class="btn-ss-excel" id="btnSalaryExcel" onclick="exportSalaryExcel()" title="Export monthly salary structure to Excel — one sheet per department" style="display:none;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -2057,6 +2058,70 @@ async function saveIncrement(){
       toast('Increment applied — Set Salary updated','success');
     } else toast(d.error||'Could not apply increment','error');
   }catch(e){ toast('Network error while applying increment','error'); }
+}
+
+// ── Bulk: apply every employee's Set Salary to the currently-selected month ──
+// Only touches employees who (a) have a Set Salary saved, and (b) do NOT already
+// have a salary structure row for that month — never overwrites existing/edited/approved entries.
+async function applyAllSetSalaries(){
+  const period = ((document.getElementById('ssFMonth')||{}).value||'').slice(0,7)
+    || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+  if(!allEmps || !allEmps.length){ toast('No employees loaded yet','error'); return; }
+  if(!confirm(`Apply each employee's Set Salary for ${period}?\n\nOnly employees with no salary structure yet for this month will be filled in.`)) return;
+
+  const btn = document.getElementById('btnApplyAllSetSalary');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Applying…'; }
+
+  let applied = 0, skippedExisting = 0, skippedNoMaster = 0, failed = 0;
+  const [py, pm] = period.split('-').map(Number);
+
+  for(const emp of allEmps){
+    try{
+      const existsAlready = allSalaryStructures.some(s => s.emp_id === emp.id && (s.period||'').slice(0,7) === period);
+      if(existsAlready){ skippedExisting++; continue; }
+
+      const mr = await fetch(`${BASE}/api/salary-master?emp_id=${emp.id}`, {headers: hdrs()});
+      const md = await mr.json();
+      const m = (md && md.success) ? md.data : null;
+      if(!m){ skippedNoMaster++; continue; }
+
+      // Days worked from attendance (leave-aware), fallback to full calendar month
+      let daysWorked = null, totalDays = new Date(py, pm, 0).getDate();
+      try{
+        const ar = await fetch(`${BASE}/api/attendance/monthly-summary?emp_id=${emp.id}&period=${period}`, {headers: hdrs()});
+        const ad = await ar.json();
+        if(ad && ad.success){ daysWorked = ad.days_worked; if(ad.total_days_in_month) totalDays = ad.total_days_in_month; }
+      }catch(e){}
+      const ratio = (daysWorked!=null && totalDays>0) ? Math.min(daysWorked,totalDays)/totalDays : 1;
+
+      const earn = (m.basic||0)+(m.hra||0)+(m.dearness_allowance||0)+(m.medical_allowance||0)+(m.lta||0)+(m.special_allowance||0)+(m.city_compensatory_allowance||0);
+      const ded  = (m.professional_tax||0)+(m.tds||0)+(m.existing_advance||0)+(m.other_deductions||0);
+      const payableEarn = Math.round(earn*ratio);
+
+      const payload = {
+        emp_id: emp.id, period: period+'-01',
+        basic: m.basic||0, hra: m.hra||0, dearness_allowance: m.dearness_allowance||0,
+        medical_allowance: m.medical_allowance||0, lta: m.lta||0, special_allowance: m.special_allowance||0,
+        city_compensatory_allowance: m.city_compensatory_allowance||0,
+        professional_tax: m.professional_tax||0, tds: m.tds||0,
+        existing_advance: m.existing_advance||0, other_deductions: m.other_deductions||0,
+        total_earnings: payableEarn, total_deductions: ded, net_pay: Math.round(payableEarn-ded),
+        days_worked: daysWorked, mode_of_payment: emp.mode_of_payment || 'Account',
+        pay_date: `${py}-${String(pm).padStart(2,'0')}-07`,
+        salary_ctc: m.salary_ctc||0
+      };
+      const r = await fetch(`${BASE}/api/salary-structures`, {method:'POST', headers:hdrs(), body:JSON.stringify(payload)});
+      const d = await r.json();
+      if(d && (d.success || d.id)) applied++; else failed++;
+    }catch(e){ failed++; }
+  }
+
+  if(btn){ btn.disabled = false; btn.textContent = '⚡ Apply Set Salaries (This Month)'; }
+  toast(`Applied ${applied} · Already set ${skippedExisting} · No Set Salary ${skippedNoMaster}${failed?` · Failed ${failed}`:''}`, failed ? 'error' : 'success');
+
+  await loadSalaryStructures();
+  renderSSTable();
+  updateSSStats();
 }
 
 

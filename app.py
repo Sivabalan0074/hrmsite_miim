@@ -1605,6 +1605,149 @@ def api_salary_structures():
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+_SALARY_MASTER_FIELDS = ['basic', 'hra', 'dearness_allowance', 'medical_allowance', 'lta',
+                         'special_allowance', 'city_compensatory_allowance', 'professional_tax',
+                         'tds', 'existing_advance', 'other_deductions', 'salary_ctc']
+
+
+def _ensure_salary_master_tables(conn):
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS employee_salary_master (
+        id INTEGER PRIMARY KEY {_AUTOINC},
+        emp_id INTEGER UNIQUE,
+        basic REAL DEFAULT 0, hra REAL DEFAULT 0,
+        dearness_allowance REAL DEFAULT 0, medical_allowance REAL DEFAULT 0,
+        lta REAL DEFAULT 0, special_allowance REAL DEFAULT 0,
+        city_compensatory_allowance REAL DEFAULT 0,
+        professional_tax REAL DEFAULT 0, tds REAL DEFAULT 0,
+        existing_advance REAL DEFAULT 0, other_deductions REAL DEFAULT 0,
+        salary_ctc REAL DEFAULT 0,
+        set_by TEXT, set_at TEXT, updated_by TEXT, updated_at TEXT
+    )""")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS salary_increment_history (
+        id INTEGER PRIMARY KEY {_AUTOINC},
+        emp_id INTEGER, old_ctc REAL DEFAULT 0, new_ctc REAL DEFAULT 0,
+        increment_type TEXT, increment_value REAL DEFAULT 0,
+        effective_date TEXT, note TEXT,
+        created_by TEXT, created_at TEXT
+    )""")
+    conn.commit()
+
+
+@app.route('/api/salary-master', methods=['GET', 'POST'])
+@require_auth
+def api_salary_master():
+    """
+    GET  ?emp_id=<id>              -> returns the employee's saved base ("Set") salary, or null
+    POST { emp_id, basic, hra, ... , salary_ctc, set_by }
+                                    -> creates/updates (upserts) the employee's base salary
+    """
+    try:
+        conn = _db()
+        _ensure_salary_master_tables(conn)
+        if request.method == 'GET':
+            emp_id = request.args.get('emp_id')
+            if not emp_id:
+                conn.close()
+                return jsonify({"success": False, "error": "emp_id required"}), 400
+            row = conn.execute("SELECT * FROM employee_salary_master WHERE emp_id=?", (emp_id,)).fetchone()
+            conn.close()
+            return jsonify({"success": True, "data": dict(row) if row else None})
+
+        data = request.json or {}
+        emp_id = data.get('emp_id')
+        if not emp_id:
+            conn.close()
+            return jsonify({"success": False, "error": "emp_id required"}), 400
+        import datetime as _dt
+        now = _dt.datetime.now().isoformat(timespec='seconds')
+        by_name = data.get('set_by') or 'Admin'
+        clean = {k: (data.get(k) or 0) for k in _SALARY_MASTER_FIELDS}
+        existing = conn.execute("SELECT id FROM employee_salary_master WHERE emp_id=?", (emp_id,)).fetchone()
+        if existing:
+            set_clause = ', '.join(f"{k}=?" for k in _SALARY_MASTER_FIELDS) + ", updated_by=?, updated_at=?"
+            values = [clean[k] for k in _SALARY_MASTER_FIELDS] + [by_name, now, existing['id']]
+            conn.execute(f"UPDATE employee_salary_master SET {set_clause} WHERE id=?", values)
+            conn.commit()
+            row = conn.execute("SELECT * FROM employee_salary_master WHERE id=?", (existing['id'],)).fetchone()
+            conn.close()
+            return jsonify({"success": True, "data": dict(row)})
+        cols = ['emp_id'] + _SALARY_MASTER_FIELDS + ['set_by', 'set_at', 'updated_by', 'updated_at']
+        vals = [emp_id] + [clean[k] for k in _SALARY_MASTER_FIELDS] + [by_name, now, by_name, now]
+        placeholders = ', '.join('?' for _ in cols)
+        cur = conn.execute(f"INSERT INTO employee_salary_master ({', '.join(cols)}) VALUES ({placeholders})", vals)
+        conn.commit()
+        new_id = getattr(cur, 'lastrowid', None) or getattr(conn, 'lastrowid', None)
+        row = conn.execute("SELECT * FROM employee_salary_master WHERE id=?", (new_id,)).fetchone()
+        conn.close()
+        return jsonify({"success": True, "data": dict(row)}), 201
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/salary-master/<int:emp_id>/increment', methods=['POST'])
+@require_auth
+def api_salary_master_increment(emp_id):
+    """
+    Body: { increment_type: 'amount'|'percent', value, effective_date, note, created_by }
+    Bumps the employee's Set Salary CTC (by flat amount or percent), re-derives the
+    earning components with the same ratio used by "Set Salary", and logs the change.
+    """
+    try:
+        conn = _db()
+        _ensure_salary_master_tables(conn)
+        master = conn.execute("SELECT * FROM employee_salary_master WHERE emp_id=?", (emp_id,)).fetchone()
+        if not master:
+            conn.close()
+            return jsonify({"success": False, "error": "Set Salary first before applying an increment"}), 400
+        data = request.json or {}
+        inc_type = (data.get('increment_type') or 'amount').lower()
+        value = float(data.get('value') or 0)
+        old_ctc = float(master['salary_ctc'] or 0)
+        if inc_type == 'percent':
+            new_ctc = round(old_ctc * (1 + value / 100))
+        else:
+            new_ctc = round(old_ctc + value)
+        basic = round(new_ctc / 2)
+        hra = round(basic / 2)
+        da = round(hra / 2)
+        ma = round(da / 2)
+        lta = round(ma / 2)
+        sa = new_ctc - basic - hra - da - ma - lta
+        import datetime as _dt
+        now = _dt.datetime.now().isoformat(timespec='seconds')
+        by_name = data.get('created_by') or 'Admin'
+        conn.execute("""UPDATE employee_salary_master SET basic=?, hra=?, dearness_allowance=?,
+            medical_allowance=?, lta=?, special_allowance=?, salary_ctc=?, updated_by=?, updated_at=?
+            WHERE emp_id=?""", (basic, hra, da, ma, lta, sa, new_ctc, by_name, now, emp_id))
+        conn.execute("""INSERT INTO salary_increment_history
+            (emp_id, old_ctc, new_ctc, increment_type, increment_value, effective_date, note, created_by, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?)""",
+                     (emp_id, old_ctc, new_ctc, inc_type, value, data.get('effective_date') or now[:10],
+                      data.get('note') or '', by_name, now))
+        conn.commit()
+        row = conn.execute("SELECT * FROM employee_salary_master WHERE emp_id=?", (emp_id,)).fetchone()
+        conn.close()
+        return jsonify({"success": True, "data": dict(row)})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/salary-master/<int:emp_id>/history', methods=['GET'])
+@require_auth
+def api_salary_master_history(emp_id):
+    try:
+        conn = _db()
+        _ensure_salary_master_tables(conn)
+        rows = conn.execute("SELECT * FROM salary_increment_history WHERE emp_id=? ORDER BY id DESC", (emp_id,)).fetchall()
+        conn.close()
+        return jsonify({"success": True, "data": [dict(r) for r in rows]})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 @app.route('/api/salary-structures/export-excel', methods=['GET'])
 @require_auth
 def export_salary_structures_excel():
