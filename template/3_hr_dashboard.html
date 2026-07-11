@@ -8,6 +8,19 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Exo+2:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
 
+  /* ── MIIM Unified Header (matches Attendance & Leave page style) ── */
+  @keyframes miimFadeDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes miimLogoIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+  @keyframes miimScaleIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+  .miim-hdr-left{display:flex;align-items:center;gap:12px;animation:miimFadeDown .45s cubic-bezier(.22,1,.36,1) both;}
+  .miim-hdr-back{background:#f97316;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:background .2s,transform .22s cubic-bezier(.34,1.56,.64,1),box-shadow .2s;animation:miimScaleIn .38s cubic-bezier(.34,1.56,.64,1) .05s both;}
+  .miim-hdr-back:hover{background:#ea6800;transform:translateX(-3px) scale(1.04);box-shadow:0 6px 18px rgba(249,115,22,.4);}
+  .miim-hdr-back:active{transform:scale(.95);}
+  .miim-hdr-logo{font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:700;color:#f97316;letter-spacing:2px;animation:miimLogoIn .7s cubic-bezier(.22,1,.36,1) .1s both;}
+  .miim-hdr-vdiv{width:1px;height:22px;background:#252a38;}
+  .miim-hdr-title{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:600;display:flex;align-items:center;gap:7px;color:#e8ecf4;}
+  .miim-hdr-title::before{content:'';width:3px;height:17px;background:#f97316;border-radius:2px;display:inline-block;}
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
@@ -8792,28 +8805,15 @@ function _qsSlipOpen(id,name,dept,desig,empno,type){
     <div class="topbar" style="padding-left:16px;">
       <div class="tb-left" style="display:flex;align-items:center;gap:14px;">
         <!-- BACK TO DASHBOARD BUTTON (moved from fixed position into header) -->
-        <button onclick="hideEmployeePage();document.querySelectorAll('.settings-panel-page').forEach(p=>p.classList.remove('active'));document.getElementById('panel-general').classList.add('active');"
-          style="
-            display:inline-flex;align-items:center;gap:7px;
-            background:transparent;
-            border:1.5px solid var(--orange,#f97316);
-            color:var(--orange,#f97316);
-            border-radius:7px;
-            padding:6px 14px;
-            font-family:Rajdhani,sans-serif;
-            font-size:.82rem;
-            font-weight:700;
-            letter-spacing:1px;
-            cursor:pointer;
-            white-space:nowrap;
-            transition:background 0.2s,box-shadow 0.2s;
-            flex-shrink:0;
-          "
-          onmouseover="this.style.background='rgba(249,115,22,0.12)';this.style.boxShadow='0 0 10px rgba(249,115,22,0.3)'"
-          onmouseout="this.style.background='transparent';this.style.boxShadow='none'">
-          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-          Back to Dashboard
-        </button>
+        <div class="miim-hdr-left">
+          <button class="miim-hdr-back" onclick="hideEmployeePage();document.querySelectorAll('.settings-panel-page').forEach(p=>p.classList.remove('active'));document.getElementById('panel-general').classList.add('active');">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            Back to Dashboard
+          </button>
+          <div class="miim-hdr-logo">MIIM</div>
+          <div class="miim-hdr-vdiv"></div>
+          <div class="miim-hdr-title">Employee Page</div>
+        </div>
         <div class="tb-dept">
           <div class="tb-dept-badge" onclick="openEmpSidebar()" title="Open Menu">HR</div>
           <div>
