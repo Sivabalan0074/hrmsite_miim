@@ -677,6 +677,14 @@
             <input id="sseDaysWorked" type="number" min="0" max="31" placeholder="e.g. 26" oninput="sseDaysWorkedManualEdit();sseRecalc();"/>
             <div id="sseDWBreakdown" style="font-size:10px;color:var(--text3);margin-top:4px;"></div>
           </div>
+          <div class="sse-field">
+            <label>Base Salary</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" onclick="openSetSalary()" style="flex:1;padding:8px 10px;border-radius:var(--radius);border:1px solid var(--orange);background:rgba(232,112,0,.12);color:var(--orange);font-family:'Barlow',sans-serif;font-weight:700;font-size:12px;cursor:pointer;">⚙ Set Salary</button>
+              <button type="button" onclick="openIncrement()" style="flex:1;padding:8px 10px;border-radius:var(--radius);border:1px solid var(--green);background:rgba(34,197,94,.12);color:var(--green);font-family:'Barlow',sans-serif;font-weight:700;font-size:12px;cursor:pointer;">📈 Increment</button>
+            </div>
+            <div id="sseMasterStatus" style="font-size:10px;color:var(--text3);margin-top:4px;">Not set for this employee</div>
+          </div>
         </div>
       </div>
 
@@ -743,6 +751,81 @@
     </div>
   </div>
 </div>
+
+<!-- SET SALARY MODAL (master/base salary per employee) -->
+<div class="sse-overlay" id="ssmModal">
+  <div class="sse-modal" style="width:600px;">
+    <div class="sse-topbar">
+      <div>
+        <div class="sse-title">⚙ Set Salary</div>
+        <div class="sse-sub" id="ssmSub">Base salary for this employee — auto-applied to every future month</div>
+      </div>
+      <button class="ss-close" onclick="closeSetSalary()">✕</button>
+    </div>
+    <div class="sse-body">
+      <div>
+        <div style="background:rgba(232,112,0,.07);border:1.5px solid rgba(232,112,0,.35);border-radius:6px;padding:10px 14px;margin-bottom:12px;">
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--orange);margin-bottom:6px;">💰 Salary / CTC (₹) &nbsp;<span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;">(Annual Cost to Company)</span></div>
+          <input id="ssmCTC" type="number" min="0" placeholder="e.g. 540000" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'Barlow',sans-serif;font-size:13px;padding:8px 10px;outline:none;" oninput="ssmCTCAutoFill()"/>
+        </div>
+        <div class="sse-grid">
+          <div class="sse-field"><label>Basic (₹)</label><input id="ssmBasic" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>HRA (₹)</label><input id="ssmHRA" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>Dearness Allowance (₹)</label><input id="ssmDA" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>Medical Allowance (₹)</label><input id="ssmMA" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>LTA (₹)</label><input id="ssmLTA" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>Special Allowance* (₹)</label><input id="ssmSA" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>City Compensatory Allow. (₹)</label><input id="ssmCCA" type="number" min="0" placeholder="0"/></div>
+        </div>
+      </div>
+      <div>
+        <div class="sse-section-lbl">📉 Deductions</div>
+        <div class="sse-grid">
+          <div class="sse-field"><label>Professional Tax (₹)</label><input id="ssmPT" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>TDS (₹)</label><input id="ssmTDS" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>Existing Advance (₹)</label><input id="ssmAdv" type="number" min="0" placeholder="0"/></div>
+          <div class="sse-field"><label>Other Deductions (₹)</label><input id="ssmOtherDed" type="number" min="0" placeholder="0"/></div>
+        </div>
+      </div>
+    </div>
+    <div class="sse-footer">
+      <button class="btn-cancel" onclick="closeSetSalary()">Cancel</button>
+      <button class="btn-save" onclick="saveSetSalary()">💾 Save & Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- INCREMENT MODAL -->
+<div class="sse-overlay" id="sincModal">
+  <div class="sse-modal" style="width:460px;">
+    <div class="sse-topbar">
+      <div>
+        <div class="sse-title">📈 Increment</div>
+        <div class="sse-sub" id="sincSub">Raise the Set Salary — updates the base for this employee</div>
+      </div>
+      <button class="ss-close" onclick="closeIncrement()">✕</button>
+    </div>
+    <div class="sse-body">
+      <div class="sse-grid">
+        <div class="sse-field"><label>Increment Type</label>
+          <select id="sincType">
+            <option value="amount">Flat Amount (₹)</option>
+            <option value="percent">Percentage (%)</option>
+          </select>
+        </div>
+        <div class="sse-field"><label>Value</label><input id="sincValue" type="number" min="0" placeholder="e.g. 20000 or 10"/></div>
+        <div class="sse-field"><label>Effective Date</label><input id="sincDate" type="date" style="color-scheme:dark"/></div>
+        <div class="sse-field"><label>Note (optional)</label><input id="sincNote" type="text" placeholder="e.g. Annual increment"/></div>
+      </div>
+      <div id="sincPreview" style="margin-top:14px;font-size:12px;color:var(--text3);"></div>
+    </div>
+    <div class="sse-footer">
+      <button class="btn-cancel" onclick="closeIncrement()">Cancel</button>
+      <button class="btn-save" onclick="saveIncrement()">💾 Apply Increment</button>
+    </div>
+  </div>
+</div>
+
 
 
 <!-- ══════════════════════════════════════
@@ -1497,6 +1580,8 @@ function renderSSTable(){
 // ── Open entry form ──
 function openSSEntry(empId, period){
   _sseEditId = null;
+  _sseMasterSalary = null;
+  updateMasterStatusUI();
   populateSSFilters();
 
   // Reset form
@@ -1549,17 +1634,20 @@ function openSSEntry(empId, period){
           ssePopulateFromExisting(ss);
           // Only auto-fill from attendance if this saved record has no days_worked yet
           sseAutoFillDaysWorked(false);
+          fetchSalaryMaster(empId); // status badge only — don't overwrite the loaded record
         } else {
           _sseEditId=null;
           document.getElementById('sseTitle').textContent='Add Salary Structure';
           // New entry for this period — auto-calc Days Worked from Attendance right away
           sseAutoFillDaysWorked(true);
+          // Auto-apply the employee's Set Salary (if any) straight into Earnings
+          fetchSalaryMaster(empId).then(function(m){ if(m) applyMasterSalaryToForm(); });
         }
       })
       .catch(function(){
         const ss=allSalaryStructures.find(s=>s.emp_id===empId&&(s.period||'').slice(0,7)===ym);
-        if(ss){ _sseEditId=ss.id; document.getElementById('sseTitle').textContent='Edit Salary Structure'; ssePopulateFromExisting(ss); sseAutoFillDaysWorked(false); }
-        else { document.getElementById('sseTitle').textContent='Add Salary Structure'; sseAutoFillDaysWorked(true); }
+        if(ss){ _sseEditId=ss.id; document.getElementById('sseTitle').textContent='Edit Salary Structure'; ssePopulateFromExisting(ss); sseAutoFillDaysWorked(false); fetchSalaryMaster(empId); }
+        else { document.getElementById('sseTitle').textContent='Add Salary Structure'; sseAutoFillDaysWorked(true); fetchSalaryMaster(empId).then(function(m){ if(m) applyMasterSalaryToForm(); }); }
       });
     // ── AUTO-SYNC: apply pending deduction saved by HR Deduction modal ──
     try {
@@ -1816,6 +1904,162 @@ function sseCTCAutoFill(){
   document.getElementById('sseSA').value    = sa    || '';
   sseRecalc();
 }
+
+// ══════════════════════════════════════════════════════════════
+//  SET SALARY / INCREMENT — per-employee master ("base") salary
+//  that auto-applies to Earnings every time a new month is added.
+// ══════════════════════════════════════════════════════════════
+var _sseMasterSalary = null; // holds the saved master row for the currently-open employee, or null
+
+function updateMasterStatusUI(){
+  var el = document.getElementById('sseMasterStatus');
+  if(!el) return;
+  if(_sseMasterSalary){
+    var ctc = parseFloat(_sseMasterSalary.salary_ctc)||0;
+    el.innerHTML = '✅ <span style="color:var(--green)">Set</span> — CTC ₹'+ctc.toLocaleString('en-IN');
+  } else {
+    el.textContent = 'Not set for this employee';
+    el.style.color = 'var(--text3)';
+  }
+}
+
+async function fetchSalaryMaster(empId){
+  if(!empId){ _sseMasterSalary=null; updateMasterStatusUI(); return null; }
+  try{
+    const r = await fetch(`${BASE}/api/salary-master?emp_id=${empId}`, {headers: hdrs()});
+    const d = await r.json();
+    _sseMasterSalary = (d && d.success && d.data) ? d.data : null;
+  }catch(e){ _sseMasterSalary = null; }
+  updateMasterStatusUI();
+  return _sseMasterSalary;
+}
+
+// Pushes the saved master salary straight into the Earnings/Deductions fields
+// on the open Add/Edit Salary Structure form.
+function applyMasterSalaryToForm(){
+  if(!_sseMasterSalary) return;
+  var m = _sseMasterSalary;
+  document.getElementById('sseCTC').value      = m.salary_ctc || '';
+  document.getElementById('sseBasic').value    = m.basic || '';
+  document.getElementById('sseHRA').value      = m.hra || '';
+  document.getElementById('sseDA').value       = m.dearness_allowance || '';
+  document.getElementById('sseMA').value       = m.medical_allowance || '';
+  document.getElementById('sseLTA').value      = m.lta || '';
+  document.getElementById('sseSA').value       = m.special_allowance || '';
+  document.getElementById('sseCCA').value      = m.city_compensatory_allowance || '';
+  document.getElementById('ssePT').value       = m.professional_tax || '';
+  document.getElementById('sseTDS').value      = m.tds || '';
+  document.getElementById('sseAdv').value      = m.existing_advance || '';
+  document.getElementById('sseOtherDed').value = m.other_deductions || '';
+  sseRecalc();
+}
+
+// ── Set Salary modal ──
+function openSetSalary(){
+  var empId = parseInt(document.getElementById('sseEmpSel').value) || null;
+  if(!empId){ toast('Select an employee first','error'); return; }
+  var m = _sseMasterSalary;
+  var pick = function(masterKey, formId){ return m ? (m[masterKey]||'') : (document.getElementById(formId).value||''); };
+  document.getElementById('ssmCTC').value     = pick('salary_ctc','sseCTC');
+  document.getElementById('ssmBasic').value   = pick('basic','sseBasic');
+  document.getElementById('ssmHRA').value     = pick('hra','sseHRA');
+  document.getElementById('ssmDA').value      = pick('dearness_allowance','sseDA');
+  document.getElementById('ssmMA').value      = pick('medical_allowance','sseMA');
+  document.getElementById('ssmLTA').value     = pick('lta','sseLTA');
+  document.getElementById('ssmSA').value      = pick('special_allowance','sseSA');
+  document.getElementById('ssmCCA').value     = pick('city_compensatory_allowance','sseCCA');
+  document.getElementById('ssmPT').value      = pick('professional_tax','ssePT');
+  document.getElementById('ssmTDS').value     = pick('tds','sseTDS');
+  document.getElementById('ssmAdv').value     = pick('existing_advance','sseAdv');
+  document.getElementById('ssmOtherDed').value= pick('other_deductions','sseOtherDed');
+  document.getElementById('ssmSub').textContent = (document.getElementById('sseEmpName').value||'') + ' — auto-applied to every future month';
+  document.getElementById('ssmModal').classList.add('open');
+}
+function closeSetSalary(){ document.getElementById('ssmModal').classList.remove('open'); }
+
+function ssmCTCAutoFill(){
+  const ctc   = parseFloat(document.getElementById('ssmCTC').value) || 0;
+  const basic = Math.round(ctc / 2);
+  const hra   = Math.round(basic / 2);
+  const da    = Math.round(hra / 2);
+  const ma    = Math.round(da / 2);
+  const lta   = Math.round(ma / 2);
+  const sa    = ctc - basic - hra - da - ma - lta;
+  document.getElementById('ssmBasic').value = basic || '';
+  document.getElementById('ssmHRA').value   = hra   || '';
+  document.getElementById('ssmDA').value    = da    || '';
+  document.getElementById('ssmMA').value    = ma    || '';
+  document.getElementById('ssmLTA').value   = lta   || '';
+  document.getElementById('ssmSA').value    = sa    || '';
+}
+
+async function saveSetSalary(){
+  var empId = parseInt(document.getElementById('sseEmpSel').value) || null;
+  if(!empId){ toast('Select an employee first','error'); return; }
+  const g = id=>parseFloat(document.getElementById(id).value)||0;
+  const payload = {
+    emp_id: empId,
+    salary_ctc: g('ssmCTC'), basic: g('ssmBasic'), hra: g('ssmHRA'),
+    dearness_allowance: g('ssmDA'), medical_allowance: g('ssmMA'), lta: g('ssmLTA'),
+    special_allowance: g('ssmSA'), city_compensatory_allowance: g('ssmCCA'),
+    professional_tax: g('ssmPT'), tds: g('ssmTDS'), existing_advance: g('ssmAdv'), other_deductions: g('ssmOtherDed'),
+    set_by: (sess().username || 'Admin')
+  };
+  if(payload.salary_ctc===0 && payload.basic===0){ toast('Enter at least the CTC / Basic before saving','error'); return; }
+  try{
+    const r = await fetch(`${BASE}/api/salary-master`, {method:'POST', headers:hdrs(), body:JSON.stringify(payload)});
+    const d = await r.json();
+    if(d && d.success){
+      _sseMasterSalary = d.data;
+      updateMasterStatusUI();
+      applyMasterSalaryToForm();
+      closeSetSalary();
+      toast('Salary set — applied to Earnings','success');
+    } else toast(d.error||'Could not save Set Salary','error');
+  }catch(e){ toast('Network error while saving Set Salary','error'); }
+}
+
+// ── Increment modal ──
+function openIncrement(){
+  var empId = parseInt(document.getElementById('sseEmpSel').value) || null;
+  if(!empId){ toast('Select an employee first','error'); return; }
+  if(!_sseMasterSalary){ toast('Set Salary first, then apply an increment','error'); return; }
+  document.getElementById('sincType').value  = 'amount';
+  document.getElementById('sincValue').value = '';
+  document.getElementById('sincDate').value  = new Date().toISOString().slice(0,10);
+  document.getElementById('sincNote').value  = '';
+  document.getElementById('sincSub').textContent = (document.getElementById('sseEmpName').value||'') + ' — updates the base for this employee';
+  document.getElementById('sincPreview').textContent = 'Current CTC: ₹'+(parseFloat(_sseMasterSalary.salary_ctc)||0).toLocaleString('en-IN');
+  document.getElementById('sincModal').classList.add('open');
+}
+function closeIncrement(){ document.getElementById('sincModal').classList.remove('open'); }
+
+async function saveIncrement(){
+  var empId = parseInt(document.getElementById('sseEmpSel').value) || null;
+  if(!empId || !_sseMasterSalary){ toast('Set Salary first','error'); return; }
+  const type  = document.getElementById('sincType').value;
+  const value = parseFloat(document.getElementById('sincValue').value)||0;
+  if(value<=0){ toast('Enter a valid increment value','error'); return; }
+  const payload = {
+    increment_type: type, value: value,
+    effective_date: document.getElementById('sincDate').value,
+    note: document.getElementById('sincNote').value,
+    created_by: (sess().username || 'Admin')
+  };
+  try{
+    const r = await fetch(`${BASE}/api/salary-master/${empId}/increment`, {method:'POST', headers:hdrs(), body:JSON.stringify(payload)});
+    const d = await r.json();
+    if(d && d.success){
+      _sseMasterSalary = d.data;
+      updateMasterStatusUI();
+      applyMasterSalaryToForm();
+      closeIncrement();
+      toast('Increment applied — Set Salary updated','success');
+    } else toast(d.error||'Could not apply increment','error');
+  }catch(e){ toast('Network error while applying increment','error'); }
+}
+
+
 // ── Inline CTC Auto-Fill: Basic=CTC/2, HRA=Basic/2, DA=HRA/2, MA=DA/2, LTA=MA/2, SA=Remaining ──
 function ilCTCAutoFill(eid){
   const ctc   = parseFloat(document.getElementById('il_ctc_'+eid).value) || 0;
@@ -3671,6 +3915,8 @@ document.addEventListener('DOMContentLoaded', async function(){
 });
 
 (function(){ var _m=document.getElementById('sseModal'); if(_m)_m.addEventListener('click',function(e){if(e.target===this)closeSSEntry();}); })();
+(function(){ var _m=document.getElementById('ssmModal'); if(_m)_m.addEventListener('click',function(e){if(e.target===this)closeSetSalary();}); })();
+(function(){ var _m=document.getElementById('sincModal'); if(_m)_m.addEventListener('click',function(e){if(e.target===this)closeIncrement();}); })();
 
 // ═══════════════════════════════════════════════════════════
 //  CORRECTION PANEL — full dashboard logic
