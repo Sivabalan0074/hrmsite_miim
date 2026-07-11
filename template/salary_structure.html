@@ -616,7 +616,7 @@
         </select>
       </div>
       <div class="ss-fg"><label>Period (Month)</label>
-        <input type="date" id="ssFMonth" onchange="renderSSTable()" style="color-scheme:dark"/>
+        <input type="date" id="ssFMonth" onchange="renderSSTable();updateSSStats();" style="color-scheme:dark"/>
       </div>
       <div class="ss-fg"><label>Search</label>
         <input type="text" id="ssFSearch" placeholder="Name / ID…" oninput="renderSSTable()"/>
@@ -1160,13 +1160,12 @@ function updateSSStats(){
   const monthRaw = (document.getElementById('ssFMonth')||{}).value || '';
   const selMonth = monthRaw ? monthRaw.slice(0,7) : '';
 
-  // Count records scoped to selected period, fallback to any period if none match
+  // Count records scoped to selected period only — no fallback, so switching
+  // to a month with no structures correctly shows 0 / Not Set instead of
+  // silently displaying another month's totals.
   let validStructs = allSalaryStructures.filter(s=>{
-    const periodMatch = selMonth ? (s.period||'').slice(0,7) === selMonth : true;
-    return periodMatch;
+    return selMonth ? (s.period||'').slice(0,7) === selMonth : true;
   });
-  // If no structures match the selected month, show all (so counts aren't misleadingly zero)
-  if(validStructs.length === 0 && selMonth) validStructs = allSalaryStructures.slice();
 
   // Build employee set from valid records only — strict match by DB id, never empid
   // (see renderSSTable note above for why mixing id/empid causes false matches)
