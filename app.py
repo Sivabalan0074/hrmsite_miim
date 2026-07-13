@@ -1120,7 +1120,7 @@ def get_leave_balance():
         year = request.args.get('year', str(datetime.date.today().year))
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
-        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
         return jsonify(dict(row))
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
@@ -3042,7 +3042,7 @@ def leave_balance_report():
             "Apr 2026 - Mar 2027". Defaults to the current financial year.)
 
     MIIM Leave Policy V24, applied per leave type:
-      CL (Casual Leave)  -> 12/year flat quota. Lapses at year-end (no
+      CL (Casual Leave)  -> 6/year flat quota. Lapses at year-end (no
                              carry-over into the next FY).
       SL (Sick Leave)    -> accrues 1/month (12/year). Carries over into
                              future years, capped at a running 32-day
@@ -3102,7 +3102,7 @@ def leave_balance_report():
         q += " ORDER BY dept, username"
         emps = conn.execute(q, tuple(params)).fetchall()
 
-        cl_total = 12
+        cl_total = 6
         el_accrued = round(min(month_in_fy * 0.5, 6.0), 1)
         pm_fy_total = 2 * month_in_fy
 
@@ -3352,7 +3352,7 @@ def attendance_monthly_summary():
                 used_before[t] = (row['c'] if row else 0) or 0
 
             accrued = {
-                "cl": 12.0,                                        # flat annual quota, no monthly accrual
+                "cl": 6.0,                                        # flat annual quota, no monthly accrual
                 "sl": min(month_in_fy, 12) * 1.0,                   # 1/month, capped 12/year (Apr-Mar)
                 "el": min(month_in_fy * 0.5, 6.0),                  # 0.5/month, capped 6/year (Apr-Mar)
             }
@@ -3926,7 +3926,7 @@ def get_leave_balance_by_id(emp_id):
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
         if row: return jsonify(dict(row))
-        return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
@@ -4627,7 +4627,7 @@ def init_db():
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, year TEXT,
         annual INTEGER DEFAULT 18, sick INTEGER DEFAULT 10,
-        casual INTEGER DEFAULT 12, earned INTEGER DEFAULT 0,
+        casual INTEGER DEFAULT 6, earned INTEGER DEFAULT 0,
         used_annual INTEGER DEFAULT 0, used_sick INTEGER DEFAULT 0,
         used_casual INTEGER DEFAULT 0
     )""")

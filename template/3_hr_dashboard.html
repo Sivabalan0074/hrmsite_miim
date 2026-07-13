@@ -4614,7 +4614,7 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                 <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
                   <div style="color:#3b82f6;font-weight:700;margin-bottom:6px;">🏖️ Casual Leave (CL)</div>
-                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Quota</span><span style="color:#3b82f6;font-weight:700;">12 days/year</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Quota</span><span style="color:#3b82f6;font-weight:700;">6 days/year</span></div>
                   <div style="display:flex;justify-content:space-between;color:#999;"><span>Carry-over</span><span style="color:#ef4444;">Lapsed year-end</span></div>
                 </div>
                 <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
@@ -10795,7 +10795,7 @@ async function _loadMyLeaveBalance() {
   var elUsed = approvedEl;
   var elRem = isPerm ? Math.max(0, 6 - approvedEl) : 0;
   var clUsed = approvedCl;
-  var clRem = isPerm ? Math.max(0, 12 - approvedCl) : 0;
+  var clRem = isPerm ? Math.max(0, 6 - approvedCl) : 0;
   var pmUsed = approvedPmMonth;
   var pmRem = Math.max(0, 2 - approvedPmMonth);
   var MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -10820,7 +10820,7 @@ async function _loadMyLeaveBalance() {
 
   var slPct = slTotal > 0 ? Math.round(slRem/slTotal*100) : 0;
   var elPct = Math.round(elAccrued/6*100);
-  var clPct = Math.round(clRem/12*100);
+  var clPct = Math.round(clRem/6*100);
   var pmPct = Math.round(pmRem/2*100);
 
   var cardsHtml = isPerm
@@ -10831,8 +10831,8 @@ async function _loadMyLeaveBalance() {
       + card('el','⭐','Earned Leave','½ day/month. Encashed with April salary.',elAccrued+' months accrued',elPct,
           row('THIS MONTH','0/0.5') + row('THIS YEAR',elUsed+'/6'),
           elRem, '🌟 Encashed with April salary')
-      + card('cl','🌴','Casual Leave','12 days per year. No carry-over, no encashment.',fy.label,clPct,
-          row('THIS YEAR',clUsed+'/12'),
+      + card('cl','🌴','Casual Leave','6 days per year. No carry-over, no encashment.',fy.label,clPct,
+          row('THIS YEAR',clUsed+'/6'),
           clRem, '⚠️ No carry-over to next year')
       + card('pm','🕐','Permission','Max 2/month. Each up to 2 hours.',MONTHS_F[nowM-1]+' '+yr,pmPct,
           row('THIS MONTH',pmUsed+'/2') + row('THIS YEAR',pmUsed+'/24'),
@@ -11104,13 +11104,13 @@ function _renderDashLeaveBalance() {
   var EL_TOTAL  = 6;    // policy: 0.5/month x 12
   var elAccrued = Math.round(fy.monthInFY * 0.5 * 10) / 10; // for badge only
   var remSick   = isPerm ? Math.max(0, slTotal  - approvedSl)   : 0;
-  var remCasual = isPerm ? Math.max(0, 12       - approvedCl)   : 0;
+  var remCasual = isPerm ? Math.max(0, 6        - approvedCl)   : 0;
   var remEarned = isPerm ? Math.max(0, EL_TOTAL - approvedEl)   : 0;
   var remPerm   =          Math.max(0, 2        - approvedPmMonth);
 
   var slPct = Math.min(100, Math.round(approvedSl / slTotal  * 100));
   var elPct = Math.min(100, Math.round(approvedEl / EL_TOTAL * 100));
-  var clPct = Math.min(100, Math.round(approvedCl / 12       * 100));
+  var clPct = Math.min(100, Math.round(approvedCl / 6       * 100));
   var pmPct = Math.min(100, Math.round(approvedPmMonth / 2   * 100));
 
   var lc = function(n){ return n>0?'#22c55e':'#ef4444'; };
@@ -11140,7 +11140,7 @@ function _renderDashLeaveBalance() {
   container.innerHTML=[
     mc({icon:'\uD83E\uDD12',title:'Sick Leave',tc:'#eab308',desc:'1 day/month. Carries over up to 2\u00bd years (max 32\u219212).',tag:fy.monthInFY+' months accrued',tbg:'rgba(234,179,8,.15)',tbd:'rgba(234,179,8,.3)',br:'rgba(234,179,8,.35)',bc:'#eab308',left:remSick,pct:slPct,always:false,rows:[{k:'THIS MONTH',v:approvedSlMonth+'/'+(isPerm?1:'\u2014')},{k:'THIS YEAR',v:approvedSl+'/'+slTotal}],note:'\uD83D\uDCC5 Carries over (max 32 days)'}),
     mc({icon:'\u2B50',title:'Earned Leave',tc:'#a855f7',desc:'\u00bd day/month. Encashed with April salary. No carry-over.',tag:elAccrued+' months accrued',tbg:'rgba(168,85,247,.15)',tbd:'rgba(168,85,247,.3)',br:'rgba(168,85,247,.35)',bc:'#a855f7',left:remEarned,pct:elPct,always:false,rows:[{k:'THIS MONTH',v:approvedElMonth+'/'+(isPerm?0.5:'\u2014')},{k:'THIS YEAR',v:approvedEl+'/'+EL_TOTAL}],note:'\uD83C\uDF1F Encashed with April salary'}),
-    mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'12 days per year. No carry-over, no encashment.',tag:fy.label,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/12'}],note:'\u26A0\uFE0F No carry-over to next year'}),
+    mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'6 days per year. No carry-over, no encashment.',tag:fy.label,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/6'}],note:'\u26A0\uFE0F No carry-over to next year'}),
     mc({icon:'\u23F1\uFE0F',title:'Permission',tc:'#f97316',desc:'Max 2 permissions/month. Each up to 2 hours.',tag:MONTH_S[nowM-1]+' '+yr,tbg:'rgba(249,115,22,.15)',tbd:'rgba(249,115,22,.3)',br:'rgba(249,115,22,.35)',bc:'#f97316',left:remPerm,pct:pmPct,always:true,rows:[{k:'THIS MONTH',v:approvedPmMonth+'/2'},{k:'THIS YEAR',v:approvedPmYear+'/24'}],note:null})
   ].join('');
 }
