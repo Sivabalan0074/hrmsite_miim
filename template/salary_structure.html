@@ -724,6 +724,7 @@
           <div class="sse-field"><label>TDS (₹)</label><input id="sseTDS" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
           <div class="sse-field"><label>Existing Advance (₹)</label><input id="sseAdv" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
           <div class="sse-field"><label>Other Deductions (₹)</label><input id="sseOtherDed" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
+          <div class="sse-field"><label>Loss of Pay (₹)</label><input id="sseLOP" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
         </div>
         <!-- Dynamic extra deduction rows -->
         <div id="dedExtraRows" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
@@ -1468,6 +1469,7 @@ function renderSSTable(){
                   <div><span style="color:var(--text3)">TDS: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.tds)}</b></div>
                   <div><span style="color:var(--text3)">Advance: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.existing_advance)}</b></div>
                   <div><span style="color:var(--text3)">Other: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.other_deductions)}</b></div>
+                  <div><span style="color:var(--text3)">LOP: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.lop)}</b></div>
                   <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
                     <span style="color:var(--text3)">Total Deductions: </span><b style="color:var(--red);font-size:14px;font-family:'JetBrains Mono',monospace">₹${Number(s.total_deductions||0).toLocaleString('en-IN')}</b>
                   </div>
@@ -1586,7 +1588,7 @@ function openSSEntry(empId, period){
   populateSSFilters();
 
   // Reset form
-  ['sseBasic','sseHRA','sseDA','sseMA','sseLTA','sseSA','sseCCA','ssePT','sseTDS','sseAdv','sseOtherDed','sseDaysWorked'].forEach(id=>{document.getElementById(id).value='';});
+  ['sseBasic','sseHRA','sseDA','sseMA','sseLTA','sseSA','sseCCA','ssePT','sseTDS','sseAdv','sseOtherDed','sseLOP','sseDaysWorked'].forEach(id=>{document.getElementById(id).value='';});
   ['sseEmpId','sseDept','sseDesig','sseDOJ','sseDOB','sseFatherName'].forEach(id=>{document.getElementById(id).value='';});
   document.getElementById('sseMOP').value='Account';
   _sseDWIsAuto = false;
@@ -1661,6 +1663,7 @@ function openSSEntry(empId, period){
           if (_pend.tds             != null) document.getElementById('sseTDS').value      = _pend.tds;
           if (_pend.existing_advance!= null) document.getElementById('sseAdv').value      = _pend.existing_advance;
           if (_pend.other_deductions!= null) document.getElementById('sseOtherDed').value = _pend.other_deductions;
+          if (_pend.lop             != null) document.getElementById('sseLOP').value      = _pend.lop;
           sseRecalc();
           _pend.synced = true;
           localStorage.setItem(_pendKey, JSON.stringify(_pend));
@@ -1689,12 +1692,13 @@ async function cancelAndClearDeductions() {
   var tds   = parseFloat(document.getElementById('sseTDS').value)     || 0;
   var adv   = parseFloat(document.getElementById('sseAdv').value)     || 0;
   var oth   = parseFloat(document.getElementById('sseOtherDed').value) || 0;
-  var hasDeductions = (pt + tds + adv + oth) > 0;
+  var lop   = parseFloat(document.getElementById('sseLOP').value)      || 0;
+  var hasDeductions = (pt + tds + adv + oth + lop) > 0;
 
   // If editing an existing record and deductions are present, ask to clear
   if (_sseEditId && hasDeductions) {
     var choice = confirm(
-      'Do you want to CLEAR the deduction fields (Professional Tax, TDS, Advance, Other) from this salary structure?\n\n' +
+      'Do you want to CLEAR the deduction fields (Professional Tax, TDS, Advance, Other, LOP) from this salary structure?\n\n' +
       'Click OK to clear deductions.\n' +
       'Click Cancel to just close without clearing.'
     );
@@ -1711,6 +1715,7 @@ async function cancelAndClearDeductions() {
             tds:              0,
             existing_advance: 0,
             other_deductions: 0,
+            lop:              0,
             total_deductions: 0,
             net_pay:          Math.round(totalEarn),
             notes:            (rec.notes || '').replace(/\|?\s*Deductions cleared by HR.*$/i, '').trim() + ' | Deductions cleared by HR'
@@ -1742,7 +1747,7 @@ var _hlFields = [
   {id:'sseBasic',n:'Basic'},{id:'sseHRA',n:'HRA'},{id:'sseDA',n:'DA'},
   {id:'sseMA',n:'Medical Allow.'},{id:'sseLTA',n:'LTA'},{id:'sseSA',n:'Spec.Allow'},
   {id:'sseCCA',n:'CCA'},{id:'ssePT',n:'Prof.Tax'},{id:'sseTDS',n:'TDS'},
-  {id:'sseAdv',n:'Advance'},{id:'sseOtherDed',n:'Other Ded'},
+  {id:'sseAdv',n:'Advance'},{id:'sseOtherDed',n:'Other Ded'},{id:'sseLOP',n:'LOP'},
   {id:'sseDaysWorked',n:'Days'},{id:'sseMOP',n:'Pay Mode'},{id:'ssePayDate',n:'Pay Date'}
 ];
 
@@ -1812,7 +1817,7 @@ function ssePopulateFromExisting(s){
   setV('sseBasic',s.basic);setV('sseHRA',s.hra);setV('sseDA',s.dearness_allowance);
   setV('sseMA',s.medical_allowance);setV('sseLTA',s.lta);setV('sseSA',s.special_allowance);
   setV('sseCCA',s.city_compensatory_allowance);setV('ssePT',s.professional_tax);
-  setV('sseTDS',s.tds);setV('sseAdv',s.existing_advance);setV('sseOtherDed',s.other_deductions);
+  setV('sseTDS',s.tds);setV('sseAdv',s.existing_advance);setV('sseOtherDed',s.other_deductions);setV('sseLOP',s.lop);
   // days_worked: use the value already saved on this salary structure (including 0).
   // If it's empty, leave it empty here — openSSEntry() will auto-calc it live from
   // the Attendance table (leave-aware) via sseAutoFillDaysWorked() right after this.
@@ -2220,7 +2225,7 @@ async function sseAutoFillDaysWorked(force){
 function sseRecalc(){
   const g=id=>parseFloat(document.getElementById(id).value)||0;
   const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
-  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed');
+  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+g('sseLOP');
   const extraEarn = typeof getExtraEarnings==='function' ? getExtraEarnings() : 0;
   const extraDed  = typeof getExtraDeductions==='function' ? getExtraDeductions() : 0;
   const earn = baseEarn + extraEarn;
@@ -2247,7 +2252,7 @@ async function saveSSEntry(){
   if(!empId){toast('No employee assigned','error');return;}
   const g=id=>parseFloat(document.getElementById(id).value)||0;
   const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
-  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed');
+  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+g('sseLOP');
   const earn = baseEarn + (typeof getExtraEarnings==='function'?getExtraEarnings():0);
   const ded  = baseDed  + (typeof getExtraDeductions==='function'?getExtraDeductions():0);
   // Block save if no salary components are filled — prevents stale ₹0/junk records
@@ -2266,7 +2271,7 @@ async function saveSSEntry(){
     basic:g('sseBasic'),hra:g('sseHRA'),dearness_allowance:g('sseDA'),
     medical_allowance:g('sseMA'),lta:g('sseLTA'),special_allowance:g('sseSA'),
     city_compensatory_allowance:g('sseCCA'),
-    professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),
+    professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),lop:g('sseLOP'),
     total_earnings:payableEarn,total_deductions:ded,net_pay:Math.round(payableEarn-ded),
     days_worked:daysWorkedVal,
     mode_of_payment:document.getElementById('sseMOP').value,

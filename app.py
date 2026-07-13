@@ -1534,6 +1534,7 @@ def api_salary_structures():
             city_compensatory_allowance REAL DEFAULT 0,
             professional_tax REAL DEFAULT 0, tds REAL DEFAULT 0,
             existing_advance REAL DEFAULT 0, other_deductions REAL DEFAULT 0,
+            lop REAL DEFAULT 0,
             total_earnings REAL DEFAULT 0, total_deductions REAL DEFAULT 0,
             net_pay REAL DEFAULT 0, days_worked INTEGER DEFAULT 0,
             mode_of_payment TEXT DEFAULT 'Account', pay_date TEXT,
@@ -1550,6 +1551,7 @@ def api_salary_structures():
             ('mgmt_approved_by', 'TEXT'),
             ('mgmt_approved_at', 'TEXT'),
             ('mgmt_approval_count', 'INTEGER DEFAULT 0'),
+            ('lop', 'REAL DEFAULT 0'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE salary_structures ADD COLUMN {col} {definition}")
@@ -2095,6 +2097,7 @@ def api_salary_structure_detail(ss_id):  # type: ignore
                     city_compensatory_allowance REAL DEFAULT 0,
                     professional_tax REAL DEFAULT 0, tds REAL DEFAULT 0,
                     existing_advance REAL DEFAULT 0, other_deductions REAL DEFAULT 0,
+                    lop REAL DEFAULT 0,
                     total_earnings REAL DEFAULT 0, total_deductions REAL DEFAULT 0,
                     net_pay REAL DEFAULT 0, days_worked INTEGER DEFAULT 0,
                     mode_of_payment TEXT DEFAULT 'Account', pay_date TEXT,
@@ -4542,6 +4545,7 @@ def init_db():
         city_compensatory_allowance REAL DEFAULT 0,
         professional_tax REAL DEFAULT 0, tds REAL DEFAULT 0,
         existing_advance REAL DEFAULT 0, other_deductions REAL DEFAULT 0,
+        lop REAL DEFAULT 0,
         total_earnings REAL DEFAULT 0, total_deductions REAL DEFAULT 0,
         net_pay REAL DEFAULT 0, days_worked INTEGER DEFAULT 0,
         mode_of_payment TEXT DEFAULT 'Account', pay_date TEXT,
@@ -4558,6 +4562,7 @@ def init_db():
         ('mgmt_approved_by', 'TEXT'),
         ('mgmt_approved_at', 'TEXT'),
         ('mgmt_approval_count', 'INTEGER DEFAULT 0'),
+        ('lop', 'REAL DEFAULT 0'),
     ]:
         try:
             conn.execute(f"ALTER TABLE salary_structures ADD COLUMN {_col} {_def}")
