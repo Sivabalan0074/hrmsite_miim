@@ -3949,9 +3949,43 @@ def apply_leave_new():
         conn = _db()
         emp_id = data.get('emp_id')
         # Look up the applicant's designation/dept so the correct approval chain is stored
-        emp_row = conn.execute("SELECT dept, desig, username, empid, company_email FROM employees WHERE id=?", (emp_id,)).fetchone()
+        emp_row = conn.execute("SELECT dept, desig, username, empid, company_email, type, joindate FROM employees WHERE id=?", (emp_id,)).fetchone()
         role = _role_from_desig_dept(emp_row['desig'] if emp_row else '', emp_row['dept'] if emp_row else '', emp_row['username'] if emp_row else '')
         chain = _approval_chain_for_role(role)
+
+        # ── Block the application outright if this leave type's balance is
+        # already exhausted (0 left) — matches the Apply Leave UI, which
+        # disables the card once balance hits 0 instead of letting it
+        # silently fall through to LOP. ──
+        leave_type_in = (data.get('leave_type') or '').lower().strip()
+        lt_map = {
+            'sick leave': 'sl', 'sick': 'sl', 'sl': 'sl',
+            'casual leave': 'cl', 'casual': 'cl', 'cl': 'cl',
+            'earned leave': 'el', 'earned': 'el', 'el': 'el',
+            'paid leave': 'el', 'paid': 'el', 'pl': 'el',
+            'annual leave': 'el', 'annual': 'el',
+            'permission': 'pm', 'pm': 'pm',
+        }
+        leave_code = lt_map.get(leave_type_in, 'cl')
+        try:
+            from_dt_obj = datetime.datetime.strptime(str(data.get('from_date'))[:10], '%Y-%m-%d').date()
+            to_dt_obj = datetime.datetime.strptime(str(data.get('to_date'))[:10], '%Y-%m-%d').date()
+        except Exception:
+            from_dt_obj = to_dt_obj = None
+
+        if emp_row and from_dt_obj:
+            emp_type = (emp_row['type'] if 'type' in emp_row.keys() else '') or 'Regular'
+            is_permanent = emp_type in ('Regular', 'Regular(PIP)')
+            joindate = emp_row['joindate'] if 'joindate' in emp_row.keys() else None
+            remaining = _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, from_dt_obj, to_dt_obj)
+            if remaining <= 0:
+                conn.close()
+                return jsonify({
+                    "success": False,
+                    "no_balance": True,
+                    "error": f"No {leave_code.upper()} balance left for this period — cannot apply for this leave type."
+                }), 400
+
         applied_at = str(datetime.datetime.now())
         cur = conn.execute("INSERT INTO leave_requests (emp_id,leave_type,from_date,to_date,days,reason,status,applied_at,approval_chain,approval_stage) VALUES (?,?,?,?,?,?,'pending',?,?,0)",
                      (emp_id, data.get('leave_type'), data.get('from_date'), data.get('to_date'), data.get('days', 1), data.get('reason', ''), applied_at, _json_leave.dumps(chain)))

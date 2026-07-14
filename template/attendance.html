@@ -1788,6 +1788,7 @@ let lbViewMode='year';
 let leaveModalEmpId=null,leaveModalDKey=null;
 let leaveEditReqId=null; // set while editing an existing PENDING leave request (null = normal apply)
 let selectedLeaveType=null;
+let _ltBalanceMap={};
 
 let pendingLeaves=[];
 
@@ -3022,22 +3023,29 @@ function openLeaveModal(empId, dKey, e){
   const grid=document.getElementById('leaveTypeGrid');
   grid.innerHTML=ltypes.map(lt=>{
     const isSel=curStatus===lt.id;
-    const lop=lt.bal<=0&&!lt.disabled;
-    return `<div class="lt-card ${lt.cls}${isSel?' selected':''}${lt.disabled?' disabled':''}" id="ltcard-${lt.id}" onclick="selectLeaveType('${lt.id}')">
+    const noBalance=lt.bal<=0&&!lt.disabled;
+    const blocked=lt.disabled||noBalance;
+    return `<div class="lt-card ${lt.cls}${isSel?' selected':''}${blocked?' disabled':''}" id="ltcard-${lt.id}" ${blocked?'':`onclick="selectLeaveType('${lt.id}')"`}>
       <div class="ltc-top">
         <span class="ltc-icon">${lt.icon}</span>
         <div><div class="ltc-name">${lt.name}</div><div class="ltc-desc">${lt.desc}</div></div>
       </div>
       <div style="font-size:9px;color:var(--t3);margin-bottom:6px;">📅 ${lt.period}</div>
       <div class="ltc-stats">
-        <div class="ltc-stat"><div class="ltc-stat-label">Balance</div><div class="ltc-stat-val" style="${lt.bal<=0&&!lt.disabled?'color:var(--red)':''}">${lt.disabled?'N/A':lt.bal}</div></div>
+        <div class="ltc-stat"><div class="ltc-stat-label">Balance</div><div class="ltc-stat-val" style="${noBalance?'color:var(--red)':''}">${lt.disabled?'N/A':lt.bal}</div></div>
         <div class="ltc-stat"><div class="ltc-stat-label">Used</div><div class="ltc-stat-val" style="color:var(--t2);">${lt.disabled?'—':lt.used}</div></div>
         <div class="ltc-stat"><div class="ltc-stat-label">Total</div><div class="ltc-stat-val" style="color:var(--t3);">${lt.disabled?'—':lt.total}</div></div>
       </div>
-      ${lop?`<div class="ltc-lop-note">⚠️ Balance 0 → LOP applies</div>`:''}
+      ${noBalance?`<div class="ltc-lop-note">🚫 No balance left — cannot apply</div>`:''}
       ${lt.disabled?`<div class="ltc-na-note">Not applicable for ${emp?.type||''}</div>`:''}
     </div>`;
   }).join('');
+
+  // Keep a map of which leave types currently have balance, so selectLeaveType()
+  // can refuse a click that somehow still gets through (defensive, in addition
+  // to the disabled/pointer-events:none card above).
+  _ltBalanceMap = {};
+  ltypes.forEach(lt=>{ _ltBalanceMap[lt.id] = lt.disabled ? false : lt.bal>0; });
 
   if(['cl','sl','el','pm'].includes(curStatus)){
     selectedLeaveType=curStatus;
@@ -3048,6 +3056,10 @@ function openLeaveModal(empId, dKey, e){
 }
 
 function selectLeaveType(type){
+  if(_ltBalanceMap && _ltBalanceMap[type]===false){
+    showToast('error','No Balance Left',`This employee has 0 ${type.toUpperCase()} balance remaining — cannot apply.`);
+    return;
+  }
   selectedLeaveType=selectedLeaveType===type?null:type;
   updateLTCardSelection();
   updateLeaveApplyBtn();
