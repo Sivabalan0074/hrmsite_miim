@@ -724,7 +724,11 @@
           <div class="sse-field"><label>TDS (₹)</label><input id="sseTDS" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
           <div class="sse-field"><label>Existing Advance (₹)</label><input id="sseAdv" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
           <div class="sse-field"><label>Other Deductions (₹)</label><input id="sseOtherDed" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
-          <div class="sse-field"><label>Loss of Pay (₹)</label><input id="sseLOP" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
+          <div class="sse-field">
+            <label>Loss of Pay (₹) <span id="sseLOPAutoBadge" style="display:none;font-size:9px;font-weight:700;color:var(--orange);background:rgba(249,115,22,.12);padding:1px 6px;border-radius:4px;margin-left:4px;">AUTO</span></label>
+            <input id="sseLOP" type="number" min="0" placeholder="0" readonly style="opacity:.75;cursor:not-allowed"/>
+            <div style="font-size:10px;color:var(--text3);margin-top:3px">Calculated from attendance LOP days · already reflected in the pro-rated earnings above (reference only)</div>
+          </div>
         </div>
         <!-- Dynamic extra deduction rows -->
         <div id="dedExtraRows" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
@@ -1594,6 +1598,8 @@ function openSSEntry(empId, period){
   _sseDWIsAuto = false;
   var _dwBadge0 = document.getElementById('sseDWAutoBadge'); if(_dwBadge0) _dwBadge0.style.display='none';
   var _dwNote0 = document.getElementById('sseDWBreakdown'); if(_dwNote0) _dwNote0.textContent='';
+  _sseLopDaysCache = 0; _sseLopTotalDaysCache = 0;
+  var _lopBadge0 = document.getElementById('sseLOPAutoBadge'); if(_lopBadge0) _lopBadge0.style.display='none';
   const now=new Date();
   const ym=period||`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   document.getElementById('ssePeriod').value=ym;
@@ -2166,6 +2172,8 @@ function sseTotalDaysInPeriod(){
 
 var _sseDWIsAuto = false;   // true while the Days Worked field holds an auto-fetched value
 var _sseDWFetchToken = 0;   // guards against out-of-order responses when emp/period changes fast
+var _sseLopDaysCache = 0;   // last-fetched LOP day count for the selected emp/period
+var _sseLopTotalDaysCache = 0; // last-fetched total days in that period
 
 // If the admin types into Days Worked directly, it's no longer "auto" — stop
 // claiming it's attendance-derived, but leave whatever they typed alone.
@@ -2200,6 +2208,18 @@ async function sseAutoFillDaysWorked(force){
       _sseDWIsAuto = true;
       var badge = document.getElementById('sseDWAutoBadge');
       if(badge) badge.style.display = 'inline-block';
+      // ── Loss of Pay (₹): pure reference figure = daily rate × LOP days.
+      // The actual pay-cut already happens via the pro-rated earnings above
+      // (Days Worked already excludes these days) — this field just shows
+      // the employee/HR how much that LOP amounts to in rupees.
+      const lopEl = document.getElementById('sseLOP');
+      const lopBadge = document.getElementById('sseLOPAutoBadge');
+      _sseLopDaysCache = d.lop_leave_days || 0;
+      _sseLopTotalDaysCache = d.total_days_in_month || sseTotalDaysInPeriod();
+      if(lopEl){
+        _sseRefreshLOPField();
+        if(lopBadge) lopBadge.style.display = _sseLopDaysCache>0 ? 'inline-block' : 'none';
+      }
       if(noteEl){
         var bits = [];
         if(d.present) bits.push('Present '+d.present);
@@ -2209,6 +2229,8 @@ async function sseAutoFillDaysWorked(force){
         if(d.pm) bits.push('PM '+d.pm+(d.lop_breakdown&&d.lop_breakdown.pm?' ('+d.lop_breakdown.pm+' LOP)':''));
         if(d.off) bits.push('Off '+d.off);
         if(d.absent) bits.push('Absent '+d.absent);
+        if(d.half_day) bits.push('Half Day '+d.half_day);
+        if(d.lop) bits.push('LOP '+d.lop);
         var tail = d.days_worked+'/'+d.total_days_in_month+' payable days';
         if(d.is_notice_period) tail += ' — ⚠ Notice period: all leave = LOP';
         else if(d.lop_leave_days>0) tail += ' — ⚠ '+d.lop_leave_days+' LOP day(s)'+(d.is_permanent?' (over leave quota)':' (Probationary/Intern: 1 day/month only)');
@@ -2222,10 +2244,19 @@ async function sseAutoFillDaysWorked(force){
   }
 }
 
+function _sseRefreshLOPField(){
+  const lopEl = document.getElementById('sseLOP');
+  if(!lopEl) return;
+  const g2=id=>parseFloat(document.getElementById(id).value)||0;
+  const fullEarn = g2('sseBasic')+g2('sseHRA')+g2('sseDA')+g2('sseMA')+g2('sseLTA')+g2('sseSA')+g2('sseCCA');
+  const dailyRate = _sseLopTotalDaysCache>0 ? (fullEarn/_sseLopTotalDaysCache) : 0;
+  lopEl.value = _sseLopDaysCache>0 ? Math.round(dailyRate*_sseLopDaysCache) : 0;
+}
+
 function sseRecalc(){
   const g=id=>parseFloat(document.getElementById(id).value)||0;
   const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
-  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+g('sseLOP');
+  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed');
   const extraEarn = typeof getExtraEarnings==='function' ? getExtraEarnings() : 0;
   const extraDed  = typeof getExtraDeductions==='function' ? getExtraDeductions() : 0;
   const earn = baseEarn + extraEarn;
@@ -2245,6 +2276,7 @@ function sseRecalc(){
   if(_earnNote) _earnNote.textContent = ratio<1 ? `(pro-rated · ${daysWorked}/${totalDaysInMonth} days, full ${fmt(earn)})` : '';
   document.getElementById('sseCalcDed').textContent=fmt(ded);
   document.getElementById('sseCalcNet').textContent=fmt(net);
+  if(_sseLopDaysCache>0) _sseRefreshLOPField();
 }
 
 async function saveSSEntry(){
@@ -2252,7 +2284,7 @@ async function saveSSEntry(){
   if(!empId){toast('No employee assigned','error');return;}
   const g=id=>parseFloat(document.getElementById(id).value)||0;
   const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
-  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+g('sseLOP');
+  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed');
   const earn = baseEarn + (typeof getExtraEarnings==='function'?getExtraEarnings():0);
   const ded  = baseDed  + (typeof getExtraDeductions==='function'?getExtraDeductions():0);
   // Block save if no salary components are filled — prevents stale ₹0/junk records
