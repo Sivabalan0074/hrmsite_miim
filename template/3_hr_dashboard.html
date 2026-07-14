@@ -4542,6 +4542,8 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
               <span style="font-size:.65rem;color:#eab308;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(234,179,8,.2);"></span>Leave</span>
               <span style="font-size:.65rem;color:#3b82f6;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(59,130,246,.2);"></span>Holiday</span>
               <span style="font-size:.65rem;color:#555;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(100,100,100,.15);"></span>Weekend/Off</span>
+              <span style="font-size:.65rem;color:#ef4444;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(239,68,68,.4);"></span>LOP</span>
+              <span style="font-size:.65rem;color:#ea580c;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(234,88,12,.2);"></span>Half Day</span>
             </div>
 
             <!-- Scrollable grid table -->
@@ -9317,6 +9319,8 @@ function _qsSlipOpen(id,name,dept,desig,empno,type){
 .myatt-b-el{background:rgba(168,85,247,.15);color:#a855f7;}
 .myatt-b-pm{background:rgba(249,115,22,.15);color:#f97316;}
 .myatt-b-off{background:rgba(100,100,100,.15);color:#666;}
+.myatt-b-lop{background:rgba(239,68,68,.28);color:#ef4444;}
+.myatt-b-half{background:rgba(234,88,12,.18);color:#ea580c;}
 .myatt-b-nd{background:rgba(50,50,50,.3);color:#444;}
 
 /* Month grid */
@@ -10580,10 +10584,10 @@ function _myAttFmt(dStr) {
 }
 
 function _myAttStatusBadge(st) {
-  var map = {present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off','':{t:'—',c:'myatt-b-nd'}};
-  var labels = {present:'Present',absent:'Absent',sl:'Sick Leave',cl:'Casual Leave',el:'Earned Leave',pm:'Permission',off:'Off Day','':{t:'—'}};
-  var cls = {present:'myatt-b-p',absent:'myatt-b-a',sl:'myatt-b-sl',cl:'myatt-b-cl',el:'myatt-b-el',pm:'myatt-b-pm',off:'myatt-b-off','':'myatt-b-nd'};
-  var short = {present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off','':{t:'—'}};
+  var map = {present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off',lop:'LOP',half_day:'½','':{t:'—',c:'myatt-b-nd'}};
+  var labels = {present:'Present',absent:'Absent',sl:'Sick Leave',cl:'Casual Leave',el:'Earned Leave',pm:'Permission',off:'Off Day',lop:'Loss of Pay',half_day:'Half Day','':{t:'—'}};
+  var cls = {present:'myatt-b-p',absent:'myatt-b-a',sl:'myatt-b-sl',cl:'myatt-b-cl',el:'myatt-b-el',pm:'myatt-b-pm',off:'myatt-b-off',lop:'myatt-b-lop',half_day:'myatt-b-half','':'myatt-b-nd'};
+  var short = {present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off',lop:'LOP',half_day:'½','':{t:'—'}};
   return { label: labels[st]||st, cls: cls[st]||'myatt-b-nd', short: short[st]||st };
 }
 
@@ -10597,13 +10601,15 @@ function _renderMyAtt() {
   if (_myAttTab === 'day') {
     // Last 30 days table
     var last30 = _myAttData.filter(function(r){ return r.date <= todayStr; }).slice(-30).reverse();
-    var counts = {present:0,absent:0,sl:0,cl:0,el:0,pm:0,off:0};
+    var counts = {present:0,absent:0,sl:0,cl:0,el:0,pm:0,off:0,lop:0,half_day:0};
     _myAttData.filter(function(r){ return r.date.slice(0,7) === todayStr.slice(0,7); }).forEach(function(r){ if(counts[r.status]!==undefined) counts[r.status]++; });
     var pills = [
       {num:counts.present,lbl:'Present',col:'#22c55e'},
       {num:counts.absent,lbl:'Absent',col:'#ef4444'},
       {num:counts.sl+counts.cl+counts.el,lbl:'Leave',col:'#3b82f6'},
       {num:counts.pm,lbl:'PM',col:'#f97316'},
+      {num:counts.half_day,lbl:'Half Day',col:'#ea580c'},
+      {num:counts.lop,lbl:'LOP',col:'#ef4444'},
       {num:counts.off,lbl:'Off Days',col:'#555'}
     ];
     var pillHtml = pills.map(function(p){

@@ -2853,16 +2853,50 @@ def checkin():
 @app.route('/api/checkout', methods=['POST'])
 @require_auth
 def checkout():
+    """Checking out computes hours actually worked (checkout - checkin) and
+    auto-corrects today's status accordingly:
+      >= 8 hours worked -> 'present'   (full day)
+      >= 4 hours worked -> 'half_day'  (half day present)
+      <  4 hours worked -> 'lop'       (full day Loss of Pay)
+    """
     try:
         data = request.json or {}
         emp_id = data.get('emp_id')
         import datetime as _dt
         conn = _db()
         today = str(_dt.date.today())
-        conn.execute("UPDATE attendance SET checkout=?,updated_at=? WHERE emp_id=? AND date=?",
-                     (_dt.datetime.now().strftime('%H:%M'), str(_dt.datetime.now()), emp_id, today))
+        now_time = _dt.datetime.now().strftime('%H:%M')
+        now_str = str(_dt.datetime.now())
+
+        row = conn.execute("SELECT checkin FROM attendance WHERE emp_id=? AND date=?", (emp_id, today)).fetchone()
+        checkin_str = (row['checkin'] if row else '') or ''
+
+        new_status = None
+        hours = None
+        if checkin_str and checkin_str != '--':
+            try:
+                t_in = _dt.datetime.strptime(checkin_str, '%H:%M')
+                t_out = _dt.datetime.strptime(now_time, '%H:%M')
+                hours = (t_out - t_in).total_seconds() / 3600.0
+                if hours < 0:
+                    hours += 24  # safety net for a stray past-midnight checkin
+                if hours >= 8:
+                    new_status = 'present'
+                elif hours >= 4:
+                    new_status = 'half_day'
+                else:
+                    new_status = 'lop'
+            except Exception:
+                new_status = None
+
+        if new_status:
+            conn.execute("UPDATE attendance SET checkout=?,status=?,updated_at=? WHERE emp_id=? AND date=?",
+                         (now_time, new_status, now_str, emp_id, today))
+        else:
+            conn.execute("UPDATE attendance SET checkout=?,updated_at=? WHERE emp_id=? AND date=?",
+                         (now_time, now_str, emp_id, today))
         conn.commit(); conn.close()
-        return jsonify({"success": True})
+        return jsonify({"success": True, "status": new_status, "hours": round(hours, 2) if hours is not None else None})
     except Exception as ex:
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
@@ -3023,6 +3057,74 @@ def _sl_balance_asof(conn, emp_id, joindate, asof_date):
         balance = max(0.0, min(32.0, balance + 12.0) - used)
         y += 1
     return balance
+
+
+def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exclude_from, exclude_to):
+    """How many paid days of `leave_code` are still available for this
+    employee, evaluated just before `exclude_from` — used to decide, day by
+    day, whether a newly-approved leave should be paid (cl/sl/el/pm) or LOP.
+
+    `exclude_from`/`exclude_to` (date objects) are the date range of the
+    leave request currently being synced — any attendance rows already
+    written for those exact dates are excluded from the "already used"
+    count, so re-running the sync (idempotent backfill) doesn't make the
+    balance look smaller than it really is.
+
+    Policy (matches the written-out rules used elsewhere in this file):
+      - Probationary/Intern: 1 day/month total, across ALL leave types.
+      - Permanent (Regular / Regular(PIP)):
+          CL -> 6/year flat, no carry-over.
+          SL -> carry-over aware running balance (see _sl_balance_asof).
+          EL -> accrues 0.5/month, capped 6/year.
+          PM -> 2/month, resets monthly.
+    """
+    exclude_from_s = exclude_from.isoformat()
+    exclude_to_s = exclude_to.isoformat()
+
+    if not is_permanent:
+        month_start = exclude_from.replace(day=1)
+        month_end = _next_month_first(month_start) - datetime.timedelta(days=1)
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status IN ('cl','sl','el','pm') "
+            "AND date>=? AND date<=? AND (date<? OR date>?)",
+            (emp_id, month_start.isoformat(), month_end.isoformat(), exclude_from_s, exclude_to_s)
+        ).fetchone()
+        used = (row['c'] if row else 0) or 0
+        return max(0.0, 1.0 - used)
+
+    if leave_code == 'pm':
+        month_start = exclude_from.replace(day=1)
+        month_end = _next_month_first(month_start) - datetime.timedelta(days=1)
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='pm' "
+            "AND date>=? AND date<=? AND (date<? OR date>?)",
+            (emp_id, month_start.isoformat(), month_end.isoformat(), exclude_from_s, exclude_to_s)
+        ).fetchone()
+        used = (row['c'] if row else 0) or 0
+        return max(0.0, 2.0 - used)
+
+    if leave_code == 'sl':
+        asof = exclude_from - datetime.timedelta(days=1)
+        return _sl_balance_asof(conn, emp_id, joindate, asof)
+
+    fy_start, _fy_label, month_in_fy = _fy_bounds(exclude_from.year, exclude_from.month)
+    fy_start_date = datetime.date.fromisoformat(fy_start)
+    fy_end_date = datetime.date(fy_start_date.year + 1, 3, 31)
+
+    if leave_code == 'cl':
+        quota = 6.0
+    elif leave_code == 'el':
+        quota = min(month_in_fy * 0.5, 6.0)
+    else:
+        return 0.0
+
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status=? "
+        "AND date>=? AND date<=? AND (date<? OR date>?)",
+        (emp_id, leave_code, fy_start_date.isoformat(), fy_end_date.isoformat(), exclude_from_s, exclude_to_s)
+    ).fetchone()
+    used = (row['c'] if row else 0) or 0
+    return max(0.0, quota - used)
 
 
 
@@ -3307,7 +3409,7 @@ def attendance_monthly_summary():
             (emp_id, f"{period}-%")
         ).fetchall()
 
-        counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "other": 0}
+        counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0, "half_day": 0, "other": 0}
         marked_dates = set()
         for r in rows:
             d = str(r['date'])[:10]
@@ -3321,6 +3423,10 @@ def attendance_monthly_summary():
                 counts['off'] += 1
             elif st in ('cl', 'sl', 'el', 'pm'):
                 counts[st] += 1
+            elif st == 'lop':
+                counts['lop'] += 1
+            elif st in ('half_day', 'half-day', 'half'):
+                counts['half_day'] += 1
             else:
                 counts['other'] += 1
         not_marked = max(0, total_days - len(marked_dates))
@@ -3365,9 +3471,11 @@ def attendance_monthly_summary():
             # PM: 2/month, resets monthly (not cumulative).
             lop_breakdown['pm'] = max(0, counts['pm'] - 2)
 
-        lop_leave_days = sum(lop_breakdown.values())
-        # Payable / worked days = every day in the month EXCEPT Absent and LOP leave.
-        days_worked = total_days - counts['absent'] - lop_leave_days
+        lop_leave_days = sum(lop_breakdown.values()) + counts['lop']
+        half_day_count = counts['half_day']
+        # Payable / worked days = every day in the month EXCEPT Absent and LOP leave,
+        # with a Half Day (insufficient checkout hours) counting as 0.5 payable day.
+        days_worked = total_days - counts['absent'] - lop_leave_days - (half_day_count * 0.5)
         conn.close()
 
         return jsonify({
@@ -3382,6 +3490,8 @@ def attendance_monthly_summary():
             "sl": counts['sl'],
             "el": counts['el'],
             "pm": counts['pm'],
+            "lop": counts['lop'],
+            "half_day": half_day_count,
             "not_marked": not_marked,
             "emp_type": emp_type,
             "is_permanent": is_permanent,
@@ -3961,6 +4071,14 @@ def _sync_leave_to_attendance(conn, leave_id, now):
     """Write/refresh attendance rows for one APPROVED leave request.
     Shared by the live approve action and the one-time backfill endpoint
     below, so both use identical logic. Returns (ok: bool, error: str|None).
+
+    LOP policy: if the employee doesn't have enough remaining balance to
+    cover every day of this leave, the days beyond their balance are written
+    with status='lop' (Loss of Pay) instead of the leave-type code, so the
+    attendance calendar/payroll correctly reflects unpaid days rather than
+    quietly showing them as ordinary paid leave. This also means a day that
+    was previously auto-marked 'lop' (e.g. from insufficient checkout hours)
+    is correctly overwritten with the real leave code once balance allows it.
     """
     try:
         row = conn.execute("SELECT emp_id, leave_type, from_date, to_date FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
@@ -3976,12 +4094,29 @@ def _sync_leave_to_attendance(conn, leave_id, now):
             'annual leave': 'el', 'annual': 'el',
             'permission': 'pm', 'pm': 'pm',
         }
-        att_status = lt_map.get(leave_type, 'cl')
+        leave_code = lt_map.get(leave_type, 'cl')
         from_dt = datetime.datetime.strptime(str(row['from_date'])[:10], '%Y-%m-%d').date()
         to_dt   = datetime.datetime.strptime(str(row['to_date'])[:10], '%Y-%m-%d').date()
+
+        emp_row = conn.execute("SELECT type, joindate, lwd FROM employees WHERE id=?", (emp_id,)).fetchone()
+        emp_type = (emp_row['type'] if emp_row and 'type' in emp_row.keys() else '') or 'Regular'
+        joindate = (emp_row['joindate'] if emp_row and 'joindate' in emp_row.keys() else None)
+        lwd = (emp_row['lwd'] if emp_row and 'lwd' in emp_row.keys() else '') or ''
+        is_permanent = emp_type in ('Regular', 'Regular(PIP)')
+        is_notice_period = bool(lwd) and str(from_dt)[:7] <= str(lwd)[:10][:7]
+
+        remaining = 0.0 if is_notice_period else _leave_remaining_quota(
+            conn, emp_id, is_permanent, leave_code, joindate, from_dt, to_dt
+        )
+
         cur = from_dt
         while cur <= to_dt:
             date_str = str(cur)
+            if remaining > 0:
+                att_status = leave_code
+                remaining -= 1
+            else:
+                att_status = 'lop'
             existing = conn.execute("SELECT id, status FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
             if existing:
                 # Don't clobber a row that's already correctly marked with this leave

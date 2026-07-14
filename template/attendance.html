@@ -219,6 +219,8 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .gv-sl{background:var(--yellow-dim);color:var(--yellow);}
 .gv-el{background:var(--purple-dim);color:var(--purple);}
 .gv-pm{background:var(--orange-dim);color:var(--orange);}
+.gv-lop{background:var(--red-dim);color:var(--red);}
+.gv-half{background:rgba(234,88,12,0.18);color:#ea580c;}
 .gv-pending{background:rgba(239,68,68,0.15);color:var(--red);}
 
 .qcell-pop{position:fixed;z-index:600;background:var(--bg3);border:1px solid var(--orange);border-radius:10px;padding:10px 12px;box-shadow:0 12px 40px rgba(0,0,0,0.9);min-width:190px;}
@@ -1387,6 +1389,8 @@ tr.emp-row td {
       <option value="present">✅ Present</option>
       <option value="absent">❌ Absent</option>
       <option value="off">🔘 Off Day</option>
+      <option value="half_day">🌗 Half Day</option>
+      <option value="lop">🚫 LOP</option>
     </select>
     <button class="bulk-apply-btn" onclick="applyBulk()">Apply</button>
     <div class="sel-count">Sel: <span id="selCount">0</span></div>
@@ -1677,9 +1681,9 @@ function inFY(y, m, fyStartYear){
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
-const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
-const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',pending:'gv-pending'};
-const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',pending:'?'};
+const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c'};
+const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-half',pending:'gv-pending'};
+const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'LOP',half_day:'½',pending:'?'};
 
 // ════════════════════════════════════════════════════
 // ROLE CONFIG
@@ -2709,8 +2713,8 @@ function renderEmployeeDetail(empId){
     balanceHtml=`<div class="lb-nonperm-note">⚠️ ${emp.type} — 1 leave day/month. CL/SL/EL not applicable.</div>`;
   }
 
-  const stLabels={present:'✅ Present',absent:'❌ Absent',off:'🔘 Off Day',cl:'🌴 Casual Leave',sl:'🤒 Sick Leave',el:'⭐ Earned Leave',pm:'🕐 Permission','':'— Not Marked'};
-  const stColors={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)','':'var(--t3)'};
+  const stLabels={present:'✅ Present',absent:'❌ Absent',off:'🔘 Off Day',cl:'🌴 Casual Leave',sl:'🤒 Sick Leave',el:'⭐ Earned Leave',pm:'🕐 Permission',lop:'🚫 Loss of Pay',half_day:'🌗 Half Day','':'— Not Marked'};
+  const stColors={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c','':'var(--t3)'};
   const st=todayRec.status||'';
 
   mc.innerHTML=`<div class="emp-detail-wrap">
