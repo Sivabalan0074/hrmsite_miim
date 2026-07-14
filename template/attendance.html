@@ -176,6 +176,10 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .qbtn.a:hover,.qbtn.a.active{background:var(--red);color:#fff;}
 .qbtn.off{background:rgba(78,88,112,0.2);color:var(--t2);}
 .qbtn.off:hover,.qbtn.off.active{background:var(--t3);color:var(--t1);}
+.qbtn.lop{background:var(--red-dim);color:var(--red);border-color:rgba(239,68,68,0.25);}
+.qbtn.lop:hover,.qbtn.lop.active{background:var(--red);color:#fff;}
+.qbtn.half{background:rgba(234,88,12,0.15);color:#ea580c;border-color:rgba(234,88,12,0.3);}
+.qbtn.half:hover,.qbtn.half.active{background:#ea580c;color:#fff;}
 
 /* ── Total Hours & Multi Check-In/Out ── */
 .total-hrs{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:var(--green);}
@@ -196,6 +200,8 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .apply-leave-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid rgba(59,130,246,0.4);background:rgba(59,130,246,0.1);color:var(--blue);cursor:pointer;font-family:'Exo 2',sans-serif;transition:all .18s;white-space:nowrap;}
 .apply-leave-btn:hover{background:rgba(59,130,246,0.2);border-color:var(--blue);transform:translateY(-1px);}
 .apply-leave-btn.has-leave{border-color:rgba(59,130,246,0.6);background:rgba(59,130,246,0.15);}
+.apply-leave-btn.lop-cta{border-color:rgba(239,68,68,0.5);background:rgba(239,68,68,0.1);color:var(--red);}
+.apply-leave-btn.lop-cta:hover{background:rgba(239,68,68,0.2);border-color:var(--red);}
 
 .grid-view{overflow-x:auto;}
 .gv-table{border-collapse:collapse;white-space:nowrap;}
@@ -1438,6 +1444,7 @@ tr.emp-row td {
     </div>
     <div class="modal-body">
       <div id="leaveModalBalCards" style="display:none;margin-bottom:4px;"></div>
+      <div id="leaveModalLopNote" style="display:none;"></div>
       <div class="lt-grid" id="leaveTypeGrid"></div>
       <div class="leave-form-row">
         <div class="leave-form-group">
@@ -2852,8 +2859,8 @@ function buildDayRow(emp,idx,att,cfg){
     } else if(leaveActive){
       statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:${leaveBadgeColor[status]};border:1px solid ${leaveBadgeColor[status]}33;">${leaveBadgeMap[status]}</span>`;
     } else {
-      const stLabel={present:'P',absent:'A',off:'Off'}[status]||status;
-      const stClass={present:'p',absent:'a',off:'off'}[status]||'off';
+      const stLabel={present:'P',absent:'A',off:'Off',lop:'LOP',half_day:'½ Day'}[status]||status;
+      const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
       statusBtns=`<span class="qbtn ${stClass} active" style="cursor:default;">${stLabel}</span>`;
     }
   }else{
@@ -2871,8 +2878,8 @@ function buildDayRow(emp,idx,att,cfg){
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
       </div>`;
     } else {
-      const stLabel={present:'P',absent:'A',off:'Off'}[status]||status;
-      const stClass={present:'p',absent:'a',off:'off'}[status]||'off';
+      const stLabel={present:'P',absent:'A',off:'Off',lop:'LOP',half_day:'½ Day'}[status]||status;
+      const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
       statusBtns=`<div class="status-btns">
         <button class="qbtn ${stClass} active" onclick="setStatus(${emp.id},'${status}',event)">${stLabel}</button>
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Change status">✎</button>
@@ -2886,10 +2893,13 @@ function buildDayRow(emp,idx,att,cfg){
   //   While the request is still PENDING (not yet approved), this becomes an
   //   Edit button that updates the same request instead of applying fresh.
   const myPendingReq=leaveActive?findMyPendingLeave(emp.id,dk(viewDate)):null;
+  const isAutoLop=status==='lop';
   const leaveBtnHtml=(editable||isOwnRow)
     ?(myPendingReq
         ?`<button class="apply-leave-btn has-leave" onclick="event.stopPropagation();editPendingLeave(${myPendingReq.id})">✎ Edit Leave</button>`
-        :`<button class="apply-leave-btn${['cl','sl','el','pm'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`)
+        :isAutoLop
+          ?`<button class="apply-leave-btn lop-cta" title="This day is auto-marked LOP (checked-in/out under 4 hrs). Apply Permission here if balance is available." onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event,'pm')">🕐 Apply Permission</button>`
+          :`<button class="apply-leave-btn${['cl','sl','el','pm'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`)
     :'';
 
   // Correction request button — visible to employees for own row, managers see all
@@ -2932,7 +2942,7 @@ function editPendingLeave(reqId){
   if(titleEl)titleEl.textContent='✏️ Edit Leave Request';
 }
 
-function openLeaveModal(empId, dKey, e){
+function openLeaveModal(empId, dKey, e, preselect){
   if(e)e.stopPropagation();
   leaveModalEmpId=empId;
   leaveModalDKey=dKey;
@@ -2966,6 +2976,24 @@ function openLeaveModal(empId, dKey, e){
   }
 
   const curStatus=(attCache[dKey]||{})[empId]?.status||'';
+
+  // ── LOP explanation banner ── if this day was auto-marked LOP (checkin/
+  // checkout worked under 4 hours), explain why and point at Permission as
+  // the way to cover it, IF balance allows — the modal below still enforces
+  // the actual balance check, this is just context for the user.
+  const _lopNoteEl=document.getElementById('leaveModalLopNote');
+  if(_lopNoteEl){
+    if(curStatus==='lop'){
+      const _entries=getEntries(empId, dKey);
+      const _mins=calcTotalMins(_entries);
+      const _hrsTxt=_mins?` (worked ${fmtHrsMins(_mins)})`:'';
+      _lopNoteEl.innerHTML=`<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--red);margin-bottom:14px;">🚫 This day is auto-marked <b>LOP</b> — check-in/check-out was under 4 hours${_hrsTxt}. You can apply <b>Permission</b> below to cover it if balance is available; otherwise it stays LOP.</div>`;
+      _lopNoteEl.style.display='block';
+    }else{
+      _lopNoteEl.style.display='none';
+      _lopNoteEl.innerHTML='';
+    }
+  }
 
   // ── Compute balance from att_cache (primary) + approved_leaves (secondary) ──
   // April+ only, correct empId only
@@ -3049,6 +3077,13 @@ function openLeaveModal(empId, dKey, e){
 
   if(['cl','sl','el','pm'].includes(curStatus)){
     selectedLeaveType=curStatus;
+    updateLTCardSelection();
+    updateLeaveApplyBtn();
+  }else if(preselect && _ltBalanceMap[preselect]){
+    // e.g. the "🕐 Apply Permission" CTA on a LOP day — only auto-select if
+    // that leave type actually has balance; if not, leave it unselected so
+    // the disabled card's "No balance left" note speaks for itself.
+    selectedLeaveType=preselect;
     updateLTCardSelection();
     updateLeaveApplyBtn();
   }
