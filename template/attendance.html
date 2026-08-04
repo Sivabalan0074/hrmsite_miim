@@ -1787,7 +1787,21 @@ let employees=[],attCache={},balances={},selected=new Set();
 let hasChanges=false,statusFilter='',currentView='month',calOpen=false;
 const TODAY=new Date();TODAY.setHours(0,0,0,0);
 let viewDate=new Date(TODAY);
-let calYear=TODAY.getFullYear(),calMonth=TODAY.getMonth();
+// Keep the currently-viewed date across a page reload (Refresh button, F5,
+// browser reload icon, etc). Without this, viewDate always reset back to
+// "Today" on reload, so refreshing while looking at e.g. 24 Jul 2026 would
+// silently jump the page back to today's date.
+try{
+  const _savedViewDk = sessionStorage.getItem('miim_att_viewdate');
+  if(_savedViewDk){
+    const _restored = parseDK(_savedViewDk);
+    if(_restored && !isNaN(_restored.getTime())) viewDate = _restored;
+  }
+}catch(e){}
+window.addEventListener('beforeunload', ()=>{
+  try{ sessionStorage.setItem('miim_att_viewdate', dk(viewDate)); }catch(e){}
+});
+let calYear=viewDate.getFullYear(),calMonth=viewDate.getMonth();
 let activePopup=null;
 let expandedEmpId=null;
 let lbViewMode='year';
