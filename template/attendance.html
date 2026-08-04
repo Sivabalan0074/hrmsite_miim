@@ -2789,13 +2789,29 @@ function setLbView(mode,empId){
 // ════════════════════════════════════════════════════
 // DAY VIEW TABLE
 // ════════════════════════════════════════════════════
-function getVisibleEmployees(){
+// True if this employee had actually joined by the given date-key
+// (YYYY-MM-DD). Employees with no recorded join date are always shown
+// (backward-compatible for old records that never had one set).
+function hasJoinedByDate(emp, dKey){
+  const jd = emp.joindate || emp.join_date || '';
+  if(!jd) return true;
+  return String(jd).slice(0,10) <= dKey;
+}
+
+function getVisibleEmployees(dKey){
   const cfg=getRoleCfg();
+  let list;
   // account_manager / member / employee — only see their own row
   if(currentRole==='employee'||currentRole==='member'||currentRole==='account_manager'){
-    return employees.filter(e=>e.id===currentUserId);
+    list = employees.filter(e=>e.id===currentUserId);
+  } else {
+    list = cfg.canMarkDept?employees.filter(e=>e.dept===currentUserDept):employees;
   }
-  return cfg.canMarkDept?employees.filter(e=>e.dept===currentUserDept):employees;
+  // If a date is given, hide anyone who hadn't joined yet on that date —
+  // otherwise they show up marked "Absent" for days before they even
+  // started working.
+  if(dKey) list = list.filter(e=>hasJoinedByDate(e, dKey));
+  return list;
 }
 
 function dayFiltered(){
@@ -2803,7 +2819,7 @@ function dayFiltered(){
   const dept=document.getElementById('deptFilter')?.value||'';
   const type=document.getElementById('typeFilter')?.value||'';
   const dKey=dk(viewDate);const att=attCache[dKey]||{};
-  return getVisibleEmployees().filter(e=>{
+  return getVisibleEmployees(dKey).filter(e=>{
     if(dept&&e.dept!==dept)return false;
     if(type&&e.type!==type)return false;
     if(statusFilter&&(att[e.id]?.status||'')!==statusFilter)return false;
@@ -3747,7 +3763,9 @@ function renderWeekView(days){
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
-      const dKey=dk(d);const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const dKey=dk(d);
+      if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:10px;">·</span></td>`;
+      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
       const displaySt=isPend&&!st?'pending':st;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
@@ -3766,7 +3784,9 @@ function renderMonthView(days){
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
-      const dKey=dk(d);const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const dKey=dk(d);
+      if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:9px;">·</span></td>`;
+      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
       // Show "pending" badge if leave is pending approval (not yet approved)
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
       const displaySt=isPend?'pending':st;
@@ -3795,7 +3815,9 @@ function renderWeekViewFiltered(days){
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
-      const dKey=dk(d);const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const dKey=dk(d);
+      if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:10px;">·</span></td>`;
+      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
       const displaySt=isPend&&!st?'pending':st;
       // Dim cells that don't match the filter
@@ -3826,7 +3848,9 @@ function renderMonthViewFiltered(days){
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
-      const dKey=dk(d);const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const dKey=dk(d);
+      if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:9px;">·</span></td>`;
+      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
       const displaySt=isPend?'pending':st;
       const dimmed=statusFilter&&displaySt!==statusFilter;
@@ -4086,8 +4110,8 @@ function setSummaryUI(c){
   });
   const fu=document.getElementById('fUnmarked');if(fu)fu.textContent=(c.u??0)?`${c.u} not marked`:'✓ All marked';
 }
-function updateSummaryForDay(dKey){const vis=getVisibleEmployees();setSummaryUI(countSt(attCache[dKey]||{},vis));}
-function updateSummaryForRange(dKeys){const vis=getVisibleEmployees();let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0};dKeys.forEach(dKey=>{const c=countSt(attCache[dKey]||{},vis);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
+function updateSummaryForDay(dKey){const vis=getVisibleEmployees(dKey);setSummaryUI(countSt(attCache[dKey]||{},vis));}
+function updateSummaryForRange(dKeys){let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0};dKeys.forEach(dKey=>{const vis=getVisibleEmployees(dKey);const c=countSt(attCache[dKey]||{},vis);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
 function filterStatus(s){
   statusFilter=statusFilter===s?'':s;
   document.querySelectorAll('.sum-pill').forEach(p=>p.classList.remove('active'));
@@ -4103,7 +4127,7 @@ function filterStatus(s){
 // SAVE & RESET
 // ════════════════════════════════════════════════════
 async function saveAttendance(){
-  const dKey=dk(viewDate);const vis=getVisibleEmployees();const att=attCache[dKey]||{};
+  const dKey=dk(viewDate);const vis=getVisibleEmployees(dKey);const att=attCache[dKey]||{};
   const unmarked=vis.filter(e=>!att[e.id]?.status);
   if(unmarked.length>0){if(!confirm(`${unmarked.length} employees not marked. Save anyway? (→ Absent)`))return;unmarked.forEach(e=>{if(!att[e.id])att[e.id]={};att[e.id].status='absent';});attCache[dKey]=att;}
   const records=vis.map(e=>{
@@ -4144,7 +4168,7 @@ async function saveAttendance(){
   persistBalancesCache();
   renderDayTable();updateSummaryForDay(dKey);renderCal();
 }
-function resetDay(){if(!confirm('Reset attendance for this day?'))return;const dKey=dk(viewDate);getVisibleEmployees().forEach(e=>{if(attCache[dKey])attCache[dKey][e.id]={status:'',checkin:'',checkout:''};});selected.clear();markChanged(false);renderDayTable();updateSummaryForDay(dKey);}
+function resetDay(){if(!confirm('Reset attendance for this day?'))return;const dKey=dk(viewDate);getVisibleEmployees(dKey).forEach(e=>{if(attCache[dKey])attCache[dKey][e.id]={status:'',checkin:'',checkout:''};});selected.clear();markChanged(false);renderDayTable();updateSummaryForDay(dKey);}
 function markChanged(val=true){hasChanges=val;const dot=document.getElementById('unsavedDot');if(dot)dot.classList.toggle('show',val);}
 
 // ════════════════════════════════════════════════════
