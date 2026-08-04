@@ -1537,14 +1537,16 @@ tr.emp-row td {
           </select>
         </div>
       </div>
-      <!-- Existing sessions (read-only) -->
+      <!-- Existing sessions — click ✎ to edit one directly -->
       <div id="corrExistingSessions" style="display:none;margin-bottom:12px;">
-        <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Existing Sessions (already recorded)</div>
+        <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Existing Sessions (already recorded) — click ✎ Edit to correct a session directly</div>
         <div id="corrExistingList" style="display:flex;flex-direction:column;gap:4px;"></div>
       </div>
-      <!-- New session to add -->
+      <!-- New session to add / session being edited -->
       <div style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
-        <div style="font-size:10px;color:var(--orange);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">➕ New Session to Add / Correct</div>
+        <div id="corrNewSessionLabel" style="font-size:10px;color:var(--orange);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+          <span>➕ New Session to Add / Correct</span>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="corr-field">
             <label>Check-In Time</label>
@@ -4440,6 +4442,11 @@ document.addEventListener('keydown',e=>{
 let _corrReqEmpId  = null;
 let _corrReqEmpName = '';
 let _corrApprovalList = [];
+// When correcting a session that's already fully recorded (both check-in
+// AND check-out present), this holds {checkin, checkout} of the ORIGINAL
+// session being edited, so we can tell the backend exactly which row to
+// update instead of always inserting a new one. Null = "add a new session".
+let _corrReqEditingOrig = null;
 
 // Called when employee clicks "✏ Request Correction" on their own row
 function openCorrRequestModal(empId, empName, dateStr) {
@@ -4472,8 +4479,13 @@ function openCorrRequestModal(empId, empName, dateStr) {
   if (co) co.value = '';
   if (rs) rs.value = '';
   if (st) st.value = existRec.status || 'present';
+  // Fresh open of the modal = plain "add new session" mode, not editing.
+  _corrReqEditingOrig = null;
+  updateCorrNewSessionLabel();
 
-  // Show existing sessions (read-only)
+  // Show existing sessions, each with an Edit button so a fully-recorded
+  // session (both check-in & check-out already present) can be corrected
+  // directly instead of only ever adding a brand-new session.
   const existSessDiv  = document.getElementById('corrExistingSessions');
   const existListDiv  = document.getElementById('corrExistingList');
   if (existSessDiv && existListDiv) {
@@ -4486,6 +4498,7 @@ function openCorrRequestModal(empId, empName, dateStr) {
           <span style="color:var(--t3);">→</span>
           <span style="color:${e.out?'var(--orange)':'var(--t3)'};">↙ ${e.out||'--'}</span>
           ${!e.out?'<span style="font-size:9px;color:var(--yellow);background:rgba(234,179,8,0.15);padding:1px 6px;border-radius:4px;">No Checkout</span>':''}
+          <button type="button" onclick='editExistingCorrSession(${JSON.stringify(e.in||"")}, ${JSON.stringify(e.out||"")})' style="margin-left:auto;padding:3px 9px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:var(--t2);font-size:11px;cursor:pointer;">✎ Edit</button>
         </div>`).join('');
     } else {
       existSessDiv.style.display = 'none';
@@ -4497,7 +4510,7 @@ function openCorrRequestModal(empId, empName, dateStr) {
   if (hintEl) {
     if (entries.length > 0 && entries.some(e=>e.in||e.out)) {
       hintEl.style.display = 'flex';
-      hintEl.innerHTML = `<span style="color:var(--t2);">Existing sessions shown above. Enter the <strong>new session</strong> to add below.</span>`;
+      hintEl.innerHTML = `<span style="color:var(--t2);">Existing sessions shown above. Click <strong>✎ Edit</strong> on a session to correct it directly, or enter a <strong>new session</strong> below.</span>`;
     } else {
       hintEl.style.display = 'flex';
       hintEl.innerHTML = `<span style="color:var(--t2);">No check-in/out recorded for this date. Enter the correct times below.</span>`;
@@ -4506,9 +4519,48 @@ function openCorrRequestModal(empId, empName, dateStr) {
   document.getElementById('corrRequestModal').classList.add('open');
 }
 
+// Called when the person clicks ✎ Edit on an already-recorded session
+// (both check-in and check-out present). Loads that session's exact times
+// into the Check-in/Check-out fields and remembers the ORIGINAL values so
+// submitCorrRequest() can tell the backend exactly which session to update.
+function editExistingCorrSession(origIn, origOut) {
+  const ci = document.getElementById('corrReqCheckin');
+  const co = document.getElementById('corrReqCheckout');
+  if (ci) ci.value = origIn || '';
+  if (co) co.value = origOut || '';
+  _corrReqEditingOrig = { checkin: origIn || '', checkout: origOut || '' };
+  updateCorrNewSessionLabel();
+  const box = document.getElementById('corrNewSessionLabel');
+  if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Switch back from "editing session X" to "add a brand new session".
+function cancelEditCorrSession() {
+  _corrReqEditingOrig = null;
+  const ci = document.getElementById('corrReqCheckin');
+  const co = document.getElementById('corrReqCheckout');
+  if (ci) ci.value = '';
+  if (co) co.value = '';
+  updateCorrNewSessionLabel();
+}
+
+// Keeps the "New Session to Add / Correct" box in sync with whether we're
+// adding a fresh session or editing an existing one.
+function updateCorrNewSessionLabel() {
+  const box = document.getElementById('corrNewSessionLabel');
+  if (!box) return;
+  if (_corrReqEditingOrig) {
+    box.innerHTML = `<span>✎ Editing Session (${_corrReqEditingOrig.checkin || '--'} → ${_corrReqEditingOrig.checkout || '--'})</span>
+      <button type="button" onclick="cancelEditCorrSession()" style="padding:2px 8px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:var(--t3);font-size:10px;cursor:pointer;">Cancel edit</button>`;
+  } else {
+    box.innerHTML = `<span>➕ New Session to Add / Correct</span>`;
+  }
+}
+
 function closeCorrRequestModal() {
   document.getElementById('corrRequestModal').classList.remove('open');
   _corrReqEmpId = null;
+  _corrReqEditingOrig = null;
 }
 
 async function submitCorrRequest() {
@@ -4544,7 +4596,12 @@ async function submitCorrRequest() {
         req_checkin:  fmt(ciVal),
         req_checkout: fmt(coVal),
         req_status:   statusVal,
-        reason:       reason
+        reason:       reason,
+        // If the person clicked ✎ Edit on an already-recorded session,
+        // tell the backend exactly which original session to update so it
+        // doesn't get added as a brand-new duplicate session.
+        orig_checkin:  _corrReqEditingOrig ? _corrReqEditingOrig.checkin  : null,
+        orig_checkout: _corrReqEditingOrig ? _corrReqEditingOrig.checkout : null
       })
     }, 8000);
     const d = await res.json();

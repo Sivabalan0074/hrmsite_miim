@@ -3549,8 +3549,8 @@ def correction_request():
     try:
         data = request.json or {}
         conn = _db()
-        conn.execute("INSERT INTO attendance_corrections (emp_id,emp_name,dept,date,req_checkin,req_checkout,req_status,reason,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)",
-                     (data.get('emp_id'), data.get('emp_name', ''), data.get('dept', ''), data.get('date'), data.get('req_checkin', '--'), data.get('req_checkout', '--'), data.get('req_status', 'present'), data.get('reason', ''), str(datetime.datetime.now())))
+        conn.execute("INSERT INTO attendance_corrections (emp_id,emp_name,dept,date,req_checkin,req_checkout,req_status,orig_checkin,orig_checkout,reason,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?)",
+                     (data.get('emp_id'), data.get('emp_name', ''), data.get('dept', ''), data.get('date'), data.get('req_checkin', '--'), data.get('req_checkout', '--'), data.get('req_status', 'present'), data.get('orig_checkin'), data.get('orig_checkout'), data.get('reason', ''), str(datetime.datetime.now())))
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:
@@ -3653,23 +3653,40 @@ def review_correction(corr_id, action):
             checkin    = str(corr['req_checkin']  or '--')
             checkout   = str(corr['req_checkout'] or '--')
             att_status = str(corr['req_status']   or 'present')
-            # If an existing session on this date already has this same
-            # check-in time but no check-out (e.g. employee forgot to check
-            # out), fill in the check-out on THAT row instead of inserting a
-            # brand-new duplicate session. Only insert a fresh row when no
-            # such matching open session exists (e.g. a genuinely new
-            # morning/afternoon session, or both check-in & check-out were
-            # missing before).
-            existing = conn.execute(
-                "SELECT id FROM attendance WHERE emp_id=? AND date=? AND checkin=? "
-                "AND (checkout IS NULL OR checkout='' OR checkout='--') "
-                "ORDER BY id LIMIT 1",
-                (emp_id, date_str, checkin)
-            ).fetchone()
+            orig_checkin  = corr['orig_checkin']  if 'orig_checkin'  in corr.keys() else None
+            orig_checkout = corr['orig_checkout'] if 'orig_checkout' in corr.keys() else None
+
+            existing = None
+            if orig_checkin or orig_checkout:
+                # The person clicked ✎ Edit on an already-recorded session
+                # (both check-in & check-out were present). Find that EXACT
+                # original session so we update it in place rather than
+                # inserting a duplicate. If it can't be found (e.g. it was
+                # changed/removed after the request was submitted), fall
+                # through to the open-session/insert logic below.
+                existing = conn.execute(
+                    "SELECT id FROM attendance WHERE emp_id=? AND date=? "
+                    "AND checkin=? AND checkout=? ORDER BY id LIMIT 1",
+                    (emp_id, date_str, str(orig_checkin or '--'), str(orig_checkout or '--'))
+                ).fetchone()
+            if not existing:
+                # If an existing session on this date already has this same
+                # check-in time but no check-out (e.g. employee forgot to
+                # check out), fill in the check-out on THAT row instead of
+                # inserting a brand-new duplicate session. Only insert a
+                # fresh row when no such matching open session exists (e.g.
+                # a genuinely new morning/afternoon session, or both
+                # check-in & check-out were missing before).
+                existing = conn.execute(
+                    "SELECT id FROM attendance WHERE emp_id=? AND date=? AND checkin=? "
+                    "AND (checkout IS NULL OR checkout='' OR checkout='--') "
+                    "ORDER BY id LIMIT 1",
+                    (emp_id, date_str, checkin)
+                ).fetchone()
             if existing:
                 conn.execute(
-                    "UPDATE attendance SET checkout=?, status=?, marked_by=? WHERE id=?",
-                    (checkout, att_status, 'CORRECTION', existing['id'])
+                    "UPDATE attendance SET checkin=?, checkout=?, status=?, marked_by=? WHERE id=?",
+                    (checkin, checkout, att_status, 'CORRECTION', existing['id'])
                 )
             else:
                 conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by) VALUES (?,?,?,?,?,?)",
@@ -4821,10 +4838,21 @@ def init_db():
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id TEXT, emp_name TEXT, dept TEXT, date TEXT,
         req_checkin TEXT, req_checkout TEXT, req_status TEXT,
+        orig_checkin TEXT, orig_checkout TEXT,
         reason TEXT, status TEXT DEFAULT 'pending',
         reviewed_by TEXT, reviewed_by_name TEXT,
         review_note TEXT, reviewed_at TEXT, created_at TEXT
     )""")
+    # Migration: add orig_checkin/orig_checkout to existing DBs that were
+    # created before "edit an existing session" support was added. These
+    # store the ORIGINAL check-in/check-out of the session being corrected,
+    # so approval can update that exact row instead of inserting a new one.
+    for _col in ('orig_checkin', 'orig_checkout'):
+        try:
+            conn.execute(f"ALTER TABLE attendance_corrections ADD COLUMN {_col} TEXT")
+            conn.commit()
+        except Exception:
+            pass  # column already exists
     conn.execute(f"""CREATE TABLE IF NOT EXISTS approval_history (
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id TEXT, emp_name TEXT, dept TEXT,
