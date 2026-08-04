@@ -3653,10 +3653,27 @@ def review_correction(corr_id, action):
             checkin    = str(corr['req_checkin']  or '--')
             checkout   = str(corr['req_checkout'] or '--')
             att_status = str(corr['req_status']   or 'present')
-            # Always INSERT new row â€” never overwrite existing sessions
-            # This supports multiple sessions (morning + afternoon) per day
-            conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by) VALUES (?,?,?,?,?,?)",
-                         (emp_id, date_str, checkin, checkout, att_status, 'CORRECTION'))
+            # If an existing session on this date already has this same
+            # check-in time but no check-out (e.g. employee forgot to check
+            # out), fill in the check-out on THAT row instead of inserting a
+            # brand-new duplicate session. Only insert a fresh row when no
+            # such matching open session exists (e.g. a genuinely new
+            # morning/afternoon session, or both check-in & check-out were
+            # missing before).
+            existing = conn.execute(
+                "SELECT id FROM attendance WHERE emp_id=? AND date=? AND checkin=? "
+                "AND (checkout IS NULL OR checkout='' OR checkout='--') "
+                "ORDER BY id LIMIT 1",
+                (emp_id, date_str, checkin)
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE attendance SET checkout=?, status=?, marked_by=? WHERE id=?",
+                    (checkout, att_status, 'CORRECTION', existing['id'])
+                )
+            else:
+                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by) VALUES (?,?,?,?,?,?)",
+                             (emp_id, date_str, checkin, checkout, att_status, 'CORRECTION'))
             emp_name = str(corr['emp_name']) if corr['emp_name'] else ''
             dept     = str(corr['dept'])     if corr['dept']     else ''
             resp["emp_id"]      = emp_id
