@@ -4212,6 +4212,27 @@ function loadApprovalHistory(){
   }catch(e){console.warn('Could not load approval history',e);}
 }
 
+// Fully invalidate a date from BOTH the in-memory attCache AND the persisted
+// localStorage cache. A plain `delete attCache[dKey]` is not enough — a
+// later loadAttCache() call (or a fresh fetchAtt() on next page load) would
+// just read the stale copy straight back out of localStorage. This is used
+// after approving an attendance correction so the corrected check-in/out
+// actually shows up instead of the old cached (often empty) data.
+function invalidateAttCacheDate(dKey){
+  if(!dKey)return;
+  delete attCache[dKey];
+  try{
+    const raw=localStorage.getItem('miim_att_cache');
+    if(raw){
+      const saved=JSON.parse(raw);
+      if(saved[dKey]){
+        delete saved[dKey];
+        localStorage.setItem('miim_att_cache',JSON.stringify(saved));
+      }
+    }
+  }catch(e){console.warn('Could not invalidate persisted attendance cache',e);}
+}
+
 function loadAttCache(){
   try{
     const raw=localStorage.getItem('miim_att_cache');
@@ -4632,9 +4653,13 @@ async function actOnCorrection(corrId, action) {
           // Force a real refetch from backend instead of patching locally —
           // patching only the approved session would wipe out other existing
           // sessions (e.g. ESSL device punches) from the on-screen view.
-          delete attCache[dKey];
+          // IMPORTANT: also clear the persisted localStorage copy for this
+          // date — otherwise loadAttCache()/fetchAtt() will just read the
+          // stale (often empty) cached entry straight back and the approved
+          // correction will never appear on screen.
+          invalidateAttCacheDate(dKey);
+          fetchAtt(dKey).then(() => render());
         }
-        loadAttCache();
         setTimeout(() => render(), 300);
       }
 
