@@ -4446,8 +4446,15 @@ function openCorrRequestModal(empId, empName, dateStr) {
   const existEntries = existRec.entries || [];
   const existCi = existRec.checkin || (existEntries[0]?.in) || '';
   const existCo = existRec.checkout || (existEntries[0]?.out) || '';
-  // Clear new session inputs
-  if (ci) ci.value = '';
+  const entries = existRec.entries || (existCi ? [{in:existCi,out:existCo}] : []);
+  // If there's a session that's already checked in but never checked out,
+  // pre-fill the Check-in field with that exact time. This makes the
+  // check-in value the person submits match the open session on the
+  // backend exactly, so approving it fills in the check-out on THAT
+  // session instead of creating a brand-new duplicate one. If the person
+  // wants to log a genuinely new/separate session, they can just change it.
+  const openSession = entries.find(e => e.in && !e.out);
+  if (ci) ci.value = openSession ? openSession.in : '';
   if (co) co.value = '';
   if (rs) rs.value = '';
   if (st) st.value = existRec.status || 'present';
@@ -4455,7 +4462,6 @@ function openCorrRequestModal(empId, empName, dateStr) {
   // Show existing sessions (read-only)
   const existSessDiv  = document.getElementById('corrExistingSessions');
   const existListDiv  = document.getElementById('corrExistingList');
-  const entries = existRec.entries || (existCi ? [{in:existCi,out:existCo}] : []);
   if (existSessDiv && existListDiv) {
     if (entries.length > 0 && entries.some(e=>e.in||e.out)) {
       existSessDiv.style.display = 'block';
