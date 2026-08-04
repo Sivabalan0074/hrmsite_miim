@@ -4113,7 +4113,16 @@ async function saveAttendance(){
     else if(s==='off') apiSt='absent';
     else if(['cl','sl','el','pm'].includes(s)) apiSt='leave';
     const noteMap={cl:'Casual Leave',sl:'Sick Leave',el:'Earned Leave',pm:'Permission',off:'Off Day'};
-    return {emp_id:e.id,status:apiSt,checkin:d.checkin||'--',checkout:d.checkout||'--',remarks:noteMap[s]||''};
+    // Send ALL sessions for this employee/day (not just a single
+    // checkin/checkout pair) so sessions added via "+ Add" or removed via
+    // the "✕" button actually get persisted. Without this, removing a
+    // duplicate session in the grid and hitting Save & Update never told
+    // the backend to drop that row, so it kept coming back.
+    const entries=(d.entries&&d.entries.length) ? d.entries : [{in:d.checkin||'--',out:d.checkout||'--'}];
+    const sessions=entries
+      .filter(en=>(en.in&&en.in!=='--')||(en.out&&en.out!=='--'))
+      .map(en=>({checkin:en.in||'--',checkout:en.out||'--'}));
+    return {emp_id:e.id,status:apiSt,checkin:d.checkin||'--',checkout:d.checkout||'--',remarks:noteMap[s]||'',sessions};
   });
   try{
     const res=await fetch('/api/attendance/save',{

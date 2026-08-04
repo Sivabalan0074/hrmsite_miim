@@ -3524,18 +3524,38 @@ def get_attendance_range():
 def save_attendance():
     try:
         data = request.json or {}
+        req_date = data.get('date')
         records = data.get('records', [data])
         conn = _db()
         for rec in records:
             emp_id = rec.get('emp_id')
-            date = rec.get('date')
-            existing = conn.execute("SELECT id FROM attendance WHERE emp_id=? AND date=?", (emp_id, date)).fetchone()
-            if existing:
-                conn.execute("UPDATE attendance SET checkin=?,checkout=?,status=?,note=?,marked_by=?,updated_at=? WHERE emp_id=? AND date=?",
-                             (rec.get('checkin', '--'), rec.get('checkout', '--'), rec.get('status', 'present'), rec.get('note', ''), rec.get('marked_by', 'admin'), str(datetime.datetime.now()), emp_id, date))
-            else:
+            date = rec.get('date') or req_date
+            status = rec.get('status', 'present')
+            note = rec.get('note', rec.get('remarks', ''))
+            marked_by = rec.get('marked_by', 'admin')
+            now_str = str(datetime.datetime.now())
+
+            sessions = rec.get('sessions')
+            if not sessions:
+                # Backward-compatible fallback for older clients that only
+                # ever send a single checkin/checkout pair.
+                sessions = [{'checkin': rec.get('checkin', '--'), 'checkout': rec.get('checkout', '--')}]
+            # Drop fully-empty sessions
+            sessions = [s for s in sessions if (s.get('checkin') not in (None, '', '--') or s.get('checkout') not in (None, '', '--'))]
+            if not sessions:
+                sessions = [{'checkin': '--', 'checkout': '--'}]
+
+            # Fully replace every existing attendance row for this
+            # employee/date with the sessions sent from the client. This
+            # correctly persists sessions added via "+ Add" or removed via
+            # "✕" in the day-view grid. The previous blind
+            # "UPDATE ... WHERE emp_id=? AND date=?" touched every existing
+            # row without ever deleting the extra ones, so removed/duplicate
+            # sessions kept reappearing after Save & Update.
+            conn.execute("DELETE FROM attendance WHERE emp_id=? AND date=?", (emp_id, date))
+            for s in sessions:
                 conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                             (emp_id, date, rec.get('checkin', '--'), rec.get('checkout', '--'), rec.get('status', 'present'), rec.get('note', ''), rec.get('marked_by', 'admin'), str(datetime.datetime.now())))
+                             (emp_id, date, s.get('checkin', '--'), s.get('checkout', '--'), status, note, marked_by, now_str))
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:
