@@ -2096,12 +2096,15 @@ async function applyAllSetSalaries(){
       const m = (md && md.success) ? md.data : null;
       if(!m){ skippedNoMaster++; continue; }
 
-      // Days worked from attendance (leave-aware), fallback to full calendar month
-      let daysWorked = null, totalDays = new Date(py, pm, 0).getDate();
+      // Days worked from attendance (leave-aware). Per-day rate always uses a
+      // fixed 30-day month (standard payroll convention) — not the actual
+      // calendar days in this month — so the daily rate stays consistent
+      // across months instead of shifting with month length.
+      let daysWorked = null, totalDays = 30;
       try{
         const ar = await fetch(`${BASE}/api/attendance/monthly-summary?emp_id=${emp.id}&period=${period}`, {headers: hdrs()});
         const ad = await ar.json();
-        if(ad && ad.success){ daysWorked = ad.days_worked; if(ad.total_days_in_month) totalDays = ad.total_days_in_month; }
+        if(ad && ad.success){ daysWorked = ad.days_worked; }
       }catch(e){}
       const ratio = (daysWorked!=null && totalDays>0) ? Math.min(daysWorked,totalDays)/totalDays : 1;
 
@@ -2162,12 +2165,11 @@ function ilCTCAutoFill(eid){
 // ── Days Worked: auto-calculated from Attendance (leave-aware) ──
 // Total calendar days in the selected period (YYYY-MM).
 function sseTotalDaysInPeriod(){
-  const ym = document.getElementById('ssePeriod').value; // "YYYY-MM"
-  if(!ym) return 30;
-  const parts = ym.split('-').map(Number);
-  const y = parts[0], m = parts[1];
-  if(!y || !m) return 30;
-  return new Date(y, m, 0).getDate();
+  // Standard payroll convention: per-day rate = CTC / 30, regardless of the
+  // actual number of calendar days in the month (28/29/30/31). This keeps
+  // the daily rate — and therefore pro-rated pay for partial-month joiners/
+  // leavers — consistent across months instead of shifting with month length.
+  return 30;
 }
 
 var _sseDWIsAuto = false;   // true while the Days Worked field holds an auto-fetched value
