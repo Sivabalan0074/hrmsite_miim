@@ -3512,8 +3512,17 @@ async function handleApproval(reqId,action){
   const chain=req.chain||getApprovalChain(req.empRole||'employee');
   const stage=req.stage||0;
 
+  // Admin can stand in for any stage in the chain — so an admin's single
+  // "Approve" click should finalize the request immediately, not just
+  // advance it one stage. Previously, approving an HR employee's leave
+  // (chain: SM -> Admin) as admin only cleared the SM stage and left it
+  // 'pending' server-side with no attendance sync — it *looked* approved
+  // (toast, history entry) but never showed up in the Leave Balance Report
+  // until a second, unexplained approve click reached the final stage.
+  const isFinalizing = (action==='approved' && currentRole==='admin') || stage+1>=chain.length;
+
   // ── Intermediate stage: this approver signs off, but the chain isn't finished yet ──
-  if(action==='approved' && stage+1<chain.length){
+  if(action==='approved' && !isFinalizing){
     req.stage=stage+1;
     const nextRole=chain[req.stage];
     const nextLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'}[nextRole]||nextRole;
