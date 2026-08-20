@@ -1638,7 +1638,7 @@ tr.emp-row td {
         <div class="policy-cards">
           <div class="policy-card">
             <div class="pc-title">🌴 <span style="color:var(--blue)">Casual Leave (CL)</span></div>
-            <div class="pc-row"><span class="pc-key">Quota</span><span class="pc-val gr">6 days/year</span></div>
+            <div class="pc-row"><span class="pc-key">Quota</span><span class="pc-val gr">12 days/year</span></div>
             <div class="pc-row"><span class="pc-key">Carry-over</span><span class="pc-val re">Lapsed year-end</span></div>
           </div>
           <div class="policy-card">
@@ -2058,7 +2058,7 @@ function loadDemo(){
     const elUsed=perm?(elAccrued>=1?Math.floor(Math.random()*Math.floor(elAccrued)):0):0;
     const remaining_earned=Math.max(0,elAccrued-elUsed);
     const clUsed=perm?Math.floor(Math.random()*4):0;
-    const remaining_casual=perm?Math.max(0,6-clUsed):0;
+    const remaining_casual=perm?Math.max(0,12-clUsed):0;
     const pmUsed=Math.floor(Math.random()*2);
     const remaining_pm=Math.max(0,2-pmUsed);
     const monthlyData=Array.from({length:nowMonth},(_,mi)=>({
@@ -2072,8 +2072,8 @@ function loadDemo(){
       pm:pmUsed>0&&mi===nowMonth-2?1:0
     }));
     balances[emp.id]={
-      remaining_casual:perm?6:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:2,
-      total_casual:6, total_sick:slTotal||12, total_earned:6, total_pm:2, total_earned_accrued:elAccrued,
+      remaining_casual:perm?12:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:2,
+      total_casual:12, total_sick:slTotal||12, total_earned:6, total_pm:2, total_earned_accrued:elAccrued,
       // Always start at 0 — actual used count comes from miim_approved_leaves only
       used_casual:0, used_sick:0, used_earned:0, used_pm:0,
       monthly:monthlyData, year:nowYear
@@ -2180,47 +2180,28 @@ async function loadEmployees(){
     const yr=new Date().getFullYear();
     await Promise.all(employees.map(async emp=>{
       try{
-        const r=await fetchWithTimeout(`/api/leave/balance/${emp.id}?year=${yr}`,{headers:getHeaders()},5000);
+        // Real balance — computed server-side straight from the attendance
+        // table (ground truth written the moment a leave is approved), NOT
+        // from any browser-local cache. This is why it now shows correctly
+        // for every employee regardless of which device did the approving.
+        const r=await fetchWithTimeout(`/api/leave/balance/${emp.id}`,{headers:getHeaders()},5000);
         const d=await r.json();
         if(d.success&&d.balance){
           const b=d.balance;
-          const nowMonth=new Date().getMonth()+1;
-          let monthlyData=[];
-          try{
-            const mr=await fetchWithTimeout(`/api/attendance/employee/${emp.id}?from=${yr}-01-01&to=${yr}-12-31`,{headers:getHeaders()},5000);
-            const md=await mr.json();
-            const byMonth={};
-            (md.records||[]).forEach(rec=>{
-              const m=parseInt((rec.date||'').split('-')[1]);
-              if(!byMonth[m])byMonth[m]={month:m,p:0,a:0,sl:0,cl:0,el:0,pm:0};
-              const s=rec.status||'';
-              if(s==='present'||s==='late')byMonth[m].p++;
-              else if(s==='absent')byMonth[m].a++;
-              else if(s==='leave'){
-                const note=(rec.note||'').toLowerCase();
-                if(note.includes('sick'))byMonth[m].sl++;
-                else if(note.includes('casual'))byMonth[m].cl++;
-                else if(note.includes('earned'))byMonth[m].el++;
-                else if(note.includes('permission'))byMonth[m].pm++;
-                else byMonth[m].cl++;
-              }
-            });
-            monthlyData=Array.from({length:nowMonth},(_,mi)=>byMonth[mi+1]||{month:mi+1,p:0,a:0,sl:0,cl:0,el:0,pm:0});
-          }catch(e){}
           balances[emp.id]={
-            remaining_casual:  b.remaining_casual  ?? b.casual  ?? 6,
-            remaining_sick:    b.remaining_sick    ?? b.sick     ?? 12,
-            remaining_earned:  b.remaining_earned  ?? b.earned   ?? 0,
-            remaining_pm:      b.remaining_pm      ?? 2,
-            total_casual:      b.casual            ?? 6,
-            total_sick:        b.sick              ?? 12,
-            total_earned:      b.earned            ?? 0,
+            remaining_casual:  (b.cl && b.cl.remaining)        ?? 12,
+            remaining_sick:    (b.sl && b.sl.remaining)        ?? 12,
+            remaining_earned:  (b.el && b.el.remaining)        ?? 0,
+            remaining_pm:      (b.pm && b.pm.remaining_month)  ?? 2,
+            total_casual:      (b.cl && b.cl.total)            ?? 12,
+            total_sick:        (b.sl && b.sl.total)            ?? 12,
+            total_earned:      (b.el && b.el.total)            ?? 0,
             total_pm:          2,
-            used_casual:       b.used_casual       ?? 0,
-            used_sick:         b.used_sick         ?? 0,
-            used_earned:       b.used_earned       ?? 0,
-            used_pm:           b.used_pm           ?? 0,
-            monthly:           monthlyData,
+            used_casual:       (b.cl && b.cl.used_year)        ?? 0,
+            used_sick:         (b.sl && b.sl.used_year)        ?? 0,
+            used_earned:       (b.el && b.el.used_year)        ?? 0,
+            used_pm:           (b.pm && b.pm.used_month)       ?? 0,
+            monthly:           d.monthly || [],
             year:              yr
           };
         }
@@ -2559,7 +2540,7 @@ function buildVisualLeaveCards(b, empType, empId){
   // ── Policy totals (fixed, not accrued-so-far) ──
   const SL_YEAR_TOTAL = 12;   // 1/month × 12
   const EL_YEAR_TOTAL = 6;    // 0.5/month × 12
-  const CL_YEAR_TOTAL = 6;
+  const CL_YEAR_TOTAL = 12;
   const PM_MONTH_TOTAL = 2;
   const PM_YEAR_TOTAL  = 24;
 
@@ -2682,7 +2663,7 @@ function buildVisualLeaveCards(b, empType, empId){
     }),
     card({
       icon:'🌤️', title:'Casual Leave', titleColor:'#3b82f6',
-      desc:'6 days per year. No carry-over, no encashment.',
+      desc:'12 days per year. No carry-over, no encashment.',
       tag:`${fy.label}`, tagBg:'rgba(59,130,246,.15)', tagColor:'#3b82f6', tagBorder:'rgba(59,130,246,.3)',
       border:'rgba(59,130,246,.35)', barColor:'#3b82f6',
       left: cl, pct: clUsedPct, alwaysShow: false,
@@ -3023,56 +3004,23 @@ function openLeaveModal(empId, dKey, e, preselect){
     }
   }
 
-  // ── Compute balance from att_cache (primary) + approved_leaves (secondary) ──
-  // April+ only, correct empId only
-  const _yr2=new Date().getFullYear(), _nowM2=new Date().getMonth()+1;
+  // ── Balance for the type picker — straight from `b` (balances[empId]),
+  // which loadEmployees() already populated from the real server balance
+  // (attendance table), not from any localStorage cache. ──
   const _fy2=getFYInfo();
-  let _usl=0,_uel=0,_ucl=0,_upm=0;
-  const _modalSeen=new Set();
-  const _empIdStr=String(empId);
-  try{
-    const _cache=JSON.parse(localStorage.getItem('miim_att_cache')||'{}');
-    Object.keys(_cache).forEach(dKey2=>{
-      const _ly=parseInt(dKey2.slice(0,4)),_lm=parseInt(dKey2.slice(5,7));
-      if(isNaN(_ly)||isNaN(_lm)||!inFY(_ly,_lm,_fy2.startYear))return;
-      const _rec=_cache[dKey2][_empIdStr]||_cache[dKey2][empId];
-      if(!_rec||!_rec.status)return;
-      const _st=_rec.status;
-      if(_st!=='sl'&&_st!=='el'&&_st!=='cl'&&_st!=='pm')return;
-      const _key=dKey2+'_'+_st;
-      if(_modalSeen.has(_key))return;
-      _modalSeen.add(_key);
-      if(_st==='sl')_usl++;
-      else if(_st==='el')_uel++;
-      else if(_st==='cl')_ucl++;
-      else if(_st==='pm'&&_lm===_nowM2)_upm++;
-    });
-  }catch(e2){}
-  try{
-    JSON.parse(localStorage.getItem('miim_approved_leaves')||'[]').forEach(lv=>{
-      if(String(lv.empId)!==_empIdStr)return;
-      const _ly=parseInt((lv.date||'').slice(0,4)),_lm=parseInt((lv.date||'').slice(5,7));
-      if(isNaN(_ly)||isNaN(_lm)||!inFY(_ly,_lm,_fy2.startYear))return;
-      const _t=lv.type||'';
-      if(_t!=='sl'&&_t!=='el'&&_t!=='cl'&&_t!=='pm')return;
-      const _key=lv.date+'_'+_t;
-      if(_modalSeen.has(_key))return;
-      _modalSeen.add(_key);
-      if(_t==='sl')_usl++;
-      else if(_t==='el')_uel++;
-      else if(_t==='cl')_ucl++;
-      else if(_t==='pm'&&_lm===_nowM2)_upm++;
-    });
-  }catch(e3){}
-  const sl=perm?Math.max(0,12-_usl):0;
-  const el=perm?Math.max(0,6-_uel):0;
-  const cl=perm?Math.max(0,6-_ucl):0;
-  const pm=Math.max(0,2-_upm);
+  const _usl = b.used_sick   || 0;
+  const _uel = b.used_earned || 0;
+  const _ucl = b.used_casual || 0;
+  const _upm = b.used_pm     || 0;
+  const sl = perm ? (b.remaining_sick   ?? 12) : 0;
+  const el = perm ? (b.remaining_earned ?? 6)  : 0;
+  const cl = perm ? (b.remaining_casual ?? 12) : 0;
+  const pm = b.remaining_pm ?? 2;
 
   const ltypes=[
     {id:'sl',cls:'lt-sl',icon:'🤒',name:'Sick Leave',desc:'1 day per month. Carries over (max 32 days).',bal:sl,total:12,used:_usl,disabled:!perm,period:'Accrued this year'},
     {id:'el',cls:'lt-el',icon:'⭐',name:'Earned Leave',desc:'½ day per month. Encashed with April salary.',bal:el,total:6,used:_uel,disabled:!perm,period:_fy2.label},
-    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'6 days per year. No carry-over at year end.',bal:cl,total:6,used:_ucl,disabled:!perm,period:_fy2.label},
+    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'12 days per year. No carry-over at year end.',bal:cl,total:12,used:_ucl,disabled:!perm,period:_fy2.label},
     {id:'pm',cls:'lt-pm',icon:'🕐',name:'Permission',desc:'Max 2 per month, up to 2 hours each.',bal:pm,total:2,used:_upm,disabled:false,period:`${MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`},
   ];
 
@@ -3147,7 +3095,7 @@ function deductLeaveBalance(empId, leaveType){
     b.remaining_sick=Math.max(0,(b.remaining_sick??b.total_sick??0)-1);
   } else if(leaveType==='cl'){
     b.used_casual=(b.used_casual||0)+1;
-    b.remaining_casual=Math.max(0,(b.remaining_casual??6)-1);
+    b.remaining_casual=Math.max(0,(b.remaining_casual??12)-1);
   } else if(leaveType==='el'){
     b.used_earned=(b.used_earned||0)+1;
     b.remaining_earned=Math.max(0,(b.remaining_earned??0)-1);
