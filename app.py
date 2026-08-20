@@ -1,4 +1,4 @@
-﻿"""
+"""
 MIIM HR Dashboard â€” Flask Backend
 All routes, DB helpers, and background services in one file.
 """
@@ -1120,7 +1120,7 @@ def get_leave_balance():
         year = request.args.get('year', str(datetime.date.today().year))
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
-        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
         return jsonify(dict(row))
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
@@ -3073,7 +3073,7 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
     Policy (matches the written-out rules used elsewhere in this file):
       - Probationary/Intern: 1 day/month total, across ALL leave types.
       - Permanent (Regular / Regular(PIP)):
-          CL -> 6/year flat, no carry-over.
+          CL -> 12/year flat, no carry-over.
           SL -> carry-over aware running balance (see _sl_balance_asof).
           EL -> accrues 0.5/month, capped 6/year.
           PM -> 2/month, resets monthly.
@@ -3112,7 +3112,7 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
     fy_end_date = datetime.date(fy_start_date.year + 1, 3, 31)
 
     if leave_code == 'cl':
-        quota = 6.0
+        quota = 12.0
     elif leave_code == 'el':
         quota = min(month_in_fy * 0.5, 6.0)
     else:
@@ -3144,7 +3144,7 @@ def leave_balance_report():
             "Apr 2026 - Mar 2027". Defaults to the current financial year.)
 
     MIIM Leave Policy V24, applied per leave type:
-      CL (Casual Leave)  -> 6/year flat quota. Lapses at year-end (no
+      CL (Casual Leave)  -> 12/year flat quota. Lapses at year-end (no
                              carry-over into the next FY).
       SL (Sick Leave)    -> accrues 1/month (12/year). Carries over into
                              future years, capped at a running 32-day
@@ -3204,7 +3204,7 @@ def leave_balance_report():
         q += " ORDER BY dept, username"
         emps = conn.execute(q, tuple(params)).fetchall()
 
-        cl_total = 6
+        cl_total = 12
         el_accrued = round(min(month_in_fy * 0.5, 6.0), 1)
         pm_fy_total = 2 * month_in_fy
 
@@ -3366,7 +3366,7 @@ def attendance_monthly_summary():
         apply to them.
       - Regular / Regular(PIP) (permanent): CL/SL/EL are paid leave, up to
         each type's accrued quota for the year so far:
-          CL -> 6 days/year, flat (no monthly accrual, no carry-over)
+          CL -> 12 days/year, flat (no monthly accrual, no carry-over)
           SL -> accrues 1/month, capped at 12/year
           EL -> accrues 0.5/month, capped at 6/year
         Any usage beyond the accrued-to-date quota is LOP.
@@ -3458,7 +3458,7 @@ def attendance_monthly_summary():
                 used_before[t] = (row['c'] if row else 0) or 0
 
             accrued = {
-                "cl": 6.0,                                        # flat annual quota, no monthly accrual
+                "cl": 12.0,                                       # flat annual quota, no monthly accrual
                 "sl": min(month_in_fy, 12) * 1.0,                   # 1/month, capped 12/year (Apr-Mar)
                 "el": min(month_in_fy * 0.5, 6.0),                  # 0.5/month, capped 6/year (Apr-Mar)
             }
@@ -4118,15 +4118,80 @@ def delete_leave_new(leave_id):
 @app.route('/api/leave/balance/<int:emp_id>', methods=['GET'])
 @require_auth
 def get_leave_balance_by_id(emp_id):
+    """Real leave balance for one employee — computed straight from the
+    `attendance` table (the ground truth that _sync_leave_to_attendance
+    writes to the moment a leave is approved), never from a client-side
+    cache. This is what BOTH the employee's own "My Leave Balance" view
+    and HR's "Apply Leave" balance cards should call, so an approved leave
+    shows up correctly no matter which device/browser did the approving.
+    """
     try:
-        year = request.args.get('year', str(datetime.date.today().year))
+        today = datetime.date.today()
+        fy_start, fy_label, cur_month_in_fy = _fy_bounds(today.year, today.month)
+        fy_start_date = datetime.date.fromisoformat(fy_start)
+        fy_end_date = datetime.date(fy_start_date.year + 1, 3, 31)
+        nowM, nowY = today.month, today.year
+
         conn = _db()
-        row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
+        emp_row = conn.execute("SELECT type, joindate FROM employees WHERE id=?", (emp_id,)).fetchone()
+        emp_type = (emp_row['type'] if emp_row else '') or 'Regular'
+        joindate = emp_row['joindate'] if emp_row else None
+        is_perm = emp_type in ('Regular', 'Regular(PIP)')
+
+        rows = conn.execute(
+            "SELECT date, status FROM attendance WHERE emp_id=? AND date>=? AND date<=?",
+            (emp_id, fy_start_date.isoformat(), fy_end_date.isoformat())
+        ).fetchall()
+
+        counts_year = {'sl': 0, 'cl': 0, 'el': 0, 'pm': 0}
+        counts_month = {'sl': 0, 'cl': 0, 'el': 0, 'pm': 0}
+        monthly = {}
+        for r in rows:
+            d = datetime.datetime.strptime(str(r['date'])[:10], '%Y-%m-%d').date()
+            st = r['status']
+            mrec = monthly.setdefault(d.month, {'month': d.month, 'p': 0, 'a': 0, 'sl': 0, 'cl': 0, 'el': 0, 'pm': 0})
+            if st in ('present', 'late'):
+                mrec['p'] += 1
+            elif st == 'absent':
+                mrec['a'] += 1
+            elif st in counts_year:
+                counts_year[st] += 1
+                mrec[st] += 1
+                if d.year == nowY and d.month == nowM:
+                    counts_month[st] += 1
+
+        sl_remaining = round(_sl_balance_asof(conn, emp_id, joindate, today), 1) if is_perm else 0
+        cl_total = 12.0
+        el_total = 6.0
+        el_accrued = round(min(cur_month_in_fy * 0.5, 6.0), 1)
+        pm_month_total = 2
+        pm_year_total = 2 * cur_month_in_fy
+
+        cl_remaining = max(0.0, cl_total - counts_year['cl']) if is_perm else 0
+        el_remaining = max(0.0, el_total - counts_year['el']) if is_perm else 0
+        pm_month_remaining = max(0, pm_month_total - counts_month['pm'])
+        pm_year_remaining = max(0, pm_year_total - counts_year['pm'])
         conn.close()
-        if row: return jsonify(dict(row))
-        return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+
+        balance = {
+            "is_permanent": is_perm,
+            "fy_label": fy_label,
+            "month_in_fy": cur_month_in_fy,
+            "sl": {"used_month": counts_month['sl'], "used_year": counts_year['sl'],
+                   "remaining": sl_remaining, "total": round(sl_remaining + counts_year['sl'], 1)},
+            "cl": {"used_year": counts_year['cl'], "total": cl_total if is_perm else 0,
+                   "remaining": cl_remaining},
+            "el": {"used_month": counts_month['el'], "used_year": counts_year['el'],
+                   "accrued": el_accrued if is_perm else 0, "total": el_total if is_perm else 0,
+                   "remaining": el_remaining},
+            "pm": {"used_month": counts_month['pm'], "used_year": counts_year['pm'],
+                   "month_total": pm_month_total, "year_total": pm_year_total,
+                   "remaining_month": pm_month_remaining, "remaining_year": pm_year_remaining},
+        }
+        monthly_list = sorted(monthly.values(), key=lambda m: m['month'])
+        return jsonify({"success": True, "balance": balance, "monthly": monthly_list})
     except Exception as ex:
-        print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
+        print(f"[API Error] {ex}"); return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
 @app.route('/api/leave', methods=['GET'])
@@ -4850,7 +4915,7 @@ def init_db():
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, year TEXT,
         annual INTEGER DEFAULT 18, sick INTEGER DEFAULT 10,
-        casual INTEGER DEFAULT 6, earned INTEGER DEFAULT 0,
+        casual INTEGER DEFAULT 12, earned INTEGER DEFAULT 0,
         used_annual INTEGER DEFAULT 0, used_sick INTEGER DEFAULT 0,
         used_casual INTEGER DEFAULT 0
     )""")
