@@ -4616,7 +4616,7 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                 <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
                   <div style="color:#3b82f6;font-weight:700;margin-bottom:6px;">🏖️ Casual Leave (CL)</div>
-                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Quota</span><span style="color:#3b82f6;font-weight:700;">6 days/year</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Quota</span><span style="color:#3b82f6;font-weight:700;">12 days/year</span></div>
                   <div style="display:flex;justify-content:space-between;color:#999;"><span>Carry-over</span><span style="color:#ef4444;">Lapsed year-end</span></div>
                 </div>
                 <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
@@ -10769,41 +10769,35 @@ async function _loadMyLeaveBalance() {
   var yr = new Date().getFullYear();
   var nowM = new Date().getMonth() + 1;
   var b = {};
+  var backendMonthly = [];
 
+  // Always ask the server for the real balance — computed straight from the
+  // attendance table (updated the instant a leave is approved, by whoever
+  // approved it, on whatever device). No localStorage/client cache involved,
+  // so this is correct even if approval happened on a completely different
+  // browser than the one viewing this screen.
   try {
     if (empId) {
-      var r = await fetch('/api/leave/balance/' + empId + '?year=' + yr, { headers: { 'X-User-Id': String(empId) } });
+      var r = await fetch('/api/leave/balance/' + empId, { headers: { 'X-User-Id': String(empId) } });
       var d = await r.json();
-      if (d.success && d.balance) b = d.balance;
+      if (d.success && d.balance) { b = d.balance; backendMonthly = d.monthly || []; }
     }
   } catch(e) {}
 
-  var isPerm = empType === 'Regular' || empType === 'Regular(PIP)';
+  var isPerm = (typeof b.is_permanent === 'boolean') ? b.is_permanent : (empType === 'Regular' || empType === 'Regular(PIP)');
   var fy = getFYInfo();
-  var approvedSl=0, approvedCl=0, approvedEl=0, approvedPmMonth=0, approvedPmYear=0;
-  try {
-    var rawApproved = JSON.parse(localStorage.getItem('miim_approved_leaves') || '[]');
-    rawApproved.forEach(function(lv) {
-      if (String(lv.empId) !== String(empId)) return;
-      var lvYr = parseInt((lv.date||'').slice(0,4));
-      var lvMo = parseInt((lv.date||'').slice(5,7));
-      if (!inFY(lvYr, lvMo, fy.startYear)) return;
-      if (lv.type==='sl') approvedSl++;
-      else if (lv.type==='cl') approvedCl++;
-      else if (lv.type==='el') approvedEl++;
-      else if (lv.type==='pm') { approvedPmYear++; if(lvMo===nowM) approvedPmMonth++; }
-    });
-  } catch(ex) {}
-  var slTotal = 12;
-  var slUsed = approvedSl;
-  var slRem = isPerm ? Math.max(0, slTotal - approvedSl) : 0;
-  var elAccrued = Math.round(fy.monthInFY * 0.5 * 10) / 10;
-  var elUsed = approvedEl;
-  var elRem = isPerm ? Math.max(0, 6 - approvedEl) : 0;
-  var clUsed = approvedCl;
-  var clRem = isPerm ? Math.max(0, 6 - approvedCl) : 0;
-  var pmUsed = approvedPmMonth;
-  var pmRem = Math.max(0, 2 - approvedPmMonth);
+
+  var slTotal   = (b.sl && b.sl.total)        || 12;
+  var slUsed    = (b.sl && b.sl.used_year)    || 0;
+  var slRem     = isPerm ? ((b.sl && b.sl.remaining) || 0) : 0;
+  var elAccrued = (b.el && b.el.accrued) || (Math.round(fy.monthInFY * 0.5 * 10) / 10);
+  var elUsed    = (b.el && b.el.used_year)    || 0;
+  var elRem     = isPerm ? ((b.el && b.el.remaining) || 0) : 0;
+  var clUsed    = (b.cl && b.cl.used_year)    || 0;
+  var clRem     = isPerm ? ((b.cl && b.cl.remaining) || 0) : 0;
+  var pmUsed     = (b.pm && b.pm.used_month) || 0;
+  var pmUsedYear = (b.pm && b.pm.used_year)  || 0;
+  var pmRem      = (b.pm && b.pm.remaining_month) != null ? b.pm.remaining_month : Math.max(0, 2 - pmUsed);
   var MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var MONTHS_F = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -10826,7 +10820,7 @@ async function _loadMyLeaveBalance() {
 
   var slPct = slTotal > 0 ? Math.round(slRem/slTotal*100) : 0;
   var elPct = Math.round(elAccrued/6*100);
-  var clPct = Math.round(clRem/6*100);
+  var clPct = Math.round(clRem/12*100);
   var pmPct = Math.round(pmRem/2*100);
 
   var cardsHtml = isPerm
@@ -10837,63 +10831,56 @@ async function _loadMyLeaveBalance() {
       + card('el','⭐','Earned Leave','½ day/month. Encashed with April salary.',elAccrued+' months accrued',elPct,
           row('THIS MONTH','0/0.5') + row('THIS YEAR',elUsed+'/6'),
           elRem, '🌟 Encashed with April salary')
-      + card('cl','🌴','Casual Leave','6 days per year. No carry-over, no encashment.',fy.label,clPct,
-          row('THIS YEAR',clUsed+'/6'),
+      + card('cl','🌴','Casual Leave','12 days per year. No carry-over, no encashment.',fy.label,clPct,
+          row('THIS YEAR',clUsed+'/12'),
           clRem, '⚠️ No carry-over to next year')
       + card('pm','🕐','Permission','Max 2/month. Each up to 2 hours.',MONTHS_F[nowM-1]+' '+yr,pmPct,
-          row('THIS MONTH',pmUsed+'/2') + row('THIS YEAR',pmUsed+'/24'),
+          row('THIS MONTH',pmUsed+'/2') + row('THIS YEAR',pmUsedYear+'/24'),
           pmRem, '🔁 Resets each month')
       + '</div>'
     : '<div style="background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.3);border-radius:10px;padding:14px 16px;font-size:.82rem;color:#eab308;margin-bottom:18px;">⚠️ '+empType+' — 1 leave day/month. CL / SL / EL not applicable.</div>'
       + '<div class="myleave-grid">'
       + card('pm','🕐','Permission','Max 2/month. Each up to 2 hours.',MONTHS_F[nowM-1]+' '+yr,pmPct,
-          row('THIS MONTH',pmUsed+'/2') + row('THIS YEAR',pmUsed+'/24'),
+          row('THIS MONTH',pmUsed+'/2') + row('THIS YEAR',pmUsedYear+'/24'),
           pmRem, '🔁 Resets each month')
       + '</div>';
 
-  // Monthly history table — always build from miim_approved_leaves for consistency
-  var monthlyMap = {};
-  // Seed P/A counts from backend if available
-  (b.monthly||[]).forEach(function(m){ monthlyMap[m.month] = {month:m.month,p:m.p||0,a:m.a||0,sl:0,cl:0,el:0,pm:0}; });
-  // Override leave counts from approved leaves (source of truth)
-  try {
-    var allApproved = JSON.parse(localStorage.getItem('miim_approved_leaves') || '[]');
-    allApproved.forEach(function(lv) {
-      if (String(lv.empId) !== String(empId)) return;
-      var lvYr = parseInt((lv.date||'').slice(0,4));
-      var lvMo = parseInt((lv.date||'').slice(5,7));
-      if (lvYr !== yr || isNaN(lvMo)) return;
-      if (!monthlyMap[lvMo]) monthlyMap[lvMo] = {month:lvMo, p:0, a:0, sl:0, cl:0, el:0, pm:0};
-      if (lv.type==='sl') monthlyMap[lvMo].sl++;
-      else if (lv.type==='cl') monthlyMap[lvMo].cl++;
-      else if (lv.type==='el') monthlyMap[lvMo].el++;
-      else if (lv.type==='pm') monthlyMap[lvMo].pm++;
-    });
-  } catch(ex) {}
-  var monthlyData = Array.from({length: nowM}, function(_,mi){
-    var existing = monthlyMap[mi+1] || {};
-    return {
-      month: mi+1,
+  // Monthly history table — built entirely from the server's monthly
+  // breakdown (real attendance-table data, FY order Apr→Mar), never from
+  // localStorage.
+  var fyStartYear = fy.startYear;
+  var byMonth = {};
+  backendMonthly.forEach(function(m){ byMonth[m.month] = m; });
+  var FY_ORDER = [4,5,6,7,8,9,10,11,12,1,2,3];
+  var todayNow = new Date();
+  var monthlyData = [];
+  for (var i = 0; i < FY_ORDER.length; i++) {
+    var mo = FY_ORDER[i];
+    var calYear = (mo >= 4) ? fyStartYear : fyStartYear + 1;
+    if (calYear > todayNow.getFullYear() || (calYear === todayNow.getFullYear() && mo > (todayNow.getMonth()+1))) break;
+    var existing = byMonth[mo] || {};
+    monthlyData.push({
+      month: mo, year: calYear,
       p: existing.p || 0, a: existing.a || 0,
       sl: existing.sl || 0, cl: existing.cl || 0,
       el: existing.el || 0, pm: existing.pm || 0,
-      el_accrued: isPerm ? Math.round((mi+1)*0.5*10)/10 : 0
-    };
-  });
+      el_accrued: isPerm ? Math.round((i+1)*0.5*10)/10 : 0
+    });
+  }
   var histRows = monthlyData.map(function(m){
     return '<tr>'
-      + '<td style="font-weight:600;color:#888;">'+MONTHS_S[m.month-1]+' '+yr+'</td>'
+      + '<td style="font-weight:600;color:#888;">'+MONTHS_S[m.month-1]+' '+m.year+'</td>'
       + '<td style="color:#22c55e;">'+m.p+'</td>'
       + '<td style="color:'+(m.a>0?'#ef4444':'#444')+';">'+(m.a||'—')+'</td>'
       + '<td style="color:'+(m.sl>0?'#eab308':'#444')+';">'+(m.sl||'—')+'</td>'
       + '<td style="color:'+(m.cl>0?'#3b82f6':'#444')+';">'+(m.cl||'—')+'</td>'
-      + '<td style="color:#a855f7;">'+(m.el||'—')+' <span style="font-size:.6rem;color:#555;">(+'+((m.el_accrued||Math.round((m.month)*0.5*10)/10))+')</span></td>'
+      + '<td style="color:#a855f7;">'+(m.el||'—')+' <span style="font-size:.6rem;color:#555;">(+'+m.el_accrued+')</span></td>'
       + '<td style="color:'+(m.pm>0?'#f97316':'#444')+';">'+(m.pm||'—')+'</td>'
       + '</tr>';
   }).join('');
 
   body.innerHTML = cardsHtml
-    + '<div class="myleave-hist-title">Monthly Breakdown — '+yr+'</div>'
+    + '<div class="myleave-hist-title">Monthly Breakdown — '+fy.label+'</div>'
     + '<div style="overflow-x:auto;border-radius:10px;border:1px solid #222;">'
     + '<table class="myleave-hist-table"><thead><tr><th>Month</th><th>Present</th><th>Absent</th><th>SL</th><th>CL</th><th>EL (used · +accrued)</th><th>PM</th></tr></thead>'
     + '<tbody>'+(histRows||'<tr><td colspan="7" style="text-align:center;color:#444;padding:20px;">No data</td></tr>')+'</tbody></table></div>'
@@ -10928,13 +10915,13 @@ function _loadQuickStatsForDashboard() {
   // Try to fetch attendance + leave balance
   Promise.all([
     empId ? fetch('/api/attendance/employee/'+empId+'?from='+yr+'-'+String(nowM).padStart(2,'0')+'-01&to='+yr+'-'+String(nowM).padStart(2,'0')+'-31',{headers:{'X-User-Id':String(empId)}}).then(function(r){return r.json();}).catch(function(){return{};}) : Promise.resolve({}),
-    empId ? fetch('/api/leave/balance/'+empId+'?year='+yr,{headers:{'X-User-Id':String(empId)}}).then(function(r){return r.json();}).catch(function(){return{};}) : Promise.resolve({})
+    empId ? fetch('/api/leave/balance/'+empId,{headers:{'X-User-Id':String(empId)}}).then(function(r){return r.json();}).catch(function(){return{};}) : Promise.resolve({})
   ]).then(function(results) {
     var attData = results[0]; var leaveData = results[1];
     var records = attData.records || [];
     var counts = {present:0,absent:0,leave:0};
     records.forEach(function(r){ var s=r.status||''; if(s==='present'||s==='late') counts.present++; else if(s==='absent') counts.absent++; else if(s==='leave') counts.leave++; });
-    var slRem = (leaveData.balance && leaveData.balance.remaining_sick !== undefined) ? leaveData.balance.remaining_sick : (isPerm ? (nowM + Math.floor(Math.random()*5) - Math.floor(Math.random()*2)) : 0);
+    var slRem = (leaveData.success && leaveData.balance && leaveData.balance.sl) ? leaveData.balance.sl.remaining : (isPerm ? (nowM + Math.floor(Math.random()*5) - Math.floor(Math.random()*2)) : 0);
 
     // Demo fallback
     if (!records.length) { counts.present = 18 + Math.floor(Math.random()*5); counts.absent = Math.floor(Math.random()*3); counts.leave = Math.floor(Math.random()*3); slRem = isPerm ? (nowM - Math.floor(Math.random()*2)) : 0; }
@@ -11040,7 +11027,7 @@ async function _loadMyMonthlyLeave(){
 // ════════════════════════════════════════════════════
 // LEAVE BALANCE CARDS (Image 1 style)
 // ════════════════════════════════════════════════════
-function _renderDashLeaveBalance() {
+async function _renderDashLeaveBalance() {
   var container = document.getElementById('dashLeaveBalanceCards');
   if (!container) return;
 
@@ -11051,7 +11038,6 @@ function _renderDashLeaveBalance() {
   var nowM = new Date().getMonth() + 1;
   var fy = getFYInfo();
   var empType = user.type || user.emp_type || 'Regular';
-  var isPerm = (empType === 'Regular' || empType === 'Regular(PIP)');
   var MONTH_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   if (!empId) {
@@ -11059,64 +11045,39 @@ function _renderDashLeaveBalance() {
     return;
   }
 
-  // Read from BOTH miim_att_cache (primary) AND miim_approved_leaves (secondary) — no double-count
-  var approvedSl=0, approvedCl=0, approvedEl=0, approvedPmMonth=0, approvedPmYear=0;
-  var approvedSlMonth=0, approvedElMonth=0, approvedClMonth=0;
-  var _dseen = new Set();
-  var empIdStr = String(empId);
+  container.innerHTML = '<div style="grid-column:1/-1;color:#555;font-size:.75rem;padding:12px;text-align:center;">Loading…</div>';
 
-  // Source 1: miim_att_cache — ground truth (what attendance.html actually saved)
+  // Real balance, straight from the server — computed from the attendance
+  // table (updated the instant a leave is approved, on whatever device the
+  // approval happened). No localStorage involved, so this is always correct.
+  var b = {};
   try {
-    var attCache = JSON.parse(localStorage.getItem('miim_att_cache') || '{}');
-    Object.keys(attCache).forEach(function(dKey) {
-      var lvYr = parseInt(dKey.slice(0,4));
-      var lvMo = parseInt(dKey.slice(5,7));
-      if (isNaN(lvYr) || isNaN(lvMo) || !inFY(lvYr, lvMo, fy.startYear)) return;
-      var rec = attCache[dKey][empIdStr] || attCache[dKey][Number(empId)];
-      if (!rec || !rec.status) return;
-      var st = rec.status;
-      if (st!=='sl' && st!=='cl' && st!=='el' && st!=='pm') return;
-      var key = dKey + '_' + st;
-      if (_dseen.has(key)) return;
-      _dseen.add(key);
-      if (st==='sl') { approvedSl++; if(lvMo===nowM) approvedSlMonth++; }
-      else if (st==='cl') { approvedCl++; if(lvMo===nowM) approvedClMonth++; }
-      else if (st==='el') { approvedEl++; if(lvMo===nowM) approvedElMonth++; }
-      else if (st==='pm') { approvedPmYear++; if(lvMo===nowM) approvedPmMonth++; }
-    });
+    var resp = await fetch('/api/leave/balance/' + empId, { headers: { 'X-User-Id': String(empId) } });
+    var d = await resp.json();
+    if (d.success && d.balance) b = d.balance;
   } catch(e) {}
 
-  // Source 2: miim_approved_leaves — catch any not yet in att_cache
-  try {
-    var rawApproved = JSON.parse(localStorage.getItem('miim_approved_leaves') || '[]');
-    rawApproved.forEach(function(lv) {
-      if (String(lv.empId) !== empIdStr) return;
-      var lvYr = parseInt((lv.date||'').slice(0,4));
-      var lvMo = parseInt((lv.date||'').slice(5,7));
-      if (isNaN(lvYr) || isNaN(lvMo) || !inFY(lvYr, lvMo, fy.startYear)) return;
-      var t = lv.type || '';
-      if (t!=='sl' && t!=='cl' && t!=='el' && t!=='pm') return;
-      var key = lv.date + '_' + t;
-      if (_dseen.has(key)) return;
-      _dseen.add(key);
-      if (t==='sl') { approvedSl++; if(lvMo===nowM) approvedSlMonth++; }
-      else if (t==='cl') { approvedCl++; if(lvMo===nowM) approvedClMonth++; }
-      else if (t==='el') { approvedEl++; if(lvMo===nowM) approvedElMonth++; }
-      else if (t==='pm') { approvedPmYear++; if(lvMo===nowM) approvedPmMonth++; }
-    });
-  } catch(e) {}
+  var isPerm = (typeof b.is_permanent === 'boolean') ? b.is_permanent : (empType === 'Regular' || empType === 'Regular(PIP)');
 
-  var slTotal   = 12;   // policy: 1/month x 12
-  var EL_TOTAL  = 6;    // policy: 0.5/month x 12
-  var elAccrued = Math.round(fy.monthInFY * 0.5 * 10) / 10; // for badge only
-  var remSick   = isPerm ? Math.max(0, slTotal  - approvedSl)   : 0;
-  var remCasual = isPerm ? Math.max(0, 6        - approvedCl)   : 0;
-  var remEarned = isPerm ? Math.max(0, EL_TOTAL - approvedEl)   : 0;
-  var remPerm   =          Math.max(0, 2        - approvedPmMonth);
+  var slTotal   = (b.sl && b.sl.total) || 12;
+  var EL_TOTAL  = (b.el && b.el.total) || 6;
+  var elAccrued = (b.el && b.el.accrued) || (Math.round(fy.monthInFY * 0.5 * 10) / 10);
+  var approvedSl      = (b.sl && b.sl.used_year)  || 0;
+  var approvedSlMonth = (b.sl && b.sl.used_month) || 0;
+  var approvedEl      = (b.el && b.el.used_year)  || 0;
+  var approvedElMonth = (b.el && b.el.used_month) || 0;
+  var approvedCl      = (b.cl && b.cl.used_year)  || 0;
+  var approvedPmMonth = (b.pm && b.pm.used_month) || 0;
+  var approvedPmYear  = (b.pm && b.pm.used_year)  || 0;
+
+  var remSick   = isPerm ? ((b.sl && b.sl.remaining) || 0) : 0;
+  var remCasual = isPerm ? ((b.cl && b.cl.remaining) || 0) : 0;
+  var remEarned = isPerm ? ((b.el && b.el.remaining) || 0) : 0;
+  var remPerm   = (b.pm && b.pm.remaining_month) != null ? b.pm.remaining_month : Math.max(0, 2 - approvedPmMonth);
 
   var slPct = Math.min(100, Math.round(approvedSl / slTotal  * 100));
   var elPct = Math.min(100, Math.round(approvedEl / EL_TOTAL * 100));
-  var clPct = Math.min(100, Math.round(approvedCl / 6       * 100));
+  var clPct = Math.min(100, Math.round(approvedCl / 12      * 100));
   var pmPct = Math.min(100, Math.round(approvedPmMonth / 2   * 100));
 
   var lc = function(n){ return n>0?'#22c55e':'#ef4444'; };
@@ -11146,7 +11107,7 @@ function _renderDashLeaveBalance() {
   container.innerHTML=[
     mc({icon:'\uD83E\uDD12',title:'Sick Leave',tc:'#eab308',desc:'1 day/month. Carries over up to 2\u00bd years (max 32\u219212).',tag:fy.monthInFY+' months accrued',tbg:'rgba(234,179,8,.15)',tbd:'rgba(234,179,8,.3)',br:'rgba(234,179,8,.35)',bc:'#eab308',left:remSick,pct:slPct,always:false,rows:[{k:'THIS MONTH',v:approvedSlMonth+'/'+(isPerm?1:'\u2014')},{k:'THIS YEAR',v:approvedSl+'/'+slTotal}],note:'\uD83D\uDCC5 Carries over (max 32 days)'}),
     mc({icon:'\u2B50',title:'Earned Leave',tc:'#a855f7',desc:'\u00bd day/month. Encashed with April salary. No carry-over.',tag:elAccrued+' months accrued',tbg:'rgba(168,85,247,.15)',tbd:'rgba(168,85,247,.3)',br:'rgba(168,85,247,.35)',bc:'#a855f7',left:remEarned,pct:elPct,always:false,rows:[{k:'THIS MONTH',v:approvedElMonth+'/'+(isPerm?0.5:'\u2014')},{k:'THIS YEAR',v:approvedEl+'/'+EL_TOTAL}],note:'\uD83C\uDF1F Encashed with April salary'}),
-    mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'6 days per year. No carry-over, no encashment.',tag:fy.label,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/6'}],note:'\u26A0\uFE0F No carry-over to next year'}),
+    mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'12 days per year. No carry-over, no encashment.',tag:fy.label,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/12'}],note:'\u26A0\uFE0F No carry-over to next year'}),
     mc({icon:'\u23F1\uFE0F',title:'Permission',tc:'#f97316',desc:'Max 2 permissions/month. Each up to 2 hours.',tag:MONTH_S[nowM-1]+' '+yr,tbg:'rgba(249,115,22,.15)',tbd:'rgba(249,115,22,.3)',br:'rgba(249,115,22,.35)',bc:'#f97316',left:remPerm,pct:pmPct,always:true,rows:[{k:'THIS MONTH',v:approvedPmMonth+'/2'},{k:'THIS YEAR',v:approvedPmYear+'/24'}],note:null})
   ].join('');
 }
