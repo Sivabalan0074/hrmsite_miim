@@ -877,8 +877,8 @@ function hdrs(x={}){
     else role = 'member';
   }
 
-  // Step 4: Access check — ONLY admin and account_manager / account dept
-  var allowed = (role === 'admin' || role === 'account_manager') || (dept === 'account' || dept === 'accounts');
+  // Step 4: Access check — admin, HR, and account_manager / account dept
+  var allowed = (role === 'admin' || role === 'hr' || role === 'senior_hr' || role === 'account_manager') || (dept === 'admin' || dept === 'hr' || dept === 'account' || dept === 'accounts');
   if (!allowed) {
     _showBlock('Your role (' + (role || 'unknown') + ') does not have permission to access this page.');
   }
