@@ -1080,6 +1080,16 @@ async function loadAll(){
   }catch(_){}
 
   renderAll(false);
+
+  // ── Deep-link: if opened as account_section.html?emp_id=123, jump
+  // straight into that employee's Accounts modal instead of the full list.
+  try{
+    var _qp = new URLSearchParams(window.location.search);
+    var _deepEmpId = _qp.get('emp_id');
+    if(_deepEmpId && allEmps.some(function(e){return String(e.id)===String(_deepEmpId);})){
+      openModal(_deepEmpId);
+    }
+  }catch(_){}
 }
 
 function buildFilters(){const depts=[...new Set(allEmps.map(e=>e.dept))].sort();const df=document.getElementById('fDept');df.innerHTML='<option value="">— All Departments —</option>';depts.forEach(d=>df.innerHTML+=`<option value="${d}">${d}</option>`);}
