@@ -3918,13 +3918,13 @@ document.addEventListener('DOMContentLoaded', async function(){
   // Try to restore session from any storage (fixes session timeout blank screen)
   restoreSession();
 
-  // ── Admin-only: Show Export Excel button ──
+  // ── Admin & HR: Show Export Excel button (Account Dept does not need it) ──
   function _applyExcelBtnVisibility(){
     try{
       var _u=JSON.parse(sessionStorage.getItem('miim_user')||localStorage.getItem('miim_user')||'{}');
       var _dept=(_u.dept||_u.department||sessionStorage.getItem('userDept')||localStorage.getItem('userDept')||'').trim().toLowerCase();
       var _role=(_u.role||_u.user_role||sessionStorage.getItem('userRole')||localStorage.getItem('userRole')||'').trim().toLowerCase();
-      var _isAdmin=(_dept==='admin'||_role==='admin');
+      var _isAdmin=(_dept==='admin'||_role==='admin'||_dept==='hr'||_role==='hr'||_role==='senior_hr');
       var _btn=document.getElementById('btnSalaryExcel');
       if(_btn) _btn.style.display=_isAdmin?'':'none';
     }catch(e){}
