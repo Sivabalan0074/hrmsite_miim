@@ -13554,6 +13554,16 @@ function openSalarySlipModal() {
   var empId=user.id||user.emp_id||user.empid||window._currentEmpId||window._loggedInEmpId||null;
   if(!empId){var em2=document.getElementById('ss-slip-empty-msg');if(em2)em2.textContent='Could not identify your account. Please re-login.';return;}
 
+  // ── Fetch the authoritative employee master record (empid, DOB, joining
+  // date, father's name, employee type) — the salary_structures table only
+  // snapshots earnings/deductions, not these identity fields, so the print
+  // slip must pull them from /api/employees/<id> directly. ──
+  window._ssEmpRecord = null;
+  fetch('/api/employees/'+empId,{credentials:'same-origin',headers:{'X-User-Id':String(empId)}})
+    .then(function(r){return r.json();})
+    .then(function(d){ if(d && d.employee) window._ssEmpRecord = d.employee; })
+    .catch(function(){});
+
   function _buildSlipModal(slips) {
     // ── Merge archived slips from DATABASE into the dropdown ──
     // (already merged via openEmpSalarySlipModal API fetch — _es.slips contains archived too)
@@ -13869,11 +13879,18 @@ function printSalarySlipWindow() {
   // ── FIX: When HR views an employee overlay (_es exists), use _es data not _loggedUser ──
   // _loggedUser = the HR's own name; _es = the employee being viewed by HR
   var _isHROverlay = (_es && _es.name && _es.id);
+  var _emp = window._ssEmpRecord || {};   // authoritative employee master record (self-service path)
   var name  = _isHROverlay ? (_es.name  || 'Employee') : (window._loggedUser  || document.getElementById('ss-slip-name')  && document.getElementById('ss-slip-name').textContent  || 'Employee');
   var dept  = _isHROverlay ? (_es.dept  || '—')        : (window._loggedDept  || document.getElementById('ss-slip-dept')  && document.getElementById('ss-slip-dept').textContent  || '—');
   var desig = _isHROverlay ? (_es.desig || '—')        : (window._loggedDesig || document.getElementById('ss-slip-desig') && document.getElementById('ss-slip-desig').textContent || '—');
-  // Also pull empid for the slip
-  var _empid = _isHROverlay ? (_es.empid||'—') : (d.empid||d.emp_id||'—');
+  // Also pull empid for the slip — prefer the employee master record's
+  // human-readable empid (e.g. "10017"); NEVER fall back to d.emp_id, which
+  // is the internal numeric database foreign key, not a real Employee ID.
+  var _empid = _isHROverlay ? (_es.empid||'—') : (_emp.empid||d.empid||'—');
+  var _empType   = _isHROverlay ? (_es.type||'—')        : (_emp.type||d.employee_type||d.emp_type||'—');
+  var _doj       = _isHROverlay ? (_es.joindate||'')     : (_emp.joindate||_emp.join_date||d.doj||d.joindate||'');
+  var _dobVal    = _isHROverlay ? (_es.dob||'')          : (_emp.dob||_emp.date_of_birth||d.dob||'');
+  var _fatherVal = _isHROverlay ? (_es.father_name||'—') : (_emp.father_name||d.father_name||'—');
   var _MO2=['January','February','March','April','May','June','July','August','September','October','November','December'];
   // ── FIX: ALWAYS derive period from the actual slip data (d.period), never from a UI dropdown
   // Using ss-month-select caused wrong month because it belongs to a different panel
@@ -13936,6 +13953,7 @@ function printSalarySlipWindow() {
     '.net-bar{display:flex;align-items:center;padding:11px 16px;background:#fff}' +
     '.net-label{font-size:12.5px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:.6px}' +
     '.net-amount{margin-left:14px;background:#1a1a1a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;padding:6px 20px;font-size:16px;font-weight:700;border-radius:2px}' +
+    '.digital-note{text-align:center;font-size:9.5px;color:#777;font-style:italic;padding:8px 16px 14px;border-top:1px dashed #ccc}' +
     '</style></head><body>' +
     '<div class="slip">' +
     '<div class="header">' +
@@ -13951,10 +13969,10 @@ function printSalarySlipWindow() {
     '<div class="period-banner">PAY SLIP FOR THE MONTH OF ' + _periodBanner + '</div>' +
     '<table class="info-table"><colgroup><col style="width:22%"/><col style="width:28%"/><col style="width:22%"/><col style="width:28%"/></colgroup><tbody>' +
     '<tr><td class="info-lbl">Employee Name</td><td class="info-val">' + name + '</td><td class="info-lbl">Department</td><td class="info-val">' + dept + '</td></tr>' +
-    '<tr><td class="info-lbl">Employee ID</td><td class="info-val">' + _empid + '</td><td class="info-lbl">Employee Type</td><td class="info-val">' + (d.emp_type||(_es&&(_es.type||_es.emp_type))||'—') + '</td></tr>' +
+    '<tr><td class="info-lbl">Employee ID</td><td class="info-val">' + _empid + '</td><td class="info-lbl">Employee Type</td><td class="info-val">' + _empType + '</td></tr>' +
     '<tr><td class="info-lbl">Designation</td><td class="info-val">' + desig + '</td><td class="info-lbl">Pay Period</td><td class="info-val">' + _periodBanner + '</td></tr>' +
-    '<tr><td class="info-lbl">Date of Joining</td><td class="info-val">' + _fmtD(d.doj||d.joindate||d.join_date||(_es&&_es.joindate)||'') + '</td><td class="info-lbl">Date of Birth</td><td class="info-val">' + _fmtD(d.dob||(_es&&_es.dob)||'') + '</td></tr>' +
-    '<tr><td class="info-lbl">Mode of Payment</td><td class="info-val">' + (d.mode_of_payment||d.mop||'Account') + '</td><td class="info-lbl">Father&#39;s Name</td><td class="info-val">' + (d.father_name||(_es&&_es.father_name)||'—') + '</td></tr>' +
+    '<tr><td class="info-lbl">Date of Joining</td><td class="info-val">' + _fmtD(_doj) + '</td><td class="info-lbl">Date of Birth</td><td class="info-val">' + _fmtD(_dobVal) + '</td></tr>' +
+    '<tr><td class="info-lbl">Mode of Payment</td><td class="info-val">' + (d.mode_of_payment||d.mop||'Account') + '</td><td class="info-lbl">Father&#39;s Name</td><td class="info-val">' + _fatherVal + '</td></tr>' +
     '<tr><td class="info-lbl">Pay Date</td><td class="info-val">' + _fmtD(d.pay_date||d.payDate||'') + '</td><td class="info-lbl">Days Worked</td><td class="info-val">' + (d.days_worked||'—') + '</td></tr>' +
     '</tbody></table>' +
     '<table class="pay-table"><colgroup><col/><col/><col/><col/></colgroup>' +
@@ -13963,6 +13981,7 @@ function printSalarySlipWindow() {
     '<tr class="total-row"><td>Total Earnings</td><td>' + totalEarn + '</td><td>Total Deductions</td><td>' + totalDeduct + '</td></tr>' +
     '</tbody></table>' +
     '<div class="net-bar"><span class="net-label">Net Pay (Rounded)</span><span class="net-amount">&#8377; ' + Number(d._netPay||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) + '</span></div>' +
+    '<div class="digital-note">This is a system-generated pay slip and does not require a signature or company seal.</div>' +
     '</div>' +
     '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},500);}<'+'/script>' +
     '</body></html>';
