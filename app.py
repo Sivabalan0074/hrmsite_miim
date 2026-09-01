@@ -3773,7 +3773,26 @@ def approval_history():
                              (data.get('emp_id'), emp_name, data.get('dept', ''), leave_type, leave_date, action, data.get('actioned_by', ''), data.get('actioned_by_name', ''), data.get('reason', ''), str(datetime.datetime.now())))
             conn.commit(); conn.close()
             return jsonify({"success": True})
-        rows = conn.execute("SELECT * FROM approval_history ORDER BY actioned_at DESC LIMIT 50").fetchall()
+
+        # ── Role-based visibility ──
+        # admin / superadmin / hr / senior_hr see every approved-leave record.
+        # sm / pm (department-level managers) only see records for their own
+        # department — a Design SM must not see Accounts' leave history etc.
+        # Role/dept come from the same X-User-Role / X-User-Dept headers the
+        # rest of the app already sends on every request (see getHeaders()
+        # in attendance.html), so no new auth plumbing is needed here.
+        role = (request.headers.get('X-User-Role', '') or request.args.get('role', '')).strip().lower()
+        dept = (request.headers.get('X-User-Dept', '') or request.args.get('dept', '')).strip()
+        dept_restricted_roles = {'sm', 'pm'}
+
+        if role in dept_restricted_roles and dept:
+            rows = conn.execute(
+                "SELECT * FROM approval_history WHERE LOWER(dept)=LOWER(?) ORDER BY actioned_at DESC LIMIT 300",
+                (dept,)
+            ).fetchall()
+        else:
+            # admin / superadmin / hr / senior_hr / unknown-role fallback → full history
+            rows = conn.execute("SELECT * FROM approval_history ORDER BY actioned_at DESC LIMIT 300").fetchall()
         conn.close()
         return jsonify({"corrections": [dict(r) for r in rows], "success": True})
     except Exception as ex:
