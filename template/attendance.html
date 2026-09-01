@@ -4214,6 +4214,47 @@ function loadApprovalHistory(){
   }catch(e){console.warn('Could not load approval history',e);}
 }
 
+// ── Server-backed approval history ──
+// Every approve/reject already POSTs to /api/approval-history (see
+// handleApproval), so the DB always has the full record. The bug: nothing
+// ever GET-ed it back — approvalHistory only ever got populated from THIS
+// browser's own localStorage, so an approval made by HR on their laptop was
+// invisible to Admin, SM, or anyone opening the page on a different device.
+// This pulls the real, shared history from the server (already filtered
+// server-side: SM/PM only get their own department's rows — see
+// /api/approval-history in app.py) and merges it into approvalHistory so
+// every role sees the same data the DB has.
+async function loadApprovalHistoryFromServer(){
+  try{
+    const res=await fetchWithTimeout('/api/approval-history',{headers:getHeaders()},6000);
+    const data=await res.json();
+    if(!data || data.success===false || !Array.isArray(data.corrections))return;
+    const fromServer=data.corrections.map(r=>({
+      id: `srv_${r.id}`,               // server rows are the source of truth; namespaced so they never collide with local Date.now() ids
+      serverId: r.id,
+      empName: r.emp_name || '',
+      dept: r.dept || '',
+      leaveType: r.leave_type || '',
+      leaveDate: r.leave_date || '',
+      action: r.action || '',
+      actionBy: r.actioned_by || '',
+      actionByName: r.actioned_by_name || r.actioned_by || '',
+      actionAt: r.actioned_at || '',
+      reason: r.reason || ''
+    }));
+    // Merge: server entries win (they're shared/authoritative); keep any
+    // purely-local not-yet-synced entries (e.g. intermediate stage sign-offs
+    // which aren't POSTed to /api/approval-history) that aren't duplicates.
+    const isDup=(local,srv)=>local.empName===srv.empName && local.leaveDate===srv.leaveDate &&
+      local.leaveType===srv.leaveType && local.action===srv.action;
+    const localOnly=approvalHistory.filter(ah=>!String(ah.id).startsWith('srv_') && !fromServer.some(sh=>isDup(ah,sh)));
+    // fromServer is already newest-first (server query orders by actioned_at DESC).
+    // localOnly holds only not-yet-synced entries (e.g. intermediate stage sign-offs),
+    // which are always more recent than anything already in the DB, so they lead.
+    approvalHistory=[...localOnly, ...fromServer];
+  }catch(e){console.warn('Could not load approval history from server',e);}
+}
+
 // Fully invalidate a date from BOTH the in-memory attCache AND the persisted
 // localStorage cache. A plain `delete attCache[dKey]` is not enough — a
 // later loadAttCache() call (or a fresh fetchAtt() on next page load) would
@@ -4262,11 +4303,19 @@ function loadAttCache(){
 // POLICY & TOAST
 // ════════════════════════════════════════════════════
 function deleteHistoryRow(id){
-  const idx=approvalHistory.findIndex(h=>h.id===id);
+  const idx=approvalHistory.findIndex(h=>String(h.id)===String(id));
   if(idx===-1)return;
+  // Server-sourced rows (id starts with "srv_") are the shared DB record —
+  // there's no delete-from-DB endpoint yet, so removing it here would just
+  // hide it locally until the next refresh brought it right back. Only
+  // not-yet-synced local entries can actually be removed.
+  if(String(id).startsWith('srv_')){
+    showToast('error','Can\'t delete this row','This action is already recorded for everyone — it can only be removed from the database.');
+    return;
+  }
   approvalHistory.splice(idx,1);
   persistApprovalHistory();
-  openHistoryModal(); // re-render
+  renderHistoryModalBody(); // re-render without re-fetching
   showToast('success','Row Deleted','History entry removed');
 }
 
@@ -4277,7 +4326,8 @@ function showHistoryCtx(e,id){
   if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}
   const menu=document.createElement('div');
   menu.style.cssText=`position:fixed;z-index:9999;left:${Math.min(e.clientX,window.innerWidth-160)}px;top:${Math.min(e.clientY,window.innerHeight-60)}px;background:#1e2330;border:1px solid #ef4444;border-radius:8px;padding:4px;box-shadow:0 8px 30px rgba(0,0,0,0.8);min-width:150px;`;
-  menu.innerHTML=`<div onclick="deleteHistoryRow(${id});_ctxMenu&&(_ctxMenu.remove(),_ctxMenu=null);" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;font-size:12px;color:#ef4444;cursor:pointer;font-family:'Exo 2',sans-serif;font-weight:600;transition:background .15s;" onmouseover="this.style.background='rgba(239,68,68,0.12)'" onmouseout="this.style.background='transparent'">🗑️ Delete this row</div>`;
+  const idAttr=JSON.stringify(String(id));
+  menu.innerHTML=`<div onclick='deleteHistoryRow(${idAttr});_ctxMenu&&(_ctxMenu.remove(),_ctxMenu=null);' style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;font-size:12px;color:#ef4444;cursor:pointer;font-family:'Exo 2',sans-serif;font-weight:600;transition:background .15s;" onmouseover="this.style.background='rgba(239,68,68,0.12)'" onmouseout="this.style.background='transparent'">🗑️ Delete this row</div>`;
   document.body.appendChild(menu);
   _ctxMenu=menu;
   setTimeout(()=>document.addEventListener('click',()=>{if(_ctxMenu){_ctxMenu.remove();_ctxMenu=null;}},{once:true}),0);
@@ -4364,9 +4414,11 @@ async function deletePendingLeaveReq(reqId){
   showToast('success','🗑️ Request Deleted',`${req.empName} · ${(req.type||'').toUpperCase()} · ${req.date}`);
 }
 
-function openHistoryModal(){
+function renderHistoryModalBody(){
   const body=document.getElementById('historyModalBody');
-  document.getElementById('historyModalSub').textContent=`${approvalHistory.length} action${approvalHistory.length!==1?'s':''} recorded`;
+  const scopeNote=['sm','pm'].includes(currentRole)&&currentUserDept
+    ?` · showing ${currentUserDept} dept only`:'';
+  document.getElementById('historyModalSub').textContent=`${approvalHistory.length} action${approvalHistory.length!==1?'s':''} recorded${scopeNote}`;
   const LEAVE_LABELS={sl:'🤒 SL',el:'⭐ EL',cl:'🌴 CL',pm:'🕐 PM'};
   const LEAVE_COLORS={sl:'#eab308',el:'#a855f7',cl:'#3b82f6',pm:'#f97316'};
   if(!approvalHistory.length){
@@ -4374,11 +4426,16 @@ function openHistoryModal(){
   }else{
     const rows=approvalHistory.map((h,i)=>{
       const color=LEAVE_COLORS[h.leaveType]||'var(--orange)';
-      const label=LEAVE_LABELS[h.leaveType]||h.leaveType.toUpperCase();
+      const label=LEAVE_LABELS[h.leaveType]||(h.leaveType||'').toUpperCase();
       const badge=h.action==='approved'
         ?`<span class="hist-approved">✓ Approved</span>`
-        :`<span class="hist-rejected">✕ Rejected</span>`;
-      return `<tr oncontextmenu="showHistoryCtx(event,${h.id})" style="cursor:context-menu;" title="Right-click to delete">
+        :h.action==='rejected'?`<span class="hist-rejected">✕ Rejected</span>`
+        :`<span style="color:var(--t3);font-size:11px;">${h.action}</span>`;
+      // h.id may be a string ("srv_123" for server-sourced rows) or a number
+      // (Date.now() for a not-yet-synced local entry) — always quote it when
+      // embedding in an inline handler, or "srv_123" breaks as bad JS syntax.
+      const idAttr=JSON.stringify(String(h.id));
+      return `<tr oncontextmenu='showHistoryCtx(event,${idAttr})' style="cursor:context-menu;" title="Right-click to delete">
         <td style="color:var(--t1);font-weight:600;">${h.empName}</td>
         <td><span style="font-size:10px;color:var(--t3);">${h.dept}</span></td>
         <td><span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${color}22;color:${color};border:1px solid ${color}44;">${label}</span></td>
@@ -4397,7 +4454,17 @@ function openHistoryModal(){
       <tbody>${rows}</tbody>
     </table></div>`;
   }
+}
+
+async function openHistoryModal(){
   document.getElementById('historyModal').classList.add('open');
+  // Render immediately with whatever we already have (instant, no blank flash)…
+  renderHistoryModalBody();
+  // …then refresh from the server so this shows every approver's actions —
+  // not just ones made from this browser — filtered to this role's scope
+  // (full history for admin/hr/senior_hr, own-department only for sm/pm).
+  await loadApprovalHistoryFromServer();
+  renderHistoryModalBody();
 }
 function closeHistoryModal(){document.getElementById('historyModal').classList.remove('open');}
 function openPolicy(){document.getElementById('policyModal').classList.add('open');}
@@ -4933,7 +5000,8 @@ async function boot(){
   // Fire background tasks (non-blocking)
   loadAttCache();
   loadPendingLeaves();
-  loadApprovalHistory();
+  loadApprovalHistory();          // local cache first (instant)
+  loadApprovalHistoryFromServer(); // then the real, shared, role-scoped history from the DB
   loadPendingCorrections();
 
   applyRoleUI();
