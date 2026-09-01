@@ -4306,6 +4306,81 @@ def _sync_leave_to_attendance(conn, leave_id, now):
         return False, str(att_ex)
 
 
+def _log_approval_history(conn, emp_id, leave_type, leave_date, action, actioned_by='', actioned_by_name='', reason=''):
+    """Single source of truth for writing an approval_history row. Used by
+    the live approve/reject action AND the startup backfill pass below, so
+    both produce identical rows and share the same de-dup rule (same
+    emp_name+leave_type+leave_date+action never gets inserted twice).
+
+    This exists because approval_history used to be populated ONLY by a
+    best-effort, fire-and-forget POST from the browser (attendance.html)
+    AFTER calling this approve endpoint — wrapped in `.catch(()=>{})`. Any
+    hiccup there (closed tab, flaky network, timeout) silently dropped the
+    record forever: the leave itself was correctly approved and synced to
+    attendance, but it would never show up in the Approval History panel for
+    anyone. Logging it here, server-side, in the same request that performs
+    the approval, means it can no longer be lost that way.
+    """
+    try:
+        leave_date = (str(leave_date) or '')[:10]
+        emp_name, dept = '', ''
+        if emp_id is not None:
+            emp_row = conn.execute("SELECT username, dept FROM employees WHERE id=?", (emp_id,)).fetchone()
+            if emp_row:
+                emp_name = emp_row['username'] or ''
+                dept = emp_row['dept'] or ''
+        leave_type = (leave_type or '').strip().lower()
+        if not emp_name or not leave_type or not leave_date or not action:
+            return False
+        existing = conn.execute(
+            "SELECT id FROM approval_history WHERE emp_name=? AND leave_type=? AND leave_date=? AND action=? LIMIT 1",
+            (emp_name, leave_type, leave_date, action)
+        ).fetchone()
+        if existing:
+            return False
+        conn.execute(
+            "INSERT INTO approval_history (emp_id,emp_name,dept,leave_type,leave_date,action,actioned_by,actioned_by_name,reason,actioned_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (emp_id, emp_name, dept, leave_type, leave_date, action,
+             actioned_by or '', actioned_by_name or actioned_by or 'System', reason or '', str(datetime.datetime.now()))
+        )
+        return True
+    except Exception as ex:
+        print(f"[_log_approval_history] {ex}")
+        return False
+
+
+def _backfill_approval_history_from_leave_requests(conn):
+    """ONE-TIME (but safe to re-run) repair: any leave_requests row that's
+    already 'approved' or 'rejected' but has no matching approval_history
+    entry gets one inserted now. Runs automatically on every server start
+    (see init_db) so leaves approved before this fix shipped — e.g. through
+    the old flow where the history-logging POST silently failed — show up
+    for everyone without needing a manual trigger. Fully idempotent: reruns
+    on every restart but the de-dup check in _log_approval_history means it
+    never creates duplicates.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT id, emp_id, leave_type, from_date, status, reviewed_by, reviewed_by_name, reason FROM leave_requests WHERE status IN ('approved','rejected')"
+        ).fetchall()
+        recovered = 0
+        for r in rows:
+            actioned_by = r['reviewed_by'] if 'reviewed_by' in r.keys() else ''
+            actioned_by_name = r['reviewed_by_name'] if 'reviewed_by_name' in r.keys() else ''
+            ok = _log_approval_history(
+                conn, r['emp_id'], r['leave_type'], r['from_date'], r['status'],
+                actioned_by=actioned_by or '', actioned_by_name=actioned_by_name or (actioned_by or 'System (auto-recovered)'),
+                reason=r['reason'] if 'reason' in r.keys() else ''
+            )
+            if ok:
+                recovered += 1
+        if recovered:
+            conn.commit()
+            print(f"[DB] Backfilled {recovered} missing approval_history row(s) from leave_requests.")
+    except Exception as ex:
+        print(f"[_backfill_approval_history_from_leave_requests] {ex}")
+
+
 @app.route('/api/leave/<int:leave_id>/<action>', methods=['POST'])
 @require_auth
 def action_leave(leave_id, action):
@@ -4328,8 +4403,16 @@ def action_leave(leave_id, action):
             conn.close()
             return jsonify({"success": False, "error": "Unknown action"}), 400
 
+        data = request.json or {}
+        reviewed_by = data.get('reviewed_by', '') or ''
+        reviewed_by_name = data.get('reviewed_by_name', '') or ''
+
         status = 'approved' if action == 'approve' else 'rejected'
-        conn.execute("UPDATE leave_requests SET status=?,reviewed_at=? WHERE id=?", (status, now, leave_id))
+        row = conn.execute("SELECT emp_id, leave_type, from_date, reason FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
+        conn.execute(
+            "UPDATE leave_requests SET status=?,reviewed_at=?,reviewed_by=?,reviewed_by_name=? WHERE id=?",
+            (status, now, reviewed_by, reviewed_by_name, leave_id)
+        )
 
         # If approved -- also mark attendance table for each day of leave.
         # Isolated via the shared helper: if it throws (bad date format, row
@@ -4340,6 +4423,15 @@ def action_leave(leave_id, action):
         attendance_error = None
         if status == 'approved':
             attendance_synced, attendance_error = _sync_leave_to_attendance(conn, leave_id, now)
+
+        # Log to approval_history right here, server-side — see
+        # _log_approval_history for why this can no longer be skipped.
+        if row:
+            _log_approval_history(
+                conn, row['emp_id'], row['leave_type'], row['from_date'], status,
+                actioned_by=reviewed_by, actioned_by_name=reviewed_by_name,
+                reason=row['reason'] if 'reason' in row.keys() else ''
+            )
 
         conn.commit(); conn.close()
         resp: dict[str, object] = {"success": True}
@@ -4925,6 +5017,8 @@ def init_db():
     for _lcol, _ldef in [
         ('approval_chain', "TEXT"),
         ('approval_stage', "INTEGER DEFAULT 0"),
+        ('reviewed_by', "TEXT"),
+        ('reviewed_by_name', "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE leave_requests ADD COLUMN {_lcol} {_ldef}")
@@ -5187,6 +5281,13 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.commit()
+
+    # ── Recover any leave that was approved/rejected before approval_history
+    # logging was made reliable (see _log_approval_history / action_leave) ──
+    try:
+        _backfill_approval_history_from_leave_requests(conn)
+    except Exception as _bf_ex:
+        print(f"[DB INIT WARNING] approval_history backfill skipped: {_bf_ex}")
 
     conn.close()
     print("[DB] Initialized successfully")
