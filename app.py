@@ -4400,6 +4400,44 @@ def _backfill_approval_history_from_leave_requests(conn):
         print(f"[_backfill_approval_history_from_leave_requests] {ex}")
 
 
+def _backfill_approval_history_from_attendance(conn):
+    """DEEPER repair pass — catches cases the leave_requests-based backfill
+    above cannot. Some leave days were marked directly on the attendance
+    table (e.g. via the old broken flow where the pending-leave's id never
+    matched a real leave_requests row, so leave_requests stayed 'pending'
+    forever even though the day was correctly marked sl/cl/el/pm on
+    attendance and the Leave Balance Report — which reads attendance
+    directly — already counted it as used).
+
+    Since leave_requests never reached status='approved' for these, the
+    other backfill pass has nothing to find. But attendance IS the ground
+    truth the rest of the app already trusts (Leave Balance Report, the
+    calendar view), so we reconstruct the missing approval_history rows
+    directly from it instead. Idempotent via the same de-dup rule in
+    _log_approval_history.
+    """
+    try:
+        rows = conn.execute("""
+            SELECT a.emp_id, a.date, a.status, e.username, e.dept
+            FROM attendance a JOIN employees e ON e.id = a.emp_id
+            WHERE LOWER(a.status) IN ('sl','cl','el','pm')
+        """).fetchall()
+        recovered = 0
+        for r in rows:
+            ok = _log_approval_history(
+                conn, r['emp_id'], r['status'], r['date'], 'approved',
+                actioned_by='', actioned_by_name='System (recovered from attendance)',
+                reason=''
+            )
+            if ok:
+                recovered += 1
+        if recovered:
+            conn.commit()
+            print(f"[DB] Backfilled {recovered} missing approval_history row(s) from attendance records.")
+    except Exception as ex:
+        print(f"[_backfill_approval_history_from_attendance] {ex}")
+
+
 @app.route('/api/leave/<int:leave_id>/<action>', methods=['POST'])
 @require_auth
 def action_leave(leave_id, action):
@@ -5307,6 +5345,14 @@ def init_db():
         _backfill_approval_history_from_leave_requests(conn)
     except Exception as _bf_ex:
         print(f"[DB INIT WARNING] approval_history backfill skipped: {_bf_ex}")
+
+    # ── Deeper recovery: leave days that were marked on attendance directly
+    # but whose leave_requests row never reached status='approved' (old
+    # broken client-id flow) — see _backfill_approval_history_from_attendance ──
+    try:
+        _backfill_approval_history_from_attendance(conn)
+    except Exception as _bf_ex2:
+        print(f"[DB INIT WARNING] attendance-based approval_history backfill skipped: {_bf_ex2}")
 
     conn.close()
     print("[DB] Initialized successfully")
