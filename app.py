@@ -3775,24 +3775,43 @@ def approval_history():
             return jsonify({"success": True})
 
         # ── Role-based visibility ──
-        # admin / superadmin / hr / senior_hr see every approved-leave record.
-        # sm / pm (department-level managers) only see records for their own
-        # department — a Design SM must not see Accounts' leave history etc.
-        # Role/dept come from the same X-User-Role / X-User-Dept headers the
-        # rest of the app already sends on every request (see getHeaders()
-        # in attendance.html), so no new auth plumbing is needed here.
+        # superadmin / admin / hr / senior_hr → every approved-leave record,
+        # for every employee.
+        # sm / pm (department-level managers) → only records for their own
+        # department — a Design SM must not see Accounts' leave history.
+        # Anything else (plain employee, account_manager, missing/unknown
+        # role) → default-deny down to just their own name, instead of
+        # silently falling through to the full list. The History button is
+        # already hidden from these roles in attendance.html, but the API
+        # itself must not hand out everyone's data if called directly.
+        # Role/dept/id come from the same X-User-Role / X-User-Dept /
+        # X-User-Id headers the rest of the app already sends on every
+        # request (see getHeaders() in attendance.html).
         role = (request.headers.get('X-User-Role', '') or request.args.get('role', '')).strip().lower()
         dept = (request.headers.get('X-User-Dept', '') or request.args.get('dept', '')).strip()
+        user_id = request.headers.get('X-User-Id', '') or request.args.get('user_id', '')
+
+        full_access_roles = {'admin', 'superadmin', 'hr', 'senior_hr'}
         dept_restricted_roles = {'sm', 'pm'}
 
-        if role in dept_restricted_roles and dept:
+        if role in full_access_roles:
+            rows = conn.execute("SELECT * FROM approval_history ORDER BY actioned_at DESC LIMIT 300").fetchall()
+        elif role in dept_restricted_roles and dept:
             rows = conn.execute(
                 "SELECT * FROM approval_history WHERE LOWER(dept)=LOWER(?) ORDER BY actioned_at DESC LIMIT 300",
                 (dept,)
             ).fetchall()
         else:
-            # admin / superadmin / hr / senior_hr / unknown-role fallback → full history
-            rows = conn.execute("SELECT * FROM approval_history ORDER BY actioned_at DESC LIMIT 300").fetchall()
+            # Safe default: only this person's own leave history, resolved
+            # by their employee id → username (never trust a client-sent name).
+            own_name = ''
+            if user_id:
+                emp_row = conn.execute("SELECT username FROM employees WHERE id=?", (user_id,)).fetchone()
+                own_name = (emp_row['username'] if emp_row else '') or ''
+            rows = conn.execute(
+                "SELECT * FROM approval_history WHERE LOWER(emp_name)=LOWER(?) ORDER BY actioned_at DESC LIMIT 300",
+                (own_name,)
+            ).fetchall() if own_name else []
         conn.close()
         return jsonify({"corrections": [dict(r) for r in rows], "success": True})
     except Exception as ex:
