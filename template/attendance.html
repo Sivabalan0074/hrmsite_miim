@@ -3583,10 +3583,15 @@ async function handleApproval(reqId,action){
   // Approval History still logged it) while the dashboard's numbers never
   // moved. Now we check the response and retry once before giving up.
   const endpoint=action==='approved'?'approve':'reject';
+  const _reviewerName=employees.find(e=>e.id===currentUserId)?.username || currentRole;
   async function _persistLeaveAction(){
     const res=await fetch(`/api/leave/${leaveId}/${endpoint}`,{
       method:'POST',headers:getHeaders(),
-      body:JSON.stringify({reviewed_by:currentRole,reject_note:action==='rejected'?'Rejected by manager':''})
+      body:JSON.stringify({
+        reviewed_by:currentRole,
+        reviewed_by_name:_reviewerName, // actual approver's username — server now logs approval_history itself using this, so it can't be silently lost anymore
+        reject_note:action==='rejected'?'Rejected by manager':''
+      })
     });
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const j=await res.json().catch(()=>({}));
