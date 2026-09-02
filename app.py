@@ -4202,13 +4202,33 @@ def get_leave_balance_by_id(emp_id):
         cl_total = 12.0
         el_total = 6.0
         el_accrued = round(min(cur_month_in_fy * 0.5, 6.0), 1)
-        pm_month_total = 2
-        pm_year_total = 2 * cur_month_in_fy
+
+        # Probationary / Intern — MIIM Leave Policy V24 grants ONE paid leave
+        # day per month, shared across CL/SL/EL/PM combined (NOT separate
+        # per-type quotas like permanent staff get). Anything beyond that in
+        # the same month is LOP. This mirrors _leave_remaining_quota() exactly
+        # so the balance shown here never disagrees with what actually gets
+        # approved/paid.
+        PROBATION_MONTHLY_QUOTA = 1
+        probation_used_month = counts_month['cl'] + counts_month['sl'] + counts_month['el'] + counts_month['pm']
+        probation_remaining_month = max(0, PROBATION_MONTHLY_QUOTA - probation_used_month)
+
+        if is_perm:
+            pm_month_total = 2
+            pm_year_total = 2 * cur_month_in_fy
+            pm_month_remaining = max(0, pm_month_total - counts_month['pm'])
+            pm_year_remaining = max(0, pm_year_total - counts_year['pm'])
+        else:
+            # Permission is NOT a separate 2/month quota for probation/intern
+            # staff — it draws from the same 1-day/month shared pool as
+            # everything else.
+            pm_month_total = PROBATION_MONTHLY_QUOTA
+            pm_year_total = PROBATION_MONTHLY_QUOTA * cur_month_in_fy
+            pm_month_remaining = probation_remaining_month
+            pm_year_remaining = max(0, pm_year_total - counts_year['pm'])
 
         cl_remaining = max(0.0, cl_total - counts_year['cl']) if is_perm else 0
         el_remaining = max(0.0, el_total - counts_year['el']) if is_perm else 0
-        pm_month_remaining = max(0, pm_month_total - counts_month['pm'])
-        pm_year_remaining = max(0, pm_year_total - counts_year['pm'])
         conn.close()
 
         balance = {
@@ -4225,6 +4245,14 @@ def get_leave_balance_by_id(emp_id):
             "pm": {"used_month": counts_month['pm'], "used_year": counts_year['pm'],
                    "month_total": pm_month_total, "year_total": pm_year_total,
                    "remaining_month": pm_month_remaining, "remaining_year": pm_year_remaining},
+            # Probationary/Intern only — the single shared 1-day/month bucket
+            # that CL/SL/EL/PM all draw from (zeroed out for permanent staff,
+            # who use the per-type quotas above instead).
+            "probation": {
+                "quota_month": PROBATION_MONTHLY_QUOTA if not is_perm else 0,
+                "used_month": probation_used_month if not is_perm else 0,
+                "remaining_month": probation_remaining_month if not is_perm else 0,
+            },
         }
         monthly_list = sorted(monthly.values(), key=lambda m: m['month'])
         return jsonify({"success": True, "balance": balance, "monthly": monthly_list})
