@@ -2287,7 +2287,7 @@ function mapLeaveType(lt){
   return m[lt]||'cl';
 }
 function mapLeaveTypeToBackend(code){
-  const m={sl:'Sick',cl:'Casual',el:'Earned',pm:'Annual'};
+  const m={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission'};
   return m[code]||'Casual';
 }
 
@@ -3247,7 +3247,7 @@ async function applyLeave(){
     // Update the SAME record on the backend by its id (PUT), not a new POST —
     // avoids leaving a stale duplicate row behind if the date was changed.
     try{
-      const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Annual'};
+      const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission'};
       const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
       const leaveId=req.leave_id||req.id;
       await fetch(`/api/leave/${leaveId}`,{
@@ -3351,7 +3351,7 @@ async function applyLeave(){
   // how many times "Fix Missing Attendance" was run (there was nothing
   // approved in the DB to fix). Now we capture the real id and attach it.
   try{
-    const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Annual'};
+    const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission'};
     const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
     const _applyRes=await fetch('/api/leave/apply',{
       method:'POST',headers:getHeaders(),
@@ -4030,13 +4030,21 @@ function buildMultiInOutCell(empId, d, editable, disTime, dKey){
   return `<div class="multi-inout-wrap">${rows}${addBtn}</div>`;
 }
 
+function _isHousekeepingEmp(empId){
+  const e=employees.find(x=>String(x.id)===String(empId));
+  const d=(e?.dept||'').trim().toLowerCase().replace(/-/g,' ');
+  return d==='housekeeping'||d==='housing keeping'||d==='house keeping';
+}
+
 function buildTotalHrsCell(empId, d, disTime){
   if(disTime) return `<span class="total-hrs na">—</span>`;
   const dKey=dk(viewDate);
   const entries=getEntries(empId, dKey);
   const mins=calcTotalMins(entries);
   if(!mins) return `<span class="total-hrs na" id="thr-${empId}">—</span>`;
-  const cls=mins<240?'low':mins<480?'mid':'';
+  // Housekeeping: a short daily visit is expected and still counts as a
+  // full paid day (see /api/checkout on the backend) — don't flag it red.
+  const cls=_isHousekeepingEmp(empId) ? '' : (mins<240?'low':mins<480?'mid':'');
   return `<span class="total-hrs ${cls}" id="thr-${empId}">${fmtHrsMins(mins)}</span>`;
 }
 
@@ -4050,7 +4058,7 @@ function updateTotalHrsCell(empId, dKey){
   if(disTime){el.textContent='—';el.className='total-hrs na';return;}
   const mins=calcTotalMins(entries);
   if(!mins){el.textContent='—';el.className='total-hrs na';return;}
-  const cls=mins<240?'low':mins<480?'mid':'';
+  const cls=_isHousekeepingEmp(empId) ? '' : (mins<240?'low':mins<480?'mid':'');
   el.className=`total-hrs ${cls}`;
   el.textContent=fmtHrsMins(mins);
 }
