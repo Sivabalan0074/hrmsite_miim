@@ -2858,6 +2858,10 @@ def checkout():
       >= 8 hours worked -> 'present'   (full day)
       >= 4 hours worked -> 'half_day'  (half day present)
       <  4 hours worked -> 'lop'       (full day Loss of Pay)
+
+    Housekeeping is exempt from this hours-based downgrade: their job is a
+    short daily visit, not an 8-hour shift, so a check-in (with or without a
+    matching checkout) always counts as a full paid day present.
     """
     try:
         data = request.json or {}
@@ -2871,9 +2875,17 @@ def checkout():
         row = conn.execute("SELECT checkin FROM attendance WHERE emp_id=? AND date=?", (emp_id, today)).fetchone()
         checkin_str = (row['checkin'] if row else '') or ''
 
+        emp_row = conn.execute("SELECT dept FROM employees WHERE id=?", (emp_id,)).fetchone()
+        is_housekeeping = bool(emp_row) and (emp_row['dept'] or '').strip().lower().replace('-', ' ') in (
+            'housekeeping', 'housing keeping', 'house keeping'
+        )
+
         new_status = None
         hours = None
-        if checkin_str and checkin_str != '--':
+        if is_housekeeping:
+            # Full day present regardless of hours actually worked.
+            new_status = 'present'
+        elif checkin_str and checkin_str != '--':
             try:
                 t_in = _dt.datetime.strptime(checkin_str, '%H:%M')
                 t_out = _dt.datetime.strptime(now_time, '%H:%M')
@@ -3238,6 +3250,22 @@ def leave_balance_report():
                 ).fetchone()
                 pm_used = (pm_row['c'] if pm_row else 0) or 0
 
+            # Probationary/Intern (MIIM Leave Policy V24): Permission is NOT
+            # a separate 2/month quota for them — it shares the same single
+            # 1-day/month pool as CL/SL/EL combined (see _leave_remaining_quota
+            # and the /api/leave/balance endpoint, which this must agree
+            # with). So for non-permanent staff, show the combined CL+SL+EL+PM
+            # usage against a 1/month (not 2/month) running total here — the
+            # CL/SL/EL columns themselves stay "—" since they have no quota
+            # of their own during probation.
+            if is_perm:
+                pm_total_fy = pm_fy_total
+                pm_used_fy = pm_used
+            else:
+                PROBATION_MONTHLY_QUOTA = 1
+                pm_total_fy = PROBATION_MONTHLY_QUOTA * month_in_fy
+                pm_used_fy = counts['cl'] + counts['sl'] + counts['el'] + pm_used
+
             # SL: running balance (with carry-over, capped 32) as of end of selected FY / today
             sl_remaining = round(_sl_balance_asof(conn, emp_id, e['joindate'], sl_asof_date), 1) if is_perm else 0
             sl_carried_in = round(_sl_balance_asof(conn, emp_id, e['joindate'], sl_carry_in_date), 1) if is_perm else 0
@@ -3256,8 +3284,8 @@ def leave_balance_report():
                 "el": {"used": counts['el'], "total": el_accrued if is_perm else 0,
                        "remaining": max(0, round(el_accrued - counts['el'], 1)) if is_perm else 0,
                        "carried_over": 0},
-                "pm": {"used": pm_used, "total": pm_fy_total,
-                       "remaining": max(0, pm_fy_total - pm_used),
+                "pm": {"used": pm_used_fy, "total": pm_total_fy,
+                       "remaining": max(0, pm_total_fy - pm_used_fy),
                        "carried_over": 0},
             })
         conn.close()
