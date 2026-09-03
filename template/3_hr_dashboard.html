@@ -9694,15 +9694,16 @@ async function loadLeaveReport(){
     // Group by department for readability
     const byDept = {};
     emps.forEach(e=>{ (byDept[e.dept||'—'] = byDept[e.dept||'—']||[]).push(e); });
-    const pill = (leaveObj, color) => {
+    const pill = (leaveObj, color, isSharedPm) => {
       const used = leaveObj.used, total = leaveObj.total;
       if (!(total>0)) return `<span style="color:#555;">—</span>`;
       const carry = leaveObj.carried_over || 0;
       const carryNote = carry>0 ? `<span style="font-size:9px;color:#666;">(${carry} carried)</span>` : '';
+      const sharedNote = isSharedPm ? `<span style="font-size:9px;color:#666;">(shared w/ Monthly Leave)</span>` : '';
       return `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
            <span style="font-weight:700;color:${color};">${used}<span style="color:#666;font-weight:400;"> / ${total}</span></span>
            <span style="font-size:10px;color:#8a8f9c;">${Math.max(0,total-used)} left</span>
-           ${carryNote}
+           ${carryNote}${sharedNote}
          </div>`;
     };
     let html = '';
@@ -9718,7 +9719,7 @@ async function loadLeaveReport(){
           <td style="padding:9px 8px;text-align:center;">${pill(e.sl, '#eab308')}</td>
           <td style="padding:9px 8px;text-align:center;">${pill(e.el, '#a855f7')}</td>
           <td style="padding:9px 8px;text-align:center;">${pill(e.cl, '#3b82f6')}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.pm, '#f97316')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.pm, '#f97316', !e.is_permanent)}</td>
         </tr>`;
       });
     });
