@@ -4625,6 +4625,31 @@ def _sync_approval_history_to_attendance(conn, now):
     return synced, failed
 
 
+@app.route('/api/approval-history/repair', methods=['POST'])
+@require_auth
+@require_role('admin')
+def repair_approval_history():
+    """On-demand version of the two startup backfill passes above — lets an
+    admin force approval_history to catch up with leave_requests/attendance
+    right now, from the running app, instead of waiting for the next server
+    restart (a packaged .exe build only runs the startup backfill once, at
+    boot, so any leaves approved — or attendance marked sl/cl/el/pm directly
+    — since then won't show in Approval History until this is called, or the
+    app is restarted). Safe to call repeatedly; every insert is de-duped.
+    """
+    try:
+        conn = _db()
+        before = conn.execute("SELECT COUNT(*) c FROM approval_history").fetchone()['c']
+        _backfill_approval_history_from_leave_requests(conn)
+        _backfill_approval_history_from_attendance(conn)
+        after = conn.execute("SELECT COUNT(*) c FROM approval_history").fetchone()['c']
+        conn.commit(); conn.close()
+        return jsonify({"success": True, "before": before, "after": after, "recovered": after - before})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 @app.route('/api/leave/backfill-attendance', methods=['POST'])
 @require_auth
 @require_role('admin')
