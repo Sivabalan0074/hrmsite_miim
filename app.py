@@ -3083,27 +3083,23 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
     balance look smaller than it really is.
 
     Policy (matches the written-out rules used elsewhere in this file):
-      - Probationary/Intern: 1 day/month total, across ALL leave types.
-      - Permanent (Regular / Regular(PIP)):
+      - PM (Permission) -> 2/month, resets monthly. Its OWN quota for every
+        employee, permanent or probationary/intern — it no longer shares
+        probation/intern's Monthly Leave pool below (business-rule change:
+        Permission used to be folded into that combined pool; it's now
+        tracked separately for everyone, same as permanent staff already had).
+      - Probationary/Intern (any leave_code other than pm): 1 day/month
+        total, shared across CL/SL/EL only.
+      - Permanent (Regular / Regular(PIP)), other than pm:
           CL -> 12/year flat, no carry-over.
           SL -> carry-over aware running balance (see _sl_balance_asof).
           EL -> accrues 0.5/month, capped 6/year.
-          PM -> 2/month, resets monthly.
     """
     exclude_from_s = exclude_from.isoformat()
     exclude_to_s = exclude_to.isoformat()
 
-    if not is_permanent:
-        month_start = exclude_from.replace(day=1)
-        month_end = _next_month_first(month_start) - datetime.timedelta(days=1)
-        row = conn.execute(
-            "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status IN ('cl','sl','el','pm') "
-            "AND date>=? AND date<=? AND (date<? OR date>?)",
-            (emp_id, month_start.isoformat(), month_end.isoformat(), exclude_from_s, exclude_to_s)
-        ).fetchone()
-        used = (row['c'] if row else 0) or 0
-        return max(0.0, 1.0 - used)
-
+    # PM (Permission) is its own quota for everyone now — checked first so
+    # it never falls into the probation Monthly-Leave branch below.
     if leave_code == 'pm':
         month_start = exclude_from.replace(day=1)
         month_end = _next_month_first(month_start) - datetime.timedelta(days=1)
@@ -3114,6 +3110,19 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
         ).fetchone()
         used = (row['c'] if row else 0) or 0
         return max(0.0, 2.0 - used)
+
+    if not is_permanent:
+        # Monthly Leave: 1 day/month, shared across CL/SL/EL only (PM is
+        # handled separately above).
+        month_start = exclude_from.replace(day=1)
+        month_end = _next_month_first(month_start) - datetime.timedelta(days=1)
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status IN ('cl','sl','el') "
+            "AND date>=? AND date<=? AND (date<? OR date>?)",
+            (emp_id, month_start.isoformat(), month_end.isoformat(), exclude_from_s, exclude_to_s)
+        ).fetchone()
+        used = (row['c'] if row else 0) or 0
+        return max(0.0, 1.0 - used)
 
     if leave_code == 'sl':
         asof = exclude_from - datetime.timedelta(days=1)
@@ -3250,21 +3259,24 @@ def leave_balance_report():
                 ).fetchone()
                 pm_used = (pm_row['c'] if pm_row else 0) or 0
 
-            # Probationary/Intern (MIIM Leave Policy V24): Permission is NOT
-            # a separate 2/month quota for them — it shares the same single
-            # 1-day/month pool as CL/SL/EL combined (see _leave_remaining_quota
-            # and the /api/leave/balance endpoint, which this must agree
-            # with). So for non-permanent staff, show the combined CL+SL+EL+PM
-            # usage against a 1/month (not 2/month) running total here — the
+            # Probationary/Intern (MIIM Leave Policy V24, updated): Permission
+            # now has its own separate 2/month quota — same rule as permanent
+            # staff — instead of sharing the combined Monthly Leave pool.
+            # Monthly Leave itself stays a 1-day/month pool, but shared
+            # across CL/SL/EL only now (PM no longer draws from it). The
             # CL/SL/EL columns themselves stay "—" since they have no quota
-            # of their own during probation.
+            # of their own during probation — only the shared Monthly Leave
+            # pool and the separate Permission quota apply.
             if is_perm:
                 pm_total_fy = pm_fy_total
                 pm_used_fy = pm_used
             else:
-                PROBATION_MONTHLY_QUOTA = 1
-                pm_total_fy = PROBATION_MONTHLY_QUOTA * month_in_fy
-                pm_used_fy = counts['cl'] + counts['sl'] + counts['el'] + pm_used
+                pm_total_fy = 2 * month_in_fy
+                pm_used_fy = pm_used
+
+            PROBATION_MONTHLY_QUOTA = 1
+            ml_total_fy = PROBATION_MONTHLY_QUOTA * month_in_fy
+            ml_used_fy = counts['cl'] + counts['sl'] + counts['el']
 
             # SL: running balance (with carry-over, capped 32) as of end of selected FY / today
             sl_remaining = round(_sl_balance_asof(conn, emp_id, e['joindate'], sl_asof_date), 1) if is_perm else 0
@@ -3288,10 +3300,10 @@ def leave_balance_report():
                        "remaining": max(0, cl_total - counts['cl']) if is_perm else 0,
                        "carried_over": 0},
                 # Probationary/Intern only — the real MIIM Leave Policy V24
-                # benefit: 1 paid day/month, shared with Permission below.
+                # benefit: 1 paid day/month, shared across CL/SL/EL only.
                 # Zeroed out for permanent staff (not applicable to them).
-                "ml": {"used": pm_used_fy if not is_perm else 0, "total": pm_total_fy if not is_perm else 0,
-                       "remaining": max(0, pm_total_fy - pm_used_fy) if not is_perm else 0,
+                "ml": {"used": ml_used_fy if not is_perm else 0, "total": ml_total_fy if not is_perm else 0,
+                       "remaining": max(0, ml_total_fy - ml_used_fy) if not is_perm else 0,
                        "carried_over": 0},
                 "pm": {"used": pm_used_fy, "total": pm_total_fy,
                        "remaining": max(0, pm_total_fy - pm_used_fy),
@@ -4240,29 +4252,21 @@ def get_leave_balance_by_id(emp_id):
         el_total = 6.0
         el_accrued = round(min(cur_month_in_fy * 0.5, 6.0), 1)
 
-        # Probationary / Intern — MIIM Leave Policy V24 grants ONE paid leave
-        # day per month, shared across CL/SL/EL/PM combined (NOT separate
-        # per-type quotas like permanent staff get). Anything beyond that in
-        # the same month is LOP. This mirrors _leave_remaining_quota() exactly
-        # so the balance shown here never disagrees with what actually gets
-        # approved/paid.
+        # Probationary / Intern — MIIM Leave Policy V24 (updated): Permission
+        # now has its OWN separate 2/month quota, same rule as permanent
+        # staff. The Monthly Leave pool (1 day/month) is shared across
+        # CL/SL/EL only — PM no longer draws from it. This mirrors
+        # _leave_remaining_quota() exactly so the balance shown here never
+        # disagrees with what actually gets approved/paid.
         PROBATION_MONTHLY_QUOTA = 1
-        probation_used_month = counts_month['cl'] + counts_month['sl'] + counts_month['el'] + counts_month['pm']
+        probation_used_month = counts_month['cl'] + counts_month['sl'] + counts_month['el']
         probation_remaining_month = max(0, PROBATION_MONTHLY_QUOTA - probation_used_month)
 
-        if is_perm:
-            pm_month_total = 2
-            pm_year_total = 2 * cur_month_in_fy
-            pm_month_remaining = max(0, pm_month_total - counts_month['pm'])
-            pm_year_remaining = max(0, pm_year_total - counts_year['pm'])
-        else:
-            # Permission is NOT a separate 2/month quota for probation/intern
-            # staff — it draws from the same 1-day/month shared pool as
-            # everything else.
-            pm_month_total = PROBATION_MONTHLY_QUOTA
-            pm_year_total = PROBATION_MONTHLY_QUOTA * cur_month_in_fy
-            pm_month_remaining = probation_remaining_month
-            pm_year_remaining = max(0, pm_year_total - counts_year['pm'])
+        # PM (Permission): 2/month for everyone now, permanent or not.
+        pm_month_total = 2
+        pm_year_total = 2 * cur_month_in_fy
+        pm_month_remaining = max(0, pm_month_total - counts_month['pm'])
+        pm_year_remaining = max(0, pm_year_total - counts_year['pm'])
 
         cl_remaining = max(0.0, cl_total - counts_year['cl']) if is_perm else 0
         el_remaining = max(0.0, el_total - counts_year['el']) if is_perm else 0
