@@ -3275,14 +3275,23 @@ def leave_balance_report():
             result.append({
                 "id": emp_id, "username": e['username'], "dept": e['dept'],
                 "desig": e['desig'], "type": e['type'], "is_permanent": is_perm,
-                "cl": {"used": counts['cl'], "total": cl_total if is_perm else 0,
-                       "remaining": max(0, cl_total - counts['cl']) if is_perm else 0,
-                       "carried_over": 0},
+                # Sick/Earned/Casual quotas don't apply during probation — the
+                # frontend hides these columns entirely for non-permanent rows
+                # rather than showing an empty dash.
                 "sl": {"used": sl_used, "total": sl_total if is_perm else 0,
                        "remaining": sl_remaining if is_perm else 0,
                        "carried_over": sl_carried_in if is_perm else 0},
                 "el": {"used": counts['el'], "total": el_accrued if is_perm else 0,
                        "remaining": max(0, round(el_accrued - counts['el'], 1)) if is_perm else 0,
+                       "carried_over": 0},
+                "cl": {"used": counts['cl'], "total": cl_total if is_perm else 0,
+                       "remaining": max(0, cl_total - counts['cl']) if is_perm else 0,
+                       "carried_over": 0},
+                # Probationary/Intern only — the real MIIM Leave Policy V24
+                # benefit: 1 paid day/month, shared with Permission below.
+                # Zeroed out for permanent staff (not applicable to them).
+                "ml": {"used": pm_used_fy if not is_perm else 0, "total": pm_total_fy if not is_perm else 0,
+                       "remaining": max(0, pm_total_fy - pm_used_fy) if not is_perm else 0,
                        "carried_over": 0},
                 "pm": {"used": pm_used_fy, "total": pm_total_fy,
                        "remaining": max(0, pm_total_fy - pm_used_fy),
