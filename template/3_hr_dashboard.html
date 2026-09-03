@@ -4442,11 +4442,12 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
             <th style="text-align:center;padding:10px 8px;color:#eab308;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Sick Leave</th>
             <th style="text-align:center;padding:10px 8px;color:#a855f7;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Earned Leave</th>
             <th style="text-align:center;padding:10px 8px;color:#3b82f6;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Casual Leave</th>
+            <th style="text-align:center;padding:10px 8px;color:#3b82f6;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Monthly Leave</th>
             <th style="text-align:center;padding:10px 8px;color:#f97316;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);">Permission</th>
           </tr>
         </thead>
         <tbody id="leaveReportTbody">
-          <tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>
+          <tr><td colspan="7" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -9674,12 +9675,12 @@ async function loadLeaveReport(){
   const dept = document.getElementById('leaveReportDeptFilter').value || 'all';
   const fySel = document.getElementById('leaveReportFyFilter');
   const fy = fySel && fySel.value ? fySel.value : String(_leaveReportCurrentFyStartYear());
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#8a8f9c;">Loading…</td></tr>';
   try{
     const res = await fetch('/api/leave/report?dept=' + encodeURIComponent(dept) + '&fy=' + encodeURIComponent(fy), { headers: _dedHdrs() });
     const data = await res.json();
     if (!data.success){
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#ef4444;">Could not load report.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#ef4444;">Could not load report.</td></tr>';
       return;
     }
     document.getElementById('leaveReportFyLabel').textContent = 'Financial Year: ' + (data.fy_label||'') + (data.is_current_fy===false ? ' (past year)' : '');
@@ -9688,44 +9689,50 @@ async function loadLeaveReport(){
     emps.forEach(e=>{ _leaveReportEmpById[e.id] = e; });
     document.getElementById('leaveReportCount').textContent = emps.length + ' employee' + (emps.length!==1?'s':'');
     if (!emps.length){
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#8a8f9c;">No employees found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#8a8f9c;">No employees found.</td></tr>';
       return;
     }
     // Group by department for readability
     const byDept = {};
     emps.forEach(e=>{ (byDept[e.dept||'—'] = byDept[e.dept||'—']||[]).push(e); });
-    const pill = (leaveObj, color, isSharedPm) => {
+    const pill = (leaveObj, color, note) => {
       const used = leaveObj.used, total = leaveObj.total;
       if (!(total>0)) return `<span style="color:#555;">—</span>`;
       const carry = leaveObj.carried_over || 0;
       const carryNote = carry>0 ? `<span style="font-size:9px;color:#666;">(${carry} carried)</span>` : '';
-      const sharedNote = isSharedPm ? `<span style="font-size:9px;color:#666;">(shared w/ Monthly Leave)</span>` : '';
+      const extraNote = note ? `<span style="font-size:9px;color:#666;">(${note})</span>` : '';
       return `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
            <span style="font-weight:700;color:${color};">${used}<span style="color:#666;font-weight:400;"> / ${total}</span></span>
            <span style="font-size:10px;color:#8a8f9c;">${Math.max(0,total-used)} left</span>
-           ${carryNote}${sharedNote}
+           ${carryNote}${extraNote}
          </div>`;
     };
     let html = '';
     Object.keys(byDept).sort().forEach(dept=>{
-      html += `<tr><td colspan="6" style="padding:14px 8px 6px;font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid rgba(255,255,255,.06);">${dept} <span style="color:#8a8f9c;font-weight:400;">(${byDept[dept].length})</span></td></tr>`;
+      html += `<tr><td colspan="7" style="padding:14px 8px 6px;font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid rgba(255,255,255,.06);">${dept} <span style="color:#8a8f9c;font-weight:400;">(${byDept[dept].length})</span></td></tr>`;
       byDept[dept].forEach(e=>{
+        // Probationary/Intern: Sick/Earned/Casual quotas don't apply to them
+        // (MIIM Leave Policy V24 — they get one shared 1-day/month benefit
+        // instead) — show "—" for those three so it's obvious at a glance,
+        // and surface the actual benefit under "Monthly Leave" / "Permission".
+        const naCell = `<span style="color:#333;">—</span>`;
         html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;" onclick="openEmpMonthlyLeaveModal(${e.id})" onmouseover="this.style.background='rgba(255,255,255,.03)'" onmouseout="this.style.background='transparent'">
           <td style="padding:9px 8px;">
             <div style="font-weight:600;color:#f0f0f0;">${e.username}</div>
             <div style="font-size:10px;color:#8a8f9c;">${e.desig||''} · ${e.type||''}</div>
           </td>
           <td style="padding:9px 8px;color:#8a8f9c;">${e.dept||''}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.sl, '#eab308')}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.el, '#a855f7')}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.cl, '#3b82f6')}</td>
-          <td style="padding:9px 8px;text-align:center;">${pill(e.pm, '#f97316', !e.is_permanent)}</td>
+          <td style="padding:9px 8px;text-align:center;">${e.is_permanent ? pill(e.sl, '#eab308') : naCell}</td>
+          <td style="padding:9px 8px;text-align:center;">${e.is_permanent ? pill(e.el, '#a855f7') : naCell}</td>
+          <td style="padding:9px 8px;text-align:center;">${e.is_permanent ? pill(e.cl, '#3b82f6') : naCell}</td>
+          <td style="padding:9px 8px;text-align:center;">${e.is_permanent ? naCell : pill(e.ml, '#3b82f6', 'shared w/ Permission')}</td>
+          <td style="padding:9px 8px;text-align:center;">${pill(e.pm, '#f97316', e.is_permanent ? null : 'shared w/ Monthly Leave')}</td>
         </tr>`;
       });
     });
     tbody.innerHTML = html;
   }catch(e){
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#ef4444;">Network error loading report.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#ef4444;">Network error loading report.</td></tr>';
   }
 }
 
@@ -11140,12 +11147,17 @@ async function _renderDashLeaveBalance() {
     ? mc({icon:'\u23F1\uFE0F',title:'Permission',tc:'#f97316',desc:'Max 2 permissions/month. Each up to 2 hours.',tag:MONTH_S[nowM-1]+' '+yr,tbg:'rgba(249,115,22,.15)',tbd:'rgba(249,115,22,.3)',br:'rgba(249,115,22,.35)',bc:'#f97316',left:remPerm,pct:pmPct,always:true,rows:[{k:'THIS MONTH',v:approvedPmMonth+'/2'},{k:'THIS YEAR',v:approvedPmYear+'/24'}],note:null})
     : mc({icon:'\u23F1\uFE0F',title:'Permission',tc:'#f97316',desc:'Part-day (up to 2 hrs). Shares the same 1 day/month quota.',tag:MONTH_S[nowM-1]+' '+yr,tbg:'rgba(249,115,22,.15)',tbd:'rgba(249,115,22,.3)',br:'rgba(249,115,22,.35)',bc:'#f97316',left:probRemM,pct:probPct,always:true,rows:[{k:'THIS MONTH',v:probUsedM+'/'+probQuota}],note:'\uD83D\uDD01 Shared with Monthly Leave'});
 
-  container.innerHTML=[
-    mc({icon:'\uD83E\uDD12',title:'Sick Leave',tc:'#eab308',desc:'1 day/month. Carries over up to 2\u00bd years (max 32\u219212).',tag:fy.monthInFY+' months accrued',tbg:'rgba(234,179,8,.15)',tbd:'rgba(234,179,8,.3)',br:'rgba(234,179,8,.35)',bc:'#eab308',left:remSick,pct:slPct,always:false,rows:[{k:'THIS MONTH',v:approvedSlMonth+'/'+(isPerm?1:'\u2014')},{k:'THIS YEAR',v:approvedSl+'/'+slTotal}],note:'\uD83D\uDCC5 Carries over (max 32 days)'}),
-    mc({icon:'\u2B50',title:'Earned Leave',tc:'#a855f7',desc:'\u00bd day/month. Encashed with April salary. No carry-over.',tag:elAccrued+' months accrued',tbg:'rgba(168,85,247,.15)',tbd:'rgba(168,85,247,.3)',br:'rgba(168,85,247,.35)',bc:'#a855f7',left:remEarned,pct:elPct,always:false,rows:[{k:'THIS MONTH',v:approvedElMonth+'/'+(isPerm?0.5:'\u2014')},{k:'THIS YEAR',v:approvedEl+'/'+EL_TOTAL}],note:'\uD83C\uDF1F Encashed with April salary'}),
-    clCard,
-    pmCard
-  ].join('');
+  // Probationary/Intern: Sick Leave & Earned Leave have no quota of their
+  // own during probation (MIIM Leave Policy V24 gives them the single
+  // Monthly Leave + Permission benefit instead) — don't render those two
+  // cards at all for them, rather than showing an empty "Not applicable" card.
+  var cards = [];
+  if (isPerm) {
+    cards.push(mc({icon:'\uD83E\uDD12',title:'Sick Leave',tc:'#eab308',desc:'1 day/month. Carries over up to 2\u00bd years (max 32\u219212).',tag:fy.monthInFY+' months accrued',tbg:'rgba(234,179,8,.15)',tbd:'rgba(234,179,8,.3)',br:'rgba(234,179,8,.35)',bc:'#eab308',left:remSick,pct:slPct,always:true,rows:[{k:'THIS MONTH',v:approvedSlMonth+'/1'},{k:'THIS YEAR',v:approvedSl+'/'+slTotal}],note:'\uD83D\uDCC5 Carries over (max 32 days)'}));
+    cards.push(mc({icon:'\u2B50',title:'Earned Leave',tc:'#a855f7',desc:'\u00bd day/month. Encashed with April salary. No carry-over.',tag:elAccrued+' months accrued',tbg:'rgba(168,85,247,.15)',tbd:'rgba(168,85,247,.3)',br:'rgba(168,85,247,.35)',bc:'#a855f7',left:remEarned,pct:elPct,always:true,rows:[{k:'THIS MONTH',v:approvedElMonth+'/0.5'},{k:'THIS YEAR',v:approvedEl+'/'+EL_TOTAL}],note:'\uD83C\uDF1F Encashed with April salary'}));
+  }
+  cards.push(clCard, pmCard);
+  container.innerHTML = cards.join('');
 }
 
 
