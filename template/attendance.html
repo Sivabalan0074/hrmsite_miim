@@ -1850,7 +1850,7 @@ function applyRoleUI(){
   else ds.disabled=false;
   // Show Approval History button for admin, senior_hr, hr, sm, pm (all who can approve)
   const histBtn=document.getElementById('historyBtn');
-  if(histBtn) histBtn.style.display=['admin','senior_hr','hr','sm','pm'].includes(currentRole)?'inline-flex':'none';
+  if(histBtn) histBtn.style.display=['admin','superadmin','senior_hr','hr','sm','pm'].includes(currentRole)?'inline-flex':'none';
   // Correction History button — admin, senior_hr, hr only
   const corrHistBtn=document.getElementById('corrHistoryBtn');
   if(corrHistBtn) corrHistBtn.style.display=['admin','senior_hr','hr'].includes(currentRole)?'inline-flex':'none';
@@ -4537,6 +4537,16 @@ async function openHistoryModal(){
   document.getElementById('historyModal').classList.add('open');
   // Render immediately with whatever we already have (instant, no blank flash)…
   renderHistoryModalBody();
+  // Self-heal first: a packaged/desktop build only runs the startup backfill
+  // once, at boot, so any leave approved — or attendance marked sl/cl/el/pm
+  // directly on the grid — since the app last restarted would otherwise
+  // never appear here even though it's really approved/applied. Admin-only,
+  // safe to call every time (de-duped server-side), so this stays correct
+  // without needing anyone to restart the server.
+  if(['admin','superadmin'].includes(currentRole)){
+    try{ await fetch('/api/approval-history/repair',{method:'POST',headers:getHeaders()}); }
+    catch(e){ console.warn('Could not repair approval history',e); }
+  }
   // …then refresh from the server so this shows every approver's actions —
   // not just ones made from this browser — filtered to this role's scope
   // (full history for admin/hr/senior_hr, own-department only for sm/pm).
