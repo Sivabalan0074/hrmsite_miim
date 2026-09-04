@@ -727,7 +727,7 @@
           <div class="sse-field">
             <label>Loss of Pay (₹) <span id="sseLOPAutoBadge" style="display:none;font-size:9px;font-weight:700;color:var(--orange);background:rgba(249,115,22,.12);padding:1px 6px;border-radius:4px;margin-left:4px;">AUTO</span></label>
             <input id="sseLOP" type="number" min="0" placeholder="0" readonly style="opacity:.75;cursor:not-allowed"/>
-            <div style="font-size:10px;color:var(--text3);margin-top:3px">Calculated from attendance LOP days · already reflected in the pro-rated earnings above (reference only)</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:3px">Calculated from Days Worked shortfall (Absent + over-quota leave + half-days) · included in Total Deductions below</div>
           </div>
         </div>
         <!-- Dynamic extra deduction rows -->
@@ -2105,11 +2105,16 @@ async function applyAllSetSalaries(){
         const ad = await ar.json();
         if(ad && ad.success){ daysWorked = ad.days_worked; if(ad.total_days_in_month) totalDays = ad.total_days_in_month; }
       }catch(e){}
-      const ratio = (daysWorked!=null && totalDays>0) ? Math.min(daysWorked,totalDays)/totalDays : 1;
+      const dwForCalc = (daysWorked!=null && totalDays>0) ? Math.min(daysWorked,totalDays) : totalDays;
+      const unpaidDays = Math.max(0, totalDays - dwForCalc);
 
       const earn = (m.basic||0)+(m.hra||0)+(m.dearness_allowance||0)+(m.medical_allowance||0)+(m.lta||0)+(m.special_allowance||0)+(m.city_compensatory_allowance||0);
-      const ded  = (m.professional_tax||0)+(m.tds||0)+(m.existing_advance||0)+(m.other_deductions||0);
-      const payableEarn = Math.round(earn*ratio);
+      // LOP (₹) goes into Total Deductions (not silently baked into a
+      // pro-rated Total Earnings) — same convention as the main Salary
+      // Structure editor, so bulk-applied entries show the missed-days
+      // amount in Deductions too, not a hidden ₹0.
+      const lop = totalDays>0 ? Math.round(earn*unpaidDays/totalDays) : 0;
+      const ded  = (m.professional_tax||0)+(m.tds||0)+(m.existing_advance||0)+(m.other_deductions||0)+lop;
 
       const payload = {
         emp_id: emp.id, period: period+'-01',
@@ -2117,8 +2122,8 @@ async function applyAllSetSalaries(){
         medical_allowance: m.medical_allowance||0, lta: m.lta||0, special_allowance: m.special_allowance||0,
         city_compensatory_allowance: m.city_compensatory_allowance||0,
         professional_tax: m.professional_tax||0, tds: m.tds||0,
-        existing_advance: m.existing_advance||0, other_deductions: m.other_deductions||0,
-        total_earnings: payableEarn, total_deductions: ded, net_pay: Math.round(payableEarn-ded),
+        existing_advance: m.existing_advance||0, other_deductions: m.other_deductions||0, lop: lop,
+        total_earnings: Math.round(earn), total_deductions: Math.round(ded), net_pay: Math.round(earn-ded),
         days_worked: daysWorked, mode_of_payment: emp.mode_of_payment || 'Account',
         pay_date: `${py}-${String(pm).padStart(2,'0')}-07`,
         salary_ctc: m.salary_ctc||0
@@ -2264,34 +2269,43 @@ function _sseRefreshLOPField(){
   if(!lopEl) return;
   const g2=id=>parseFloat(document.getElementById(id).value)||0;
   const fullEarn = g2('sseBasic')+g2('sseHRA')+g2('sseDA')+g2('sseMA')+g2('sseLTA')+g2('sseSA')+g2('sseCCA');
-  const dailyRate = _sseLopTotalDaysCache>0 ? (fullEarn/_sseLopTotalDaysCache) : 0;
-  lopEl.value = _sseLopDaysCache>0 ? Math.round(dailyRate*_sseLopDaysCache) : 0;
+  // Derive the LOP ₹ amount from whatever is CURRENTLY in the Days Worked
+  // box — not from the last attendance fetch — so it stays correct even if
+  // the admin manually overrides Days Worked after the auto-fill.
+  const totalDaysInMonth = sseTotalDaysInPeriod();
+  const dwRaw = document.getElementById('sseDaysWorked').value;
+  const daysWorked = (dwRaw!==''&&dwRaw!=null) ? Math.min(parseFloat(dwRaw)||0, totalDaysInMonth) : totalDaysInMonth;
+  const unpaidDays = Math.max(0, totalDaysInMonth - daysWorked);
+  lopEl.value = totalDaysInMonth>0 ? Math.round(fullEarn*unpaidDays/totalDaysInMonth) : 0;
 }
 
 function sseRecalc(){
   const g=id=>parseFloat(document.getElementById(id).value)||0;
   const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
-  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed');
   const extraEarn = typeof getExtraEarnings==='function' ? getExtraEarnings() : 0;
-  const extraDed  = typeof getExtraDeductions==='function' ? getExtraDeductions() : 0;
-  const earn = baseEarn + extraEarn;
-  const ded  = baseDed  + extraDed;
+  const earn = baseEarn + extraEarn;   // full month's salary components (gross)
 
-  // ── Pro-rate earnings by Days Worked (attendance/leave-aware) ──
+  // Keep the LOP (₹) field in sync with whatever Days Worked currently
+  // holds, THEN fold it into Total Deductions — this is what makes the
+  // days-missed amount visible in Total Deductions instead of being
+  // silently baked into a pro-rated Total Earnings figure.
+  _sseRefreshLOPField();
+  const lop = g('sseLOP');
+  const baseDed = g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+lop;
+  const extraDed  = typeof getExtraDeductions==='function' ? getExtraDeductions() : 0;
+  const ded  = baseDed + extraDed;
+
   const totalDaysInMonth = sseTotalDaysInPeriod();
   const dwRaw = document.getElementById('sseDaysWorked').value;
   const daysWorked = (dwRaw!==''&&dwRaw!=null) ? Math.min(parseFloat(dwRaw)||0, totalDaysInMonth) : totalDaysInMonth;
-  const ratio = totalDaysInMonth>0 ? daysWorked/totalDaysInMonth : 1;
-  const payableEarn = Math.round(earn*ratio);
-  const net = Math.round(payableEarn-ded);
+  const net = Math.round(earn-ded);
 
   const fmt=v=>'₹'+v.toLocaleString('en-IN');
-  document.getElementById('sseCalcEarn').textContent = fmt(payableEarn);
+  document.getElementById('sseCalcEarn').textContent = fmt(Math.round(earn));
   var _earnNote = document.getElementById('sseCalcEarnNote');
-  if(_earnNote) _earnNote.textContent = ratio<1 ? `(pro-rated · ${daysWorked}/${totalDaysInMonth} days, full ${fmt(earn)})` : '';
-  document.getElementById('sseCalcDed').textContent=fmt(ded);
+  if(_earnNote) _earnNote.textContent = (daysWorked<totalDaysInMonth) ? `(full month · ₹${Math.round(lop).toLocaleString('en-IN')} LOP for ${totalDaysInMonth-daysWorked} day(s) shown in Deductions)` : '';
+  document.getElementById('sseCalcDed').textContent=fmt(Math.round(ded));
   document.getElementById('sseCalcNet').textContent=fmt(net);
-  if(_sseLopDaysCache>0) _sseRefreshLOPField();
 }
 
 async function saveSSEntry(){
@@ -2299,27 +2313,28 @@ async function saveSSEntry(){
   if(!empId){toast('No employee assigned','error');return;}
   const g=id=>parseFloat(document.getElementById(id).value)||0;
   const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
-  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed');
   const earn = baseEarn + (typeof getExtraEarnings==='function'?getExtraEarnings():0);
+  // ── LOP (₹) — derived from Days Worked vs. the real days in this month —
+  //    is now folded into Total Deductions (not baked silently into a
+  //    pro-rated Total Earnings) so the amount deducted for missed days is
+  //    visible in the deductions total, matching the Live Calc panel above.
+  _sseRefreshLOPField();
+  const lop = g('sseLOP');
+  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+lop;
   const ded  = baseDed  + (typeof getExtraDeductions==='function'?getExtraDeductions():0);
   // Block save if no salary components are filled — prevents stale ₹0/junk records
   if(earn === 0 && ded === 0){ toast('Please fill in at least one salary component before saving.','error'); return; }
-  // ── Pro-rate earnings by Days Worked (attendance/leave-aware) so the
-  //    stored net pay matches what's shown in the Live Calc panel ──
   const totalDaysInMonth = sseTotalDaysInPeriod();
   const dwRaw = document.getElementById('sseDaysWorked').value;
   const daysWorkedVal = (dwRaw!==''&&dwRaw!=null) ? parseInt(dwRaw) : null;
-  const dwForCalc = daysWorkedVal!=null ? Math.min(daysWorkedVal, totalDaysInMonth) : totalDaysInMonth;
-  const ratio = totalDaysInMonth>0 ? dwForCalc/totalDaysInMonth : 1;
-  const payableEarn = Math.round(earn*ratio);
   const payload={
     emp_id:empId,
     period:document.getElementById('ssePeriod').value+'-01',
     basic:g('sseBasic'),hra:g('sseHRA'),dearness_allowance:g('sseDA'),
     medical_allowance:g('sseMA'),lta:g('sseLTA'),special_allowance:g('sseSA'),
     city_compensatory_allowance:g('sseCCA'),
-    professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),lop:g('sseLOP'),
-    total_earnings:payableEarn,total_deductions:ded,net_pay:Math.round(payableEarn-ded),
+    professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),lop:lop,
+    total_earnings:Math.round(earn),total_deductions:Math.round(ded),net_pay:Math.round(earn-ded),
     days_worked:daysWorkedVal,
     mode_of_payment:document.getElementById('sseMOP').value,
     pay_date:document.getElementById('ssePayDate').value,
