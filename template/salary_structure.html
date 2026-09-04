@@ -2213,13 +2213,17 @@ async function sseAutoFillDaysWorked(force){
       _sseDWIsAuto = true;
       var badge = document.getElementById('sseDWAutoBadge');
       if(badge) badge.style.display = 'inline-block';
-      // ── Loss of Pay (₹): pure reference figure = daily rate × LOP days.
+      // ── Loss of Pay (₹): pure reference figure = daily rate × unpaid days.
       // The actual pay-cut already happens via the pro-rated earnings above
       // (Days Worked already excludes these days) — this field just shows
-      // the employee/HR how much that LOP amounts to in rupees.
+      // the employee/HR how much that shortfall amounts to in rupees.
+      // IMPORTANT: uses unpaid_days (Absent + over-quota LOP leave + Half
+      // Day cuts) — NOT lop_leave_days alone — otherwise a shortfall made up
+      // mostly of plain Absent days would show "LOP = ₹0", reading as
+      // "nothing was detected" even though Days Worked was in fact reduced.
       const lopEl = document.getElementById('sseLOP');
       const lopBadge = document.getElementById('sseLOPAutoBadge');
-      _sseLopDaysCache = d.lop_leave_days || 0;
+      _sseLopDaysCache = (d.unpaid_days!=null ? d.unpaid_days : d.lop_leave_days) || 0;
       _sseLopTotalDaysCache = d.total_days_in_month || sseTotalDaysInPeriod();
       if(lopEl){
         _sseRefreshLOPField();
@@ -2238,9 +2242,15 @@ async function sseAutoFillDaysWorked(force){
         if(d.lop) bits.push('LOP '+d.lop);
         var tail = d.days_worked+'/'+d.total_days_in_month+' payable days';
         if(d.is_notice_period) tail += ' — ⚠ Notice period: all leave = LOP';
-        else if(d.lop_leave_days>0) tail += ' — ⚠ '+d.lop_leave_days+' LOP day(s)'+(d.is_permanent?' (over leave quota)':' (Probationary/Intern: 1 day/month only)');
+        else if(_sseLopDaysCache>0){
+          var _lopParts = [];
+          if(d.absent) _lopParts.push(d.absent+' Absent');
+          if(d.lop_leave_days>0) _lopParts.push(d.lop_leave_days+' over-quota leave'+(d.is_permanent?'':' (Probationary/Intern: 1 day/month only)'));
+          if(d.half_day) _lopParts.push(d.half_day+' Half Day (×0.5)');
+          tail += ' — ⚠ '+_sseLopDaysCache+' unpaid day(s)'+(_lopParts.length?' ['+_lopParts.join(' + ')+']':'');
+        }
         noteEl.textContent = (bits.length?bits.join(' · ')+' — ':'') + tail;
-        noteEl.style.color = (d.is_notice_period || d.lop_leave_days>0) ? 'var(--red, #f87171)' : 'var(--text3)';
+        noteEl.style.color = (d.is_notice_period || _sseLopDaysCache>0) ? 'var(--red, #f87171)' : 'var(--text3)';
       }
       sseRecalc();
     } else if(noteEl) noteEl.textContent = '';
