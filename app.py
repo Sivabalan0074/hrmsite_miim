@@ -3527,6 +3527,15 @@ def attendance_monthly_summary():
         days_worked = total_days - counts['absent'] - lop_leave_days - (half_day_count * 0.5)
         conn.close()
 
+        # "Unpaid days" = every day that actually reduced Days Worked above —
+        # plain Absent + over-quota/notice-period LOP leave + the 0.5-day cut
+        # from each Half Day. The Loss-of-Pay (₹) reference box on the salary
+        # screen must be driven by THIS number, not lop_leave_days alone —
+        # otherwise a shortfall made up mostly of plain Absent days shows
+        # "LOP = ₹0", which reads as "nothing was detected" even though pay
+        # was in fact reduced (via the pro-rated Days Worked).
+        unpaid_days = counts['absent'] + lop_leave_days + (half_day_count * 0.5)
+
         return jsonify({
             "success": True,
             "emp_id": emp_id,
@@ -3548,6 +3557,7 @@ def attendance_monthly_summary():
             "fy_label": fy_label,
             "lop_leave_days": lop_leave_days,
             "lop_breakdown": lop_breakdown,
+            "unpaid_days": unpaid_days,
             "days_worked": days_worked
         })
     except Exception as ex:
