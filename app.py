@@ -922,6 +922,167 @@ def delete_holiday(hid):
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
+
+# â”€â”€ Company Holiday requests: HR declares -> Admin/Superadmin approves â”€â”€
+def _ensure_holiday_requests_table(conn):
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS holiday_requests (
+        id INTEGER PRIMARY KEY {_AUTOINC},
+        date TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        status TEXT DEFAULT 'pending',
+        requested_by TEXT, requested_at TEXT,
+        reviewed_by TEXT, reviewed_at TEXT,
+        rejected_reason TEXT,
+        affected_count INTEGER DEFAULT 0
+    )""")
+
+
+@app.route('/api/holiday-requests', methods=['GET'])
+@require_auth
+def get_holiday_requests():
+    try:
+        conn = _db()
+        _ensure_holiday_requests_table(conn)
+        status = request.args.get('status', '').strip()
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM holiday_requests WHERE status=? ORDER BY requested_at DESC", (status,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM holiday_requests ORDER BY requested_at DESC").fetchall()
+        conn.close()
+        return jsonify({"success": True, "requests": [dict(r) for r in rows]})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/holiday-requests', methods=['POST'])
+@require_auth
+def create_holiday_request():
+    """HR / Admin / Superadmin declares a company holiday for a date. Goes to
+    'pending' and needs Admin/Superadmin approval before it takes effect."""
+    try:
+        data = request.json or {}
+        date = (data.get('date') or '').strip()
+        description = (data.get('description') or '').strip()
+        caller = (data.get('requested_by') or data.get('caller') or '').strip()
+
+        if not date:
+            return jsonify({"success": False, "error": "Date is required"}), 400
+        if not description:
+            return jsonify({"success": False, "error": "Description is required (mention the leave/holiday reason)"}), 400
+
+        role, _ = _get_role_dept(caller) if caller else ('member', '')
+        if role not in ('hr', 'admin'):
+            return jsonify({"success": False, "error": "Only HR/Admin/Superadmin can declare a holiday"}), 403
+
+        conn = _db()
+        _ensure_holiday_requests_table(conn)
+        existing = conn.execute(
+            "SELECT id FROM holiday_requests WHERE date=? AND status IN ('pending','approved')", (date,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({"success": False, "error": f"A holiday request for {date} already exists"}), 409
+
+        conn.execute(
+            "INSERT INTO holiday_requests (date, description, status, requested_by, requested_at) VALUES (?,?,?,?,?)",
+            (date, description, 'pending', caller or 'HR', str(datetime.datetime.now()))
+        )
+        conn.commit(); conn.close()
+        return jsonify({"success": True, "message": "Holiday request submitted. Waiting for Admin/Superadmin approval."}), 201
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/holiday-requests/<int:req_id>/approve', methods=['POST'])
+@require_auth
+def approve_holiday_request(req_id):
+    """Admin/Superadmin approval: marks EVERY active employee 'holiday'
+    (fully paid, no LOP/absent deduction) for that date, and adds it to the
+    company holiday calendar."""
+    try:
+        data = request.json or {}
+        caller = (data.get('approved_by') or data.get('caller') or '').strip()
+        role, _ = _get_role_dept(caller) if caller else ('member', '')
+        if role != 'admin':
+            return jsonify({"success": False, "error": "Only Admin/Superadmin can approve a holiday"}), 403
+
+        conn = _db()
+        _ensure_holiday_requests_table(conn)
+        row = conn.execute("SELECT * FROM holiday_requests WHERE id=?", (req_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "error": "Holiday request not found"}), 404
+        if row['status'] != 'pending':
+            conn.close()
+            return jsonify({"success": False, "error": f"Request already {row['status']}"}), 400
+
+        date = row['date']
+        description = row['description'] or 'Company Holiday'
+        now_str = str(datetime.datetime.now())
+
+        emp_rows = conn.execute("SELECT id FROM employees WHERE status='active'").fetchall()
+        for emp in emp_rows:
+            conn.execute("DELETE FROM attendance WHERE emp_id=? AND date=?", (emp['id'], date))
+            conn.execute(
+                "INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                (emp['id'], date, '--', '--', 'holiday', description, caller or 'admin', now_str)
+            )
+
+        # Reflect on the company holiday calendar too, if not already there.
+        cal_existing = conn.execute("SELECT id FROM holidays WHERE date=?", (date,)).fetchone()
+        if not cal_existing:
+            conn.execute(
+                "INSERT INTO holidays (date,name,type,emoji,`desc`) VALUES (?,?,?,?,?)",
+                (date, description[:60] or 'Company Holiday', 'Company', '\U0001f389', description)
+            )
+
+        conn.execute(
+            "UPDATE holiday_requests SET status='approved', reviewed_by=?, reviewed_at=?, affected_count=? WHERE id=?",
+            (caller or 'admin', now_str, len(emp_rows), req_id)
+        )
+        conn.commit(); conn.close()
+        return jsonify({"success": True, "message": f"Holiday approved for {date}. {len(emp_rows)} employees marked present/holiday with full salary.", "affected_count": len(emp_rows)})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/holiday-requests/<int:req_id>/reject', methods=['POST'])
+@require_auth
+def reject_holiday_request(req_id):
+    try:
+        data = request.json or {}
+        caller = (data.get('rejected_by') or data.get('caller') or '').strip()
+        reason = (data.get('reason') or '').strip()
+        role, _ = _get_role_dept(caller) if caller else ('member', '')
+        if role != 'admin':
+            return jsonify({"success": False, "error": "Only Admin/Superadmin can reject a holiday"}), 403
+
+        conn = _db()
+        _ensure_holiday_requests_table(conn)
+        row = conn.execute("SELECT * FROM holiday_requests WHERE id=?", (req_id,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({"success": False, "error": "Holiday request not found"}), 404
+        if row['status'] != 'pending':
+            conn.close()
+            return jsonify({"success": False, "error": f"Request already {row['status']}"}), 400
+
+        conn.execute(
+            "UPDATE holiday_requests SET status='rejected', reviewed_by=?, reviewed_at=?, rejected_reason=? WHERE id=?",
+            (caller or 'admin', str(datetime.datetime.now()), reason, req_id)
+        )
+        conn.commit(); conn.close()
+        return jsonify({"success": True, "message": "Holiday request rejected."})
+    except Exception as ex:
+        print(f"[ERROR] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 # Guests
 
 
@@ -3458,7 +3619,7 @@ def attendance_monthly_summary():
             (emp_id, f"{period}-%")
         ).fetchall()
 
-        counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0, "half_day": 0, "other": 0}
+        counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0, "half_day": 0, "holiday": 0, "other": 0}
         marked_dates = set()
         for r in rows:
             d = str(r['date'])[:10]
@@ -3476,6 +3637,8 @@ def attendance_monthly_summary():
                 counts['lop'] += 1
             elif st in ('half_day', 'half-day', 'half'):
                 counts['half_day'] += 1
+            elif st == 'holiday':
+                counts['holiday'] += 1
             else:
                 counts['other'] += 1
         not_marked = max(0, total_days - len(marked_dates))
@@ -3550,6 +3713,7 @@ def attendance_monthly_summary():
             "pm": counts['pm'],
             "lop": counts['lop'],
             "half_day": half_day_count,
+            "holiday": counts['holiday'],
             "not_marked": not_marked,
             "emp_type": emp_type,
             "is_permanent": is_permanent,
@@ -5268,6 +5432,20 @@ def init_db():
         id INTEGER PRIMARY KEY {_AUTOINC},
         date TEXT, name TEXT, type TEXT DEFAULT 'National',
         emoji TEXT DEFAULT 'ðŸŽ‰', `desc` TEXT DEFAULT ''
+    )""")
+    # â”€â”€ Company Holiday requests: HR declares -> Admin/Superadmin approves â”€â”€
+    # On approval, every employee is marked status='holiday' (fully paid,
+    # see attendance_monthly_summary()) for that date and it also appears
+    # on the company holiday calendar.
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS holiday_requests (
+        id INTEGER PRIMARY KEY {_AUTOINC},
+        date TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        status TEXT DEFAULT 'pending',
+        requested_by TEXT, requested_at TEXT,
+        reviewed_by TEXT, reviewed_at TEXT,
+        rejected_reason TEXT,
+        affected_count INTEGER DEFAULT 0
     )""")
     conn.execute(f"""CREATE TABLE IF NOT EXISTS guests (
         id INTEGER PRIMARY KEY {_AUTOINC},
