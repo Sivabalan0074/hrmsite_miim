@@ -4551,7 +4551,7 @@ def _sync_leave_to_attendance(conn, leave_id, now):
                 remaining -= 1
             else:
                 att_status = 'lop'
-            existing = conn.execute("SELECT id, status, checkin, checkout FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
+            existing = conn.execute("SELECT id, status, checkin, checkout, pm_minutes, pm_leave_ids FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
 
             if att_status == 'pm':
                 # PM (Permission) is a short ~2hr slip during a working day, not a
@@ -4559,14 +4559,29 @@ def _sync_leave_to_attendance(conn, leave_id, now):
                 # day. Approving it should only consume the PM quota; it must NOT
                 # overwrite the day to a bare 'pm' status or wipe out a real
                 # checkin/checkout, the way a full-day leave (SL/CL/EL) does.
-                # The day still counts as a full day present.
+                # The day still counts as a full day present -- and since the
+                # employee's actual checkin/checkout will read short by the
+                # permission's duration, that duration (policy cap: up to 2hrs
+                # per permission) is credited to pm_minutes so Total Hrs shows
+                # a full day instead of looking like a short day.
+                PM_CREDIT_MINUTES = 120  # MIIM Leave Policy V24: up to 2 hours per permission
                 if existing:
-                    if existing['status'] != 'present':
+                    already_ids = [x for x in (existing['pm_leave_ids'] or '').split(',') if x]
+                    if str(leave_id) not in already_ids:
+                        already_ids.append(str(leave_id))
+                        new_minutes = (existing['pm_minutes'] or 0) + PM_CREDIT_MINUTES
+                        conn.execute(
+                            "UPDATE attendance SET status='present',pm_minutes=?,pm_leave_ids=?,updated_at=? WHERE id=?",
+                            (new_minutes, ','.join(already_ids), now, existing['id'])
+                        )
+                    elif existing['status'] != 'present':
                         conn.execute("UPDATE attendance SET status='present',updated_at=? WHERE id=?",
                                      (now, existing['id']))
                 else:
-                    conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,'--','--','present',?,?)",
-                                 (emp_id, date_str, 'LEAVE_AUTO', now))
+                    conn.execute(
+                        "INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at,pm_minutes,pm_leave_ids) VALUES (?,?,'--','--','present',?,?,?,?)",
+                        (emp_id, date_str, 'LEAVE_AUTO', now, PM_CREDIT_MINUTES, str(leave_id))
+                    )
                 cur += datetime.timedelta(days=1)
                 continue
 
@@ -5443,6 +5458,25 @@ def init_db():
         pass  # column already exists
     try:
         conn.execute("ALTER TABLE attendance ADD COLUMN note TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+    try:
+        # Minutes credited back for the day from approved PM (Permission)
+        # requests -- see _sync_leave_to_attendance(). An approved Permission
+        # doesn't blank out the day's real checkin/checkout (that day is a
+        # full day present), but the employee's actual worked hours will read
+        # short by however long their permission was, so this credit gets
+        # added on top when Total Hrs is displayed/computed.
+        conn.execute("ALTER TABLE attendance ADD COLUMN pm_minutes INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+    try:
+        # Tracks which leave_requests.id's PM minutes have already been
+        # credited to this attendance row, so re-running the sync (backfills,
+        # re-approvals) never double-counts the same permission twice.
+        conn.execute("ALTER TABLE attendance ADD COLUMN pm_leave_ids TEXT DEFAULT ''")
         conn.commit()
     except Exception:
         pass  # column already exists
