@@ -2913,7 +2913,7 @@ function buildDayRow(emp,idx,att,cfg){
   const isOwnRow=(emp.id===currentUserId);
   const dotColor=STATUS_DOT[status]||'var(--border)';
   const editable=canEdit(emp);
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el','pm'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el'].includes(status);
 
   // ── Check-in / Check-out state for row highlighting ──
   const entries=getEntries(emp.id, dk(viewDate));
@@ -4134,7 +4134,7 @@ function updateTotalHrsCell(empId, dKey){
   const entries=getEntries(empId, dKey);
   const d=attCache[dKey]?.[empId]||{};
   const status=d.status||'';
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el','pm'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el'].includes(status);
   const pmMins=Number(d.pm_minutes)||0;
   if(disTime){el.textContent='—';el.className='total-hrs na';return;}
   const workedMins=calcTotalMins(entries);
