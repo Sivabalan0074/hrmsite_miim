@@ -4551,7 +4551,25 @@ def _sync_leave_to_attendance(conn, leave_id, now):
                 remaining -= 1
             else:
                 att_status = 'lop'
-            existing = conn.execute("SELECT id, status FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
+            existing = conn.execute("SELECT id, status, checkin, checkout FROM attendance WHERE emp_id=? AND date=?", (emp_id, date_str)).fetchone()
+
+            if att_status == 'pm':
+                # PM (Permission) is a short ~2hr slip during a working day, not a
+                # full-day absence -- the employee still worked the rest of the
+                # day. Approving it should only consume the PM quota; it must NOT
+                # overwrite the day to a bare 'pm' status or wipe out a real
+                # checkin/checkout, the way a full-day leave (SL/CL/EL) does.
+                # The day still counts as a full day present.
+                if existing:
+                    if existing['status'] != 'present':
+                        conn.execute("UPDATE attendance SET status='present',updated_at=? WHERE id=?",
+                                     (now, existing['id']))
+                else:
+                    conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,'--','--','present',?,?)",
+                                 (emp_id, date_str, 'LEAVE_AUTO', now))
+                cur += datetime.timedelta(days=1)
+                continue
+
             if existing:
                 # Don't clobber a row that's already correctly marked with this leave
                 # code (idempotent — safe to re-run the backfill any number of times).
