@@ -186,6 +186,7 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .total-hrs.low{color:var(--red);}
 .total-hrs.mid{color:var(--yellow);}
 .total-hrs.na{color:var(--t3);font-family:'Exo 2',sans-serif;font-size:11px;font-weight:400;}
+.pm-credit-badge{display:inline-block;margin-top:2px;font-size:9px;font-weight:700;color:var(--orange);background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);border-radius:4px;padding:1px 5px;white-space:nowrap;}
 .multi-inout-wrap{display:flex;flex-direction:column;gap:2px;min-width:120px;}
 .multi-inout-row{display:flex;align-items:center;gap:4px;font-size:11px;}
 .multi-inout-lbl{color:var(--t3);font-size:10px;width:18px;flex-shrink:0;}
@@ -2367,7 +2368,12 @@ function _parseAttRec(r){
     status:   feSt,
     checkin:  ci,
     checkout: co,
-    entries:  [{in:ci,out:co}]
+    entries:  [{in:ci,out:co}],
+    // Minutes credited from an approved PM (Permission) request for this day
+    // -- see _sync_leave_to_attendance() on the backend. Folded into Total
+    // Hrs so an approved 2hr permission shows the day as a full day, not
+    // short by the permission's duration.
+    pm_minutes: Number(r.pm_minutes)||0
   };
 }
 function _mergeAttRec(existing, r){
@@ -2376,6 +2382,7 @@ function _mergeAttRec(existing, r){
   const co=(r.checkout&&r.checkout!=='--')?r.checkout:'';
   existing.entries=existing.entries||[{in:existing.checkin||'',out:existing.checkout||''}];
   existing.entries.push({in:ci,out:co});
+  existing.pm_minutes=Math.max(existing.pm_minutes||0, Number(r.pm_minutes)||0);
   // Always keep sessions sorted by check-in time (HH:MM strings sort correctly lexically).
   // Entries with no check-in time are pushed to the end.
   existing.entries.sort((a,b)=>{
@@ -4102,16 +4109,23 @@ function _isHousekeepingEmp(empId){
   return d==='housekeeping'||d==='housing keeping'||d==='house keeping';
 }
 
+function _pmCreditBadge(pmMins){
+  if(!pmMins) return '';
+  return ` <span class="pm-credit-badge" title="${fmtHrsMins(pmMins)} added from an approved Permission (PM) that day">🕐 +${fmtHrsMins(pmMins)} PM</span>`;
+}
+
 function buildTotalHrsCell(empId, d, disTime){
+  const pmMins=Number(d?.pm_minutes)||0;
   if(disTime) return `<span class="total-hrs na">—</span>`;
   const dKey=dk(viewDate);
   const entries=getEntries(empId, dKey);
-  const mins=calcTotalMins(entries);
+  const workedMins=calcTotalMins(entries);
+  const mins=workedMins+pmMins;
   if(!mins) return `<span class="total-hrs na" id="thr-${empId}">—</span>`;
   // Housekeeping: a short daily visit is expected and still counts as a
   // full paid day (see /api/checkout on the backend) — don't flag it red.
   const cls=_isHousekeepingEmp(empId) ? '' : (mins<240?'low':mins<480?'mid':'');
-  return `<span class="total-hrs ${cls}" id="thr-${empId}">${fmtHrsMins(mins)}</span>`;
+  return `<span class="total-hrs ${cls}" id="thr-${empId}">${fmtHrsMins(mins)}</span>${_pmCreditBadge(pmMins)}`;
 }
 
 function updateTotalHrsCell(empId, dKey){
@@ -4121,8 +4135,10 @@ function updateTotalHrsCell(empId, dKey){
   const d=attCache[dKey]?.[empId]||{};
   const status=d.status||'';
   const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el','pm'].includes(status);
+  const pmMins=Number(d.pm_minutes)||0;
   if(disTime){el.textContent='—';el.className='total-hrs na';return;}
-  const mins=calcTotalMins(entries);
+  const workedMins=calcTotalMins(entries);
+  const mins=workedMins+pmMins;
   if(!mins){el.textContent='—';el.className='total-hrs na';return;}
   const cls=_isHousekeepingEmp(empId) ? '' : (mins<240?'low':mins<480?'mid':'');
   el.className=`total-hrs ${cls}`;
@@ -4566,7 +4582,7 @@ function renderHistoryModalBody(){
   const scopeNote=['sm','pm'].includes(currentRole)&&currentUserDept
     ?` · showing ${currentUserDept} dept only`:'';
   document.getElementById('historyModalSub').textContent=`${approvalHistory.length} action${approvalHistory.length!==1?'s':''} recorded${scopeNote}`;
-  const LEAVE_LABELS={sl:'🤒 SL',el:'⭐ EL',cl:'🌴 CL',pm:'🕐 PM'};
+  const LEAVE_LABELS={sl:'🤒 SL',el:'⭐ EL',cl:'🌴 CL',pm:'🕐 PM (+2h)'};
   const LEAVE_COLORS={sl:'#eab308',el:'#a855f7',cl:'#3b82f6',pm:'#f97316'};
   if(!approvalHistory.length){
     body.innerHTML='<div class="hist-empty">📭 No approval actions yet.<br><span style="font-size:11px;">Actions will appear here after approving or rejecting leave requests.</span></div>';
