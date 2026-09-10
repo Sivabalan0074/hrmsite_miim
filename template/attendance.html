@@ -227,6 +227,7 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .gv-pm{background:var(--orange-dim);color:var(--orange);}
 .gv-lop{background:var(--red-dim);color:var(--red);}
 .gv-half{background:rgba(234,88,12,0.18);color:#ea580c;}
+.gv-holiday{background:rgba(20,184,166,0.18);color:#14b8a6;}
 .gv-pending{background:rgba(239,68,68,0.15);color:var(--red);}
 
 .qcell-pop{position:fixed;z-index:600;background:var(--bg3);border:1px solid var(--orange);border-radius:10px;padding:10px 12px;box-shadow:0 12px 40px rgba(0,0,0,0.9);min-width:190px;}
@@ -1299,6 +1300,9 @@ tr.emp-row td {
     <button class="corr-badge" id="corrBadgeBtn" onclick="openCorrApprovalModal()" style="display:none;">
       ✏ Corrections <span class="corr-num" id="corrPendingCount">0</span>
     </button>
+    <button class="corr-badge" id="holidayBadgeBtn" onclick="openHolidayApprovalModal()" style="display:none;background:rgba(249,115,22,0.12);border-color:rgba(249,115,22,0.4);color:#f97316;">
+      🎉 Holiday Requests <span class="corr-num" id="holidayPendingCount">0</span>
+    </button>
     <button class="policy-btn" id="historyBtn" onclick="openHistoryModal()" style="display:none;">📜 Approval History</button>
     <button class="policy-btn" id="corrHistoryBtn" onclick="openCorrHistoryModal()" style="display:none;">🕐 Check-In/Out History</button>
     <button class="policy-btn" onclick="openPolicy()">📋 Leave Policy V24</button>
@@ -1397,6 +1401,7 @@ tr.emp-row td {
       <option value="off">🔘 Off Day</option>
       <option value="half_day">🌗 Half Day</option>
       <option value="lop">🚫 LOP</option>
+      <option value="holiday">🎉 Holiday (Company — needs approval)</option>
     </select>
     <button class="bulk-apply-btn" onclick="applyBulk()">Apply</button>
     <div class="sel-count">Sel: <span id="selCount">0</span></div>
@@ -1608,6 +1613,55 @@ tr.emp-row td {
   </div>
 </div>
 
+<!-- DECLARE HOLIDAY MODAL (HR/Admin submits) -->
+<div class="modal-overlay" id="holidayReqModal" onclick="if(event.target===this)closeHolidayReqModal()">
+  <div class="approval-modal-box" style="max-width:520px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">🎉 Declare Company Holiday</div>
+        <div class="modal-sub">Marks EVERY employee Present/Holiday (full salary) — needs Admin/Superadmin approval</div>
+      </div>
+      <div class="modal-close" onclick="closeHolidayReqModal()">✕</div>
+    </div>
+    <div class="modal-body">
+      <div style="background:rgba(6,182,212,0.07);border:1px solid rgba(6,182,212,0.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#7dd3e8;line-height:1.5;">
+        ℹ Once approved, this date turns into a paid Company Holiday for all employees — nobody needs to check in.
+      </div>
+      <div class="corr-field" style="margin-bottom:12px;">
+        <label>Date</label>
+        <input type="date" id="holidayReqDate" style="color-scheme:dark;"/>
+      </div>
+      <div class="corr-field" style="margin-bottom:16px;">
+        <label>Description (reason for holiday) <span style="color:var(--red)">*</span></label>
+        <textarea class="note-input" id="holidayReqDesc" rows="3" placeholder="e.g. Diwali, Company Anniversary, Sudden local holiday…"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeHolidayReqModal()">Cancel</button>
+        <button class="btn-apply" onclick="submitHolidayRequest()">Submit for Approval</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HOLIDAY REQUESTS MODAL (Admin/Superadmin approves, HR can view) -->
+<div class="modal-overlay" id="holidayApprovalModal" onclick="if(event.target===this)closeHolidayApprovalModal()">
+  <div class="approval-modal-box" style="max-width:780px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">🎉 Holiday Requests</div>
+        <div class="modal-sub" id="holidayApprovalSub">Pending company holiday declarations</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="loadHolidayApprovals()" style="padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:var(--bg2);color:var(--t2);font-size:11px;cursor:pointer;">↻ Refresh</button>
+        <div class="modal-close" onclick="closeHolidayApprovalModal()">✕</div>
+      </div>
+    </div>
+    <div class="modal-body" id="holidayApprovalBody">
+      <div style="text-align:center;padding:40px;color:var(--t3);">Loading…</div>
+    </div>
+  </div>
+</div>
+
 <!-- POLICY MODAL -->
 <div class="modal-overlay" id="policyModal" onclick="if(event.target===this)closePolicy()">
   <div class="policy-modal-box">
@@ -1690,9 +1744,9 @@ function inFY(y, m, fyStartYear){
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
-const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c'};
-const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-half',pending:'gv-pending'};
-const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'LOP',half_day:'½',pending:'?'};
+const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6'};
+const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-half',pending:'gv-pending',holiday:'gv-holiday'};
+const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'LOP',half_day:'½',pending:'?',holiday:'H'};
 
 // ════════════════════════════════════════════════════
 // ROLE CONFIG
@@ -1858,6 +1912,7 @@ function applyRoleUI(){
   const corrBadge=document.getElementById('corrBadgeBtn');
   if(corrBadge) corrBadge.style.display='none'; // will be shown by loadPendingCorrections if admin
   updatePendingBadge();
+  loadPendingHolidayRequests();
 }
 
 function updatePendingBadge(){
@@ -2851,7 +2906,7 @@ function buildDayRow(emp,idx,att,cfg){
   const isOwnRow=(emp.id===currentUserId);
   const dotColor=STATUS_DOT[status]||'var(--border)';
   const editable=canEdit(emp);
-  const disTime=!status||status==='absent'||status==='off'||['cl','sl','el','pm'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el','pm'].includes(status);
 
   // ── Check-in / Check-out state for row highlighting ──
   const entries=getEntries(emp.id, dk(viewDate));
@@ -2874,12 +2929,15 @@ function buildDayRow(emp,idx,att,cfg){
   const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm:'🕐 PM'};
   const leaveBadgeColor={cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
   const leaveActive=['cl','sl','el','pm'].includes(status);
+  const holidayActive=status==='holiday';
   if(!editable){
     // Read-only: show only the current status as a single badge
     if(!status){
       statusBtns=`<div style="font-size:11px;color:var(--t3);font-weight:600;">—</div>`;
     } else if(leaveActive){
       statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:${leaveBadgeColor[status]};border:1px solid ${leaveBadgeColor[status]}33;">${leaveBadgeMap[status]}</span>`;
+    } else if(holidayActive){
+      statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>`;
     } else {
       const stLabel={present:'P',absent:'A',off:'Off',lop:'LOP',half_day:'½ Day'}[status]||status;
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
@@ -2897,6 +2955,14 @@ function buildDayRow(emp,idx,att,cfg){
     } else if(leaveActive){
       statusBtns=`<div class="status-btns">
         <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:${leaveBadgeColor[status]};border:1px solid ${leaveBadgeColor[status]}33;">${leaveBadgeMap[status]}</span>
+        <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
+      </div>`;
+    } else if(holidayActive){
+      // Holiday came from an approved company-wide request — editable roles can
+      // still clear a single row's status if genuinely needed, but there's no
+      // quick-toggle back into it (it must go through the approval flow again).
+      statusBtns=`<div class="status-btns">
+        <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
       </div>`;
     } else {
@@ -4054,7 +4120,7 @@ function updateTotalHrsCell(empId, dKey){
   const entries=getEntries(empId, dKey);
   const d=attCache[dKey]?.[empId]||{};
   const status=d.status||'';
-  const disTime=!status||status==='absent'||status==='off'||['cl','sl','el','pm'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el','pm'].includes(status);
   if(disTime){el.textContent='—';el.className='total-hrs na';return;}
   const mins=calcTotalMins(entries);
   if(!mins){el.textContent='—';el.className='total-hrs na';return;}
@@ -4112,6 +4178,10 @@ function updateSelCount(){const el=document.getElementById('selCount');if(el)el.
 function applyBulk(){
   const status=document.getElementById('bulkSel')?.value;
   if(!status){showToast('error','Select Status','Choose a status');return;}
+  // "Holiday" isn't a plain local status edit — it's a company-wide, paid
+  // holiday that must go through HR → Admin/Superadmin approval before it
+  // actually applies to every employee's attendance & salary.
+  if(status==='holiday'){ openHolidayReqModal(); return; }
   if(!selected.size){showToast('error','No Selection','Select employees first');return;}
   selected.forEach(id=>{setStatusBulk(id,status);});
   markChanged();renderDayTable();const dKey=dk(viewDate);updateSummaryForDay(dKey);
@@ -4948,6 +5018,181 @@ async function loadPendingCorrections() {
   } catch(e) {}
 }
 
+// ════════════════════════════════════════════════════
+// COMPANY HOLIDAY: HR declares → Admin/Superadmin approves
+// On approval every employee is marked 'holiday' (fully paid) for that date.
+// ════════════════════════════════════════════════════
+const HOLIDAY_DECLARE_ROLES=['hr','senior_hr','admin','superadmin'];
+const HOLIDAY_APPROVE_ROLES=['admin','superadmin'];
+let _holidayApprovalList=[];
+
+function openHolidayReqModal(){
+  if(!HOLIDAY_DECLARE_ROLES.includes(currentRole)){
+    showToast('error','Not Allowed','Only HR/Admin/Superadmin can declare a holiday.');
+    return;
+  }
+  const dateEl=document.getElementById('holidayReqDate');
+  if(dateEl) dateEl.value=dk(viewDate);
+  const descEl=document.getElementById('holidayReqDesc');
+  if(descEl) descEl.value='';
+  document.getElementById('holidayReqModal').classList.add('open');
+}
+function closeHolidayReqModal(){
+  document.getElementById('holidayReqModal').classList.remove('open');
+}
+
+async function submitHolidayRequest(){
+  const dateVal=document.getElementById('holidayReqDate')?.value;
+  const desc=document.getElementById('holidayReqDesc')?.value.trim();
+  if(!dateVal){showToast('error','Missing date','Please pick the holiday date.');return;}
+  if(!desc){showToast('error','Description required','Mention the reason for this holiday (e.g. Diwali).');return;}
+  const requestedBy=employees.find(e=>e.id===currentUserId)?.username || currentRole;
+  try{
+    const res=await fetchWithTimeout('/api/holiday-requests',{
+      method:'POST',headers:getHeaders(),
+      body:JSON.stringify({date:dateVal,description:desc,requested_by:requestedBy,caller:requestedBy})
+    },8000);
+    const d=await res.json();
+    if(d.success){
+      showToast('success','Holiday Request Submitted',d.message||`Waiting for Admin/Superadmin approval for ${dateVal}.`);
+      closeHolidayReqModal();
+      selected.clear();updateSelCount();
+      loadPendingHolidayRequests();
+    }else{
+      showToast('error','Request Failed',d.error||'Could not submit holiday request.');
+    }
+  }catch(e){
+    showToast('error','Server Error','Could not reach server. Try again.');
+  }
+}
+
+function openHolidayApprovalModal(){
+  document.getElementById('holidayApprovalModal').classList.add('open');
+  loadHolidayApprovals();
+}
+function closeHolidayApprovalModal(){
+  document.getElementById('holidayApprovalModal').classList.remove('open');
+}
+
+function updateHolidayBadge(count){
+  const btn=document.getElementById('holidayBadgeBtn');
+  const cnt=document.getElementById('holidayPendingCount');
+  // HR sees the badge too (so they know their request is still pending) but
+  // only Admin/Superadmin get Approve/Reject buttons inside the modal.
+  const canSee=HOLIDAY_DECLARE_ROLES.includes(currentRole)||HOLIDAY_APPROVE_ROLES.includes(currentRole);
+  if(btn) btn.style.display=(canSee && count>0)?'inline-flex':'none';
+  if(cnt) cnt.textContent=count;
+}
+
+async function loadPendingHolidayRequests(){
+  if(!HOLIDAY_DECLARE_ROLES.includes(currentRole)&&!HOLIDAY_APPROVE_ROLES.includes(currentRole)) return;
+  try{
+    const res=await fetchWithTimeout('/api/holiday-requests?status=pending',{headers:getHeaders()},5000);
+    const d=await res.json();
+    updateHolidayBadge((d.requests||[]).length);
+  }catch(e){}
+}
+
+async function loadHolidayApprovals(){
+  const body=document.getElementById('holidayApprovalBody');
+  const sub=document.getElementById('holidayApprovalSub');
+  if(!body) return;
+  body.innerHTML='<div style="text-align:center;padding:40px;color:var(--t3);">Loading…</div>';
+  try{
+    const res=await fetchWithTimeout('/api/holiday-requests',{headers:getHeaders()},8000);
+    const d=await res.json();
+    _holidayApprovalList=d.requests||[];
+    const pending=_holidayApprovalList.filter(r=>r.status==='pending');
+    if(sub) sub.textContent=`${pending.length} pending · ${_holidayApprovalList.length} total`;
+    updateHolidayBadge(pending.length);
+
+    if(!_holidayApprovalList.length){
+      body.innerHTML=`<div style="text-align:center;padding:50px;color:var(--t3);font-size:13px;">
+        🎉 No holiday requests yet.</div>`;
+      return;
+    }
+
+    const canApprove=HOLIDAY_APPROVE_ROLES.includes(currentRole);
+    body.innerHTML=_holidayApprovalList.map(r=>{
+      const statusBadge = r.status==='pending'
+        ? `<span class="corr-status-badge corr-pending">⏳ Pending</span>`
+        : r.status==='approved'
+          ? `<span class="corr-status-badge" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3);">✓ Approved</span>`
+          : `<span class="corr-status-badge" style="background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">✕ Rejected</span>`;
+      const actionsHtml = (r.status==='pending' && canApprove)
+        ? `<div class="corr-acts">
+             <button class="btn-corr-reject" onclick="actOnHolidayRequest(${r.id},'reject')">✕ Reject</button>
+             <button class="btn-corr-approve" onclick="actOnHolidayRequest(${r.id},'approve')">✓ Approve — Mark All Present/Holiday</button>
+           </div>`
+        : r.status==='rejected' && r.rejected_reason
+          ? `<div style="margin-top:8px;font-size:11px;color:var(--t3);">Reason: ${r.rejected_reason}</div>`
+          : r.status==='approved'
+            ? `<div style="margin-top:8px;font-size:11px;color:var(--t3);">Applied to ${r.affected_count||0} employees · by ${r.reviewed_by||''}</div>`
+            : '';
+      return `<div class="corr-row" id="holreq-row-${r.id}">
+        <div class="corr-row-head">
+          <div>
+            <div class="corr-row-emp">🎉 ${r.date}</div>
+            <div class="corr-row-meta">Requested by ${r.requested_by||'—'} &nbsp;·&nbsp; ${(r.requested_at||'').slice(0,16).replace('T',' ')}</div>
+          </div>
+          ${statusBadge}
+        </div>
+        <div class="corr-row-body" style="grid-template-columns:1fr;">
+          <div class="corr-field corr-reason-full">
+            <label>Description</label>
+            <div style="padding:7px 10px;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;font-size:12px;color:var(--t2);">${r.description||'—'}</div>
+          </div>
+          ${actionsHtml}
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    body.innerHTML=`<div style="text-align:center;padding:40px;color:var(--red);font-size:13px;">⚠ Failed to load holiday requests.</div>`;
+  }
+}
+
+async function actOnHolidayRequest(reqId,action){
+  const rowEl=document.getElementById('holreq-row-'+reqId);
+  if(rowEl) rowEl.style.opacity='0.5';
+  const actorName=employees.find(e=>e.id===currentUserId)?.username || currentRole;
+  let reason='';
+  if(action==='reject'){
+    reason=prompt('Reason for rejecting this holiday request? (optional)')||'';
+  }
+  const url=`/api/holiday-requests/${reqId}/${action}`;
+  try{
+    const res=await fetchWithTimeout(url,{
+      method:'POST',headers:getHeaders(),
+      body:JSON.stringify({approved_by:actorName,rejected_by:actorName,caller:actorName,reason})
+    },8000);
+    const d=await res.json();
+    if(d.success){
+      const reqRow=_holidayApprovalList.find(r=>r.id===reqId)||{};
+      if(action==='approve'){
+        showToast('success','Holiday Approved',d.message||`${reqRow.date} is now a paid company holiday.`);
+        // Reflect it immediately in the on-screen grid for every employee.
+        const dKey=reqRow.date;
+        if(dKey){
+          if(!attCache[dKey]) attCache[dKey]={};
+          employees.forEach(e=>{ attCache[dKey][e.id]={status:'holiday',checkin:'--',checkout:'--',note:reqRow.description||'Company Holiday'}; });
+          persistAttCache();
+          if(dk(viewDate)===dKey){ renderDayTable(); updateSummaryForDay(dKey); }
+          renderCal();
+        }
+      }else{
+        showToast('success','Holiday Rejected',d.message||'Holiday request rejected.');
+      }
+      loadHolidayApprovals();
+    }else{
+      showToast('error','Action Failed',d.error||'Could not process request.');
+      if(rowEl) rowEl.style.opacity='1';
+    }
+  }catch(e){
+    showToast('error','Server Error','Could not reach server.');
+    if(rowEl) rowEl.style.opacity='1';
+  }
+}
+
 async function loadMyCorrHistory(empId) {
   // Returns all correction requests for this employee (for display in their row)
   try {
@@ -5090,6 +5335,7 @@ async function boot(){
   loadApprovalHistory();          // local cache first (instant)
   loadApprovalHistoryFromServer(); // then the real, shared, role-scoped history from the DB
   loadPendingCorrections();
+  loadPendingHolidayRequests();
 
   applyRoleUI();
   updateRangeLabel();
