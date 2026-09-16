@@ -28,6 +28,36 @@ MYSQL_USER     = os.environ.get('MYSQL_USER', '')
 MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD', '')
 MYSQL_DB       = os.environ.get('MYSQL_DB', '')
 
+# ── Optional SSH tunnel (used when Hostinger blocks direct MySQL port 3306
+#    from this server's IP, but SSH access is open). If SSH_HOST/SSH_USER/
+#    SSH_PASSWORD are set, we open an SSH tunnel to the Hostinger server and
+#    route MySQL traffic through it instead of connecting to port 3306 directly. ──
+SSH_HOST     = os.environ.get('SSH_HOST', '')
+SSH_PORT     = int(os.environ.get('SSH_PORT', 22))
+SSH_USER     = os.environ.get('SSH_USER', '')
+SSH_PASSWORD = os.environ.get('SSH_PASSWORD', '')
+USE_SSH_TUNNEL = bool(SSH_HOST and SSH_USER and SSH_PASSWORD)
+
+_ssh_tunnel = None
+if USE_SSH_TUNNEL:
+    try:
+        from sshtunnel import SSHTunnelForwarder
+        _ssh_tunnel = SSHTunnelForwarder(
+            (SSH_HOST, SSH_PORT),
+            ssh_username=SSH_USER,
+            ssh_password=SSH_PASSWORD,
+            # From the SSH server's own point of view, MySQL is reachable at
+            # 127.0.0.1:3306 (confirmed working via `mysql -h 127.0.0.1 ...`).
+            remote_bind_address=('127.0.0.1', MYSQL_PORT),
+        )
+        _ssh_tunnel.start()
+        # Redirect all MySQL connections through the local end of the tunnel.
+        MYSQL_HOST = '127.0.0.1'
+        MYSQL_PORT = _ssh_tunnel.local_bind_port
+        print(f"🔒 SSH tunnel active: 127.0.0.1:{MYSQL_PORT} -> {SSH_HOST}:{SSH_PORT} -> MySQL 127.0.0.1:3306")
+    except Exception as _e:
+        print(f"⚠️  SSH tunnel failed to start ({_e}); falling back to direct MySQL connection.")
+
 USE_MYSQL = PYMYSQL_AVAILABLE and bool(MYSQL_HOST) and bool(MYSQL_USER) and bool(MYSQL_DB)
 
 if USE_MYSQL:
