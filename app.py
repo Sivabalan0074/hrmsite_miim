@@ -7732,6 +7732,24 @@ def public_salary_periods():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/debug-network-check')
+def debug_network_check():
+    """TEMPORARY diagnostic route - checks if this server can reach the MySQL host over the network.
+    Remove this route once the DB connectivity issue is resolved."""
+    import socket
+    host = _dotenv_os.environ.get('MYSQL_HOST', 'srv1870.hstgr.io')
+    port = int(_dotenv_os.environ.get('MYSQL_PORT', 3306))
+    result = {"host": host, "port": port}
+    try:
+        s = socket.create_connection((host, port), timeout=8)
+        s.close()
+        result["tcp_connect"] = "SUCCESS - network route is open"
+    except Exception as e:
+        result["tcp_connect"] = "FAILED"
+        result["error"] = str(e)
+    return jsonify(result)
+
+
 if __name__ == '__main__':
     # Start email reply poller in background
     _poller_thread = threading.Thread(target=_email_poll_loop, daemon=True)
