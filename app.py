@@ -7734,19 +7734,78 @@ def public_salary_periods():
 
 @app.route('/api/debug-network-check')
 def debug_network_check():
-    """TEMPORARY diagnostic route - checks if this server can reach the MySQL host over the network.
-    Remove this route once the DB connectivity issue is resolved."""
+    """TEMPORARY diagnostic route - checks if this server can reach the MySQL host over the network,
+    and captures enough detail (outbound IP, UTC time, DNS, raw TCP, and pymysql auth) to hand to
+    Hostinger support as proof. Remove this route once the DB connectivity issue is resolved."""
     import socket
+    import time
+    import datetime
+
     host = _dotenv_os.environ.get('MYSQL_HOST', 'srv1870.hstgr.io')
     port = int(_dotenv_os.environ.get('MYSQL_PORT', 3306))
-    result = {"host": host, "port": port}
+    user = _dotenv_os.environ.get('MYSQL_USER', '')
+    password = _dotenv_os.environ.get('MYSQL_PASSWORD', '')
+    dbname = _dotenv_os.environ.get('MYSQL_DB', '')
+
+    result = {
+        "utc_time": datetime.datetime.utcnow().isoformat() + "Z",
+        "host": host,
+        "port": port,
+        "render_region_hint": _dotenv_os.environ.get('RENDER_REGION', 'unknown'),
+    }
+
+    # 1) What is this server's outbound public IP right now?
+    #    This is the IP Hostinger's firewall actually sees.
     try:
-        s = socket.create_connection((host, port), timeout=8)
+        import urllib.request
+        with urllib.request.urlopen('https://api.ipify.org', timeout=5) as r:
+            result["render_outbound_ip"] = r.read().decode().strip()
+    except Exception as e:
+        result["render_outbound_ip"] = f"lookup_failed: {e}"
+
+    # 2) DNS resolution detail (IPv4 vs IPv6) for the MySQL host
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+        result["dns_resolved_addresses"] = list({info[4][0] for info in infos})
+    except Exception as e:
+        result["dns_resolved_addresses"] = f"resolve_failed: {e}"
+
+    # 3) Raw TCP connect timing (this is the actual proof of block vs timeout vs refused)
+    t0 = time.monotonic()
+    try:
+        s = socket.create_connection((host, port), timeout=10)
         s.close()
-        result["tcp_connect"] = "SUCCESS - network route is open"
+        result["tcp_connect"] = "SUCCESS"
+    except socket.timeout:
+        result["tcp_connect"] = "TIMED_OUT"
+        result["tcp_connect_detail"] = (
+            "No response within 10s - packets are being silently dropped "
+            "(typical of a firewall DROP rule, as opposed to a REJECT which "
+            "would fail instantly)."
+        )
+    except ConnectionRefusedError as e:
+        result["tcp_connect"] = "REFUSED"
+        result["tcp_connect_detail"] = str(e)
     except Exception as e:
         result["tcp_connect"] = "FAILED"
-        result["error"] = str(e)
+        result["tcp_connect_detail"] = str(e)
+    result["tcp_connect_duration_seconds"] = round(time.monotonic() - t0, 2)
+
+    # 4) If raw TCP succeeded, also try an actual MySQL auth handshake
+    #    to separate "network reachable" from "auth/credentials" problems.
+    if result["tcp_connect"] == "SUCCESS" and user and dbname:
+        try:
+            import pymysql as _debug_pymysql
+            conn = _debug_pymysql.connect(
+                host=host, port=port, user=user, password=password,
+                database=dbname, connect_timeout=8,
+            )
+            conn.close()
+            result["mysql_auth"] = "SUCCESS"
+        except Exception as e:
+            result["mysql_auth"] = "FAILED"
+            result["mysql_auth_detail"] = str(e)
+
     return jsonify(result)
 
 
