@@ -609,12 +609,12 @@
       <div class="form-grid">
         <div class="form-field"><label>Account Number *</label><input id="mAccNo" type="text" placeholder="e.g. 123456789012"/></div>
         <div class="form-field"><label>IFSC Code *</label><input id="mIFSC" type="text" placeholder="e.g. SBIN0001234" oninput="this.value=this.value.toUpperCase()"/></div>
+        <div class="form-field"><label>Branch Name</label><input id="mBranch" type="text" placeholder="e.g. Coimbatore Main"/></div>
         <div class="form-field"><label>Status</label><select id="mStatus"><option value="Approved">Approved</option><option value="Pending">Pending</option><option value="Rejected">Rejected</option></select></div>
       </div>
       <input type="hidden" id="mAccType" value="Salary"/>
       <input type="hidden" id="mBank" value="Bank"/>
       <input type="hidden" id="mNotes" value=""/>
-      <input type="hidden" id="mBranch" value=""/>
       <input type="hidden" id="mUPI" value=""/>
     </div>
       </div><!-- /bankFormSection -->
@@ -1262,7 +1262,7 @@ function prefillEdit(accId){
 function clearForm(){
   // Only clear bank account fields — NOT employee info fields
   document.getElementById('mAccId').value='';
-  ['mAccNo','mIFSC'].forEach(id=>document.getElementById(id).value='');
+  ['mAccNo','mIFSC','mBranch'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('mStatus').value='Approved';
   document.getElementById('mFormLabel').textContent='Employee Information';
   document.getElementById('mSaveBtn').textContent='Save Account';
