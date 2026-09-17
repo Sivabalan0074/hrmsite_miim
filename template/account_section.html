@@ -598,6 +598,7 @@
         <div class="form-field"><label>Date of Joining</label><input id="mDOJ" type="text" placeholder="e.g. May 18, 2023" readonly style="opacity:.7;cursor:default"/></div>
         <div class="form-field"><label>Date of Birth</label><input id="mDOB" type="date" style="color-scheme:dark;"/></div>
         <div class="form-field"><label>Father's Name</label><input id="mFatherName" type="text" placeholder="e.g. Sivakumar.K"/></div>
+        <div class="form-field"><label>Phone Number</label><input id="mPhone" type="tel" placeholder="e.g. 9790143406" maxlength="15" oninput="this.value=this.value.replace(/[^0-9+ -]/g,'')"/></div>
         <div class="form-field"><label>Mode of Payment</label><select id="mModeOfPayment"><option value="Cash">Cash</option><option value="Account">Account</option></select></div>
         <div class="form-field"><label>Pay Date</label><input id="mPayDate" type="date" style="color-scheme:dark;"/></div>
         <div class="form-field"><label>Days Worked</label><input id="mDaysWorked" type="number" min="0" max="31" placeholder="e.g. 26"/></div>
@@ -1190,6 +1191,7 @@ function openModal(empId,prefillAccId=null){
   setV('mDOJ',          fmtDate(emp.joindate));
   setV('mDOB',          fmtDateInput(emp.dob||''));
   setV('mFatherName',   emp.father_name||'');
+  setV('mPhone',        emp.mobile||emp.phone||'');
   // Days Worked & Pay Date — set AFTER clearForm so they survive
   // Always set days_worked (even 0) — never leave as placeholder
   setV('mDaysWorked', (emp.days_worked !== undefined && emp.days_worked !== null && emp.days_worked !== '') ? String(emp.days_worked) : '');
@@ -1267,7 +1269,7 @@ function clearForm(){
   // Reset pay date to next 7th
   const mpd=document.getElementById('mPayDate');
   if(mpd){const _n=new Date();const _y=_n.getDate()>7?(_n.getMonth()===11?_n.getFullYear()+1:_n.getFullYear()):_n.getFullYear();const _m=_n.getDate()>7?(_n.getMonth()===11?0:_n.getMonth()+1):_n.getMonth();mpd.value=`${_y}-${String(_m+1).padStart(2,'0')}-07`;}
-  // NOTE: mDaysWorked, mDOB, mFatherName, mModeOfPayment are set from emp record — do NOT clear them here
+  // NOTE: mDaysWorked, mDOB, mFatherName, mPhone, mModeOfPayment are set from emp record — do NOT clear them here
 }
 function closeModal(){
   const m=document.getElementById('accModal');
@@ -1398,6 +1400,7 @@ async function saveAcc(){
     const _mop0=document.getElementById('mModeOfPayment')?.value||'';
     const _fn0=document.getElementById('mFatherName')?.value||'';
     const _dob0=document.getElementById('mDOB')?.value||'';
+    const _ph0=document.getElementById('mPhone')?.value||'';
     const _ei=allEmps.findIndex(e=>e.id===empId);
     if(_ei>=0){
       if(_dwParsed!==null) allEmps[_ei].days_worked=_dwParsed;
@@ -1405,6 +1408,7 @@ async function saveAcc(){
       if(_mop0) allEmps[_ei].mode_of_payment=_mop0;
       if(_fn0) allEmps[_ei].father_name=_fn0;
       if(_dob0) allEmps[_ei].dob=_dob0;
+      if(_ph0) allEmps[_ei].mobile=_ph0;
       lsSaveEmployees(allEmps);
     }
     const _la=lsGetAccounts();
@@ -1431,11 +1435,13 @@ async function saveAcc(){
         const syncPayload={};
         const fn=document.getElementById('mFatherName')?.value||'';
         const dob=document.getElementById('mDOB')?.value||'';
+        const ph=document.getElementById('mPhone')?.value||'';
         const mop=document.getElementById('mModeOfPayment')?.value||'';
         const dw=document.getElementById('mDaysWorked')?.value||'';
         const pd=document.getElementById('mPayDate')?.value||'';
         if(fn)  syncPayload.father_name=fn;
         if(dob) syncPayload.dob=dob;
+        if(ph)  syncPayload.mobile=ph;
         if(mop) syncPayload.mode_of_payment=mop;
         // Only include days_worked when user actually filled it (never overwrite with 0 accidentally)
         if(dw !== '' && dw !== null && dw !== undefined) syncPayload.days_worked = parseInt(dw)||0;
@@ -1470,6 +1476,7 @@ async function saveAcc(){
       const pdFinal = document.getElementById('mPayDate')?.value||'';
       const fn2     = document.getElementById('mFatherName')?.value||'';
       const dob2    = document.getElementById('mDOB')?.value||'';
+      const ph2     = document.getElementById('mPhone')?.value||'';
       const mop2    = document.getElementById('mModeOfPayment')?.value||'';
       const empIdx  = allEmps.findIndex(e=>e.id===empId);
       if(empIdx>=0){
@@ -1477,6 +1484,7 @@ async function saveAcc(){
         if(pdFinal) allEmps[empIdx].pay_date=pdFinal;
         if(fn2)  allEmps[empIdx].father_name=fn2;
         if(dob2) allEmps[empIdx].dob=dob2;
+        if(ph2)  allEmps[empIdx].mobile=ph2;
         if(mop2) allEmps[empIdx].mode_of_payment=mop2;
         lsSaveEmployees(allEmps);
       }
@@ -1508,11 +1516,13 @@ async function saveAcc(){
     if(empIdxLS>=0){
       const fn=document.getElementById('mFatherName')?.value||'';
       const dob=document.getElementById('mDOB')?.value||'';
+      const ph=document.getElementById('mPhone')?.value||'';
       const mop=document.getElementById('mModeOfPayment')?.value||'';
       const dw2=document.getElementById('mDaysWorked')?.value;
       const pd2=document.getElementById('mPayDate')?.value||'';
       if(fn)  allEmps[empIdxLS].father_name=fn;
       if(dob) allEmps[empIdxLS].dob=dob;
+      if(ph)  allEmps[empIdxLS].mobile=ph;
       if(mop) allEmps[empIdxLS].mode_of_payment=mop;
       if(dw2 !== '' && dw2 !== undefined && dw2 !== null){ allEmps[empIdxLS].days_worked=parseInt(dw2)||0; payload.days_worked=parseInt(dw2)||0; }
       if(pd2){ allEmps[empIdxLS].pay_date=pd2; }
