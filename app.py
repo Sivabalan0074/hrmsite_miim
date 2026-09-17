@@ -3000,7 +3000,7 @@ def export_bank_details_excel():
         sep_border = Border(bottom=sep_thin)
 
         COLUMNS = [("S.No", 8), ("Name", 26), ("Phone Number", 18),
-                   ("Account Number", 24), ("IFSC Code", 16), ("Branch", 20)]
+                   ("Account Number", 24), ("IFSC Code", 16), ("Branch", 24)]
         NC = len(COLUMNS)
         IFSC_COL_IDX = 5   # 1-based column index of "IFSC Code" -- kept centered like S.No below
 
@@ -3011,29 +3011,26 @@ def export_bank_details_excel():
         ws.sheet_view.showGridLines = False
 
         # Reserve rows 1-4 for the letterhead (logo + company info) on a
-        # clean white background, with a thin orange rule separating it
-        # from the data table below. The letterhead text (company name,
-        # address) can be much longer than the data table is wide, so it
-        # gets extra "virtual" columns of its own to merge across --
-        # otherwise a merged cell clips its text at the merge boundary
-        # instead of wrapping or overflowing.
+        # clean white background, framed as one block that ends at exactly
+        # the same column as the data table below it.
+        #
+        # The letterhead used to claim extra "virtual" columns (G..L) to
+        # merge across so long text had room. Those columns were filled and
+        # width-set, so Excel treated them as used content sitting outside
+        # the table -- which is what produced the stray vertical rule past
+        # column F and the long horizontal line trailing off to the right of
+        # the header row. The letterhead now stops at the table's own last
+        # column (NC), and the Branch column is a touch wider so the company
+        # name/address still fit comfortably inside that width. Nothing is
+        # written, filled or sized beyond that column, so there is no used
+        # range left outside the table for Excel to draw a boundary around.
         LOGO_ROWS = 4
-        LETTERHEAD_EXTRA_COLS = 6
-        LETTERHEAD_END = NC + LETTERHEAD_EXTRA_COLS
+        LETTERHEAD_END = NC
         for r in range(1, LOGO_ROWS + 1):
             ws.row_dimensions[r].height = 20
             for c in range(1, LETTERHEAD_END + 1):
                 cell = ws.cell(row=r, column=c)
                 cell.fill = PatternFill("solid", fgColor=TITLE_BG)
-                # Only draw the separator rule under the table's own width
-                # (not the extra virtual columns) -- otherwise it trails off
-                # as a long stray line far past the table underneath.
-                if r == LOGO_ROWS and c <= NC:
-                    cell.border = sep_border
-        # Give the extra letterhead-only columns a sensible width so the
-        # merged title/address rows have real room to breathe.
-        for c in range(NC + 1, LETTERHEAD_END + 1):
-            ws.column_dimensions[get_column_letter(c)].width = 14
 
         # Try to embed the real company logo image, sized to actually fill
         # the LOGO_ROWS block it sits in, and spanning however many columns
@@ -3059,9 +3056,14 @@ def export_bank_details_excel():
             xl_img = XLImage(img_bytes)
 
             # Pixel height of the 4 letterhead rows (Excel row height is in
-            # points; 1pt = 96/72 px), minus a small top/bottom margin.
+            # points; 1pt = 96/72 px), minus a small top/bottom margin. The
+            # margin is what keeps the logo clear of the letterhead frame:
+            # the image is an opaque rectangle, so a logo flush with the
+            # cell corner paints straight over the box's top and left rules
+            # and makes the frame look like it starts mid-way across.
+            LOGO_INSET = 5  # px of clear space above/left of the logo
             letterhead_px_h = sum(20 for _ in range(LOGO_ROWS)) * (96 / 72)
-            target_h = max(40, int(letterhead_px_h) - 10)
+            target_h = max(40, int(letterhead_px_h) - (LOGO_INSET * 2) - 6)
             aspect = xl_img.width / xl_img.height
             target_w = int(target_h * aspect)
 
@@ -3079,7 +3081,22 @@ def export_bank_details_excel():
                 if cum_px + 5 >= target_w or logo_span_cols >= NC - 1:
                     break
 
-            ws.add_image(xl_img, "A1")
+            # Anchor it a few pixels in from A1 (rather than flush to the
+            # corner) so the letterhead frame stays visible around it.
+            try:
+                from openpyxl.drawing.spreadsheet_drawing import (
+                    OneCellAnchor, AnchorMarker)
+                from openpyxl.drawing.xdr import XDRPositiveSize2D
+                EMU = 9525  # EMUs per pixel
+                xl_img.anchor = OneCellAnchor(
+                    _from=AnchorMarker(col=0, row=0,
+                                       colOff=LOGO_INSET * EMU,
+                                       rowOff=LOGO_INSET * EMU),
+                    ext=XDRPositiveSize2D(cx=target_w * EMU, cy=target_h * EMU),
+                )
+                ws.add_image(xl_img)
+            except Exception:
+                ws.add_image(xl_img, "A1")
             logo_embedded = True
         except Exception as _logo_ex:
             print(f"[WARN] Bank-details export: could not embed logo image: {_logo_ex}")
@@ -3113,6 +3130,23 @@ def export_bank_details_excel():
         g.font = Font(italic=True, size=9, color=SUBTXT, name="Calibri")
         g.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
+        # Frame the whole letterhead block (rows 1..LOGO_ROWS, columns
+        # A..NC) so the company name / address sit inside a real bordered
+        # box that lines up exactly with the table underneath: outer edges
+        # on the outside cells only, and the orange rule along the bottom
+        # where the letterhead meets the column headers. This is applied
+        # after the merges so the merged title/address rows keep their
+        # borders instead of losing them to the merge.
+        head_side = Side(style='thin', color=HDR_BG)
+        for r in range(1, LOGO_ROWS + 1):
+            for c in range(1, LETTERHEAD_END + 1):
+                ws.cell(row=r, column=c).border = Border(
+                    left=head_side if c == 1 else None,
+                    right=head_side if c == LETTERHEAD_END else None,
+                    top=head_side if r == 1 else None,
+                    bottom=head_side if r == LOGO_ROWS else None,
+                )
+
         # Column headers on the row right after the letterhead
         header_row = LOGO_ROWS + 1
         for ci, (cn, cw) in enumerate(COLUMNS, start=1):
@@ -3145,23 +3179,13 @@ def export_bank_details_excel():
         ws.freeze_panes = get_column_letter(1) + str(header_row + 1)
         ws.auto_filter.ref = "A" + str(header_row) + ":" + get_column_letter(NC) + str(header_row)
 
-        # The letterhead reserves extra "virtual" columns (F..K) purely so the
-        # merged title/address rows have room to wrap -- but those columns are
-        # still filled/widthed cells, so Excel counts them as "used" content.
-        # If the print area only covers the table's own width (A..E) while
-        # that filled letterhead formatting still reaches further out (to K),
-        # Excel/LibreOffice will draw a boundary line in Normal view marking
-        # exactly where the (narrower) print area ends and the (wider) used
-        # range continues -- which is precisely the stray vertical line at
-        # column F. The fix is not to shrink the print area to the table's
-        # width, but to make it cover the *entire* used range (through K) so
-        # there is nothing left outside it for Excel to mark a boundary
-        # around. The table itself still only has borders/fill through
-        # column E, and the columns beyond it are plain white with no grid
-        # lines showing, so it still reads as ending cleanly at the table's
-        # own edge -- there's just no separate boundary line drawn anymore.
+        # The letterhead and the table now share the exact same width, so the
+        # used range and the print area are one and the same (A1 .. last data
+        # cell). With nothing formatted outside it, Excel has no narrower /
+        # wider mismatch to mark, so no stray boundary line is drawn past the
+        # table's right edge.
         last_row = header_row + len(rows)
-        last_used_col_letter = get_column_letter(LETTERHEAD_END)
+        last_used_col_letter = get_column_letter(NC)
         ws.print_area = "A1:" + last_used_col_letter + str(last_row)  # type: ignore[assignment]
         ws.page_setup.orientation = 'portrait'
         ws.page_setup.fitToWidth = 1
