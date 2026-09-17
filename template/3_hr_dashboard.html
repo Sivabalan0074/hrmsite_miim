@@ -11191,6 +11191,9 @@ function _renderTeamAtt() {
   var myEmpId = user.id || user.emp_id || null;
   var myName  = user.username || user.name || 'You';
   var myDept  = user.dept || '';
+  // Admin-role users never show a plain "Absent" cell here either — mirrors
+  // the same rule enforced on the attendance.html grids.
+  var isAdminMe = (String(user.role||'').toLowerCase()==='admin') || (String(myDept||'').toLowerCase()==='admin') || ['superadmin','sivabalan.m'].includes(String(myName||'').toLowerCase());
 
   // Set name in title
   var nameSpan = document.getElementById('myAttDetailName');
@@ -11292,11 +11295,16 @@ function _renderTeamAtt() {
     days.forEach(function(day) {
       var rec = myAttMap[day.ds];
       var st  = rec ? rec.status : '';
+      var hasCk = !!(rec && rec.checkin);
       var cell_bg, cell_fg, cell_lbl;
 
       // Priority: attendance status FIRST, then holiday/weekend
       if (st === 'present' || st === 'late') {
         cell_bg='rgba(34,197,94,.2)'; cell_fg='#22c55e'; cell_lbl='P'; counts.present++;
+      } else if (st === 'absent' && isAdminMe) {
+        // Admin-role: never show plain Absent — Present if checked in, else blank/not-marked.
+        if (hasCk) { cell_bg='rgba(34,197,94,.2)'; cell_fg='#22c55e'; cell_lbl='P'; counts.present++; }
+        else { cell_bg='transparent'; cell_fg='#2a2a2a'; cell_lbl='\u00b7'; }
       } else if (st === 'absent') {
         cell_bg='rgba(239,68,68,.2)'; cell_fg='#ef4444'; cell_lbl='A'; counts.absent++;
       } else if (st === 'sl') {
@@ -11305,8 +11313,17 @@ function _renderTeamAtt() {
         cell_bg='rgba(59,130,246,.2)'; cell_fg='#3b82f6'; cell_lbl='CL'; counts.leave++;
       } else if (st === 'el') {
         cell_bg='rgba(168,85,247,.2)'; cell_fg='#a855f7'; cell_lbl='EL'; counts.leave++;
+      } else if (st === 'pm' && hasCk) {
+        // Permission + a real check-in that day → combined "P+PM" badge
+        cell_bg='rgba(249,115,22,.2)'; cell_fg='#f97316'; cell_lbl='P+PM'; counts.present++; counts.leave++;
       } else if (st === 'pm') {
         cell_bg='rgba(249,115,22,.2)'; cell_fg='#f97316'; cell_lbl='PM'; counts.leave++;
+      } else if (st === 'half_day') {
+        // 4–7h worked → "OFF+P" (half-day present), matching attendance.html's labeling
+        cell_bg='rgba(234,88,12,.18)'; cell_fg='#ea580c'; cell_lbl='OFF+P'; counts.present++;
+      } else if (st === 'lop') {
+        // <4h worked / no checkin → treated the same as a full Absent day
+        cell_bg='rgba(239,68,68,.2)'; cell_fg='#ef4444'; cell_lbl='A'; counts.absent++;
       } else if (st === 'leave') {
         cell_bg='rgba(234,179,8,.2)'; cell_fg='#eab308'; cell_lbl='L'; counts.leave++;
         if (rec && rec.note) {
@@ -11325,8 +11342,9 @@ function _renderTeamAtt() {
       }
 
       var glow = day.isToday ? 'box-shadow:0 0 0 1.5px #f97316;' : '';
+      var cellStyleOverride = (cell_lbl==='OFF+P'||cell_lbl==='P+PM') ? 'width:auto;min-width:26px;padding:0 3px;font-size:.5rem;' : '';
       html += '<td style="padding:3px 1px;text-align:center;border-bottom:1px solid #1a1a1a;">'
-           + '<span style="'+CELL+'background:'+cell_bg+';color:'+cell_fg+';'+glow+'">'+cell_lbl+'</span>'
+           + '<span style="'+CELL+cellStyleOverride+'background:'+cell_bg+';color:'+cell_fg+';'+glow+'">'+cell_lbl+'</span>'
            + '</td>';
     });
     html += '</tr></tbody></table>';
