@@ -2985,17 +2985,22 @@ def export_bank_details_excel():
         """).fetchall()
         conn.close()
 
-        HDR_BG = "F97316"
-        HDR_FG = "FFFFFF"
-        ROW_A = "1E1E2E"
-        ROW_B = "16162A"
-        TXT = "E5E5E5"
-        TITLE_BG = "1A1A2A"
-        thin = Side(style='thin', color="333333")
+        HDR_BG = "F97316"      # Orange accent for header + brand
+        HDR_FG = "FFFFFF"      # White text on the orange header
+        ROW_A = "FFFFFF"       # White row
+        ROW_B = "FFF3E8"       # Very light orange tint for alternate rows
+        TXT = "3A3A3A"         # Dark charcoal text (readable on white)
+        SUBTXT = "6B6B6B"      # Muted gray for secondary letterhead text
+        TITLE_BG = "FFFFFF"    # White letterhead background
+        BORDER_CLR = "E2C7A8"  # Soft warm-gray border, gentle on white
+        thin = Side(style='thin', color=BORDER_CLR)
         brd = Border(left=thin, right=thin, top=thin, bottom=thin)
+        # Slightly stronger line to separate the letterhead from the table
+        sep_thin = Side(style='thin', color=HDR_BG)
+        sep_border = Border(bottom=sep_thin)
 
-        COLUMNS = [("S.No", 6), ("Name", 22), ("Phone Number", 16),
-                   ("Account Number", 22), ("IFSC Code", 16)]
+        COLUMNS = [("S.No", 8), ("Name", 26), ("Phone Number", 18),
+                   ("Account Number", 24), ("IFSC Code", 16)]
         NC = len(COLUMNS)
 
         wb = openpyxl.Workbook()
@@ -3004,12 +3009,17 @@ def export_bank_details_excel():
         ws.title = "Bank Details"
         ws.sheet_view.showGridLines = False
 
-        # Reserve rows 1-4 for the letterhead (logo + company info)
+        # Reserve rows 1-4 for the letterhead (logo + company info) on a
+        # clean white background, with a thin orange rule separating it
+        # from the data table below.
         LOGO_ROWS = 4
         for r in range(1, LOGO_ROWS + 1):
-            ws.row_dimensions[r].height = 18
+            ws.row_dimensions[r].height = 20
             for c in range(1, NC + 1):
-                ws.cell(row=r, column=c).fill = PatternFill("solid", fgColor=TITLE_BG)
+                cell = ws.cell(row=r, column=c)
+                cell.fill = PatternFill("solid", fgColor=TITLE_BG)
+                if r == LOGO_ROWS:
+                    cell.border = sep_border
 
         # Try to embed the real company logo image, anchored in the first
         # two columns; if Pillow/the image can't be loaded, fall back to a
@@ -3036,39 +3046,39 @@ def export_bank_details_excel():
         t = ws.cell(row=1, column=info_col)
         t.value = "MISSION IMPOSSIBLE INDUSTRIAL MANAGEMENT"  # type: ignore[assignment]
         t.font = Font(bold=True, size=14, color=HDR_BG, name="Calibri")
-        t.alignment = Alignment(horizontal="left", vertical="center")
+        t.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
         ws.merge_cells(start_row=2, start_column=info_col, end_row=2, end_column=NC)
         a1 = ws.cell(row=2, column=info_col)
         a1.value = "NO.31, CHINNAN CHETTIYAR STREET, VELANDIPALAYAM, COIMBATORE - 641025"  # type: ignore[assignment]
         a1.font = Font(size=10, color=TXT, name="Calibri")
-        a1.alignment = Alignment(horizontal="left", vertical="center")
+        a1.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
         ws.merge_cells(start_row=3, start_column=info_col, end_row=3, end_column=NC)
         a2 = ws.cell(row=3, column=info_col)
         a2.value = "Phone: +91-97901 43406"  # type: ignore[assignment]
         a2.font = Font(size=10, color=TXT, name="Calibri")
-        a2.alignment = Alignment(horizontal="left", vertical="center")
+        a2.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
         ws.merge_cells(start_row=4, start_column=info_col, end_row=4, end_column=NC)
         g = ws.cell(row=4, column=info_col)
         g.value = ("Bank Details Export -- Generated: "  # type: ignore[assignment]
                    + _dt.datetime.now().strftime('%d %B %Y, %I:%M %p')
                    + "   |   Employees: " + str(len(rows)))
-        g.font = Font(italic=True, size=9, color="999999", name="Calibri")
-        g.alignment = Alignment(horizontal="left", vertical="center")
+        g.font = Font(italic=True, size=9, color=SUBTXT, name="Calibri")
+        g.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
         # Column headers on the row right after the letterhead
         header_row = LOGO_ROWS + 1
         for ci, (cn, cw) in enumerate(COLUMNS, start=1):
             c = ws.cell(row=header_row, column=ci)
             c.value = cn.upper()  # type: ignore[assignment]
-            c.font = Font(bold=True, size=10, color=HDR_FG, name="Calibri")
+            c.font = Font(bold=True, size=10.5, color=HDR_FG, name="Calibri")
             c.fill = PatternFill("solid", fgColor=HDR_BG)
-            c.alignment = Alignment(horizontal="center", vertical="center")
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             c.border = brd
             ws.column_dimensions[get_column_letter(ci)].width = cw
-        ws.row_dimensions[header_row].height = 22
+        ws.row_dimensions[header_row].height = 26
 
         for ri, r in enumerate(rows, start=1):
             rn = header_row + ri
@@ -3081,9 +3091,9 @@ def export_bank_details_excel():
                 c.value = val  # type: ignore[assignment]
                 c.fill = rfill
                 c.font = Font(size=10, color=TXT, name="Calibri")
-                c.alignment = Alignment(vertical="center", horizontal="center" if ci in (1,) else "left")
+                c.alignment = Alignment(vertical="center", horizontal="center" if ci in (1, 5) else "left", indent=0 if ci in (1, 5) else 1)
                 c.border = brd
-            ws.row_dimensions[rn].height = 18
+            ws.row_dimensions[rn].height = 20
 
         ws.freeze_panes = get_column_letter(1) + str(header_row + 1)
         ws.auto_filter.ref = "A" + str(header_row) + ":" + get_column_letter(NC) + str(header_row)
