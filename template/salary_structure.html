@@ -4347,7 +4347,11 @@ async function exportSalaryBankDetails(){
   const btnOrigHtml = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Preparing...'; }
   try{
-    const r = await fetchWithTimeout(`${BASE}/api/accounts/export-bank-details-excel?period=${period}`, {headers:hdrs()}, 15000);
+    // This page doesn't define fetchWithTimeout (that helper only exists in
+    // account_section.html) -- every other fetch call on this page uses
+    // plain fetch, so this one does too, rather than reaching for a function
+    // that isn't actually loaded here.
+    const r = await fetch(`${BASE}/api/accounts/export-bank-details-excel?period=${period}`, {headers:hdrs()});
     if(!r.ok) throw new Error('Server returned ' + r.status);
     const blob = await r.blob();
     if(blob.size < 200) throw new Error('Empty file received — no employee has a Fully Approved salary for this month yet');
