@@ -3176,7 +3176,11 @@ def export_bank_details_excel():
                 c.border = brd
             ws.row_dimensions[rn].height = 20
 
-        ws.freeze_panes = get_column_letter(1) + str(header_row + 1)
+        # No freeze panes here. Freezing below the header row makes Excel draw
+        # its pane-split rule straight across the whole sheet at that row --
+        # the dark line that ran far past the table's right edge. The table is
+        # short enough that scrolling doesn't need a frozen header, so the
+        # split (and its line) is simply not created.
         ws.auto_filter.ref = "A" + str(header_row) + ":" + get_column_letter(NC) + str(header_row)
 
         # The letterhead and the table now share the exact same width, so the
