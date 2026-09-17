@@ -3116,6 +3116,23 @@ def export_bank_details_excel():
         ws.freeze_panes = get_column_letter(1) + str(header_row + 1)
         ws.auto_filter.ref = "A" + str(header_row) + ":" + get_column_letter(NC) + str(header_row)
 
+        # The letterhead reserves extra "virtual" columns (F..K) purely so the
+        # merged title/address rows have room to wrap -- but those columns are
+        # still filled/widthed cells, so Excel counts them as "used" content.
+        # Without an explicit print area, Excel's default page-break-preview
+        # boundary lands wherever its default page width happens to cut off
+        # across that wider used range, showing a stray vertical line through
+        # the letterhead/logo area that has nothing to do with our formatting.
+        # Pin the print area to the table's real width and fit it to one page
+        # so that boundary always sits at the table's actual right edge.
+        last_row = header_row + len(rows)
+        last_col_letter = get_column_letter(NC)
+        ws.print_area = "A1:" + last_col_letter + str(last_row)  # type: ignore[assignment]
+        ws.page_setup.orientation = 'portrait'
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+
         timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = "MIIM_Bank_Details_" + timestamp + ".xlsx"
         buf = io.BytesIO()
