@@ -3024,7 +3024,10 @@ def export_bank_details_excel():
             for c in range(1, LETTERHEAD_END + 1):
                 cell = ws.cell(row=r, column=c)
                 cell.fill = PatternFill("solid", fgColor=TITLE_BG)
-                if r == LOGO_ROWS:
+                # Only draw the separator rule under the table's own width
+                # (not the extra virtual columns) -- otherwise it trails off
+                # as a long stray line far past the table underneath.
+                if r == LOGO_ROWS and c <= NC:
                     cell.border = sep_border
         # Give the extra letterhead-only columns a sensible width so the
         # merged title/address rows have real room to breathe.
@@ -3034,13 +3037,18 @@ def export_bank_details_excel():
         # Try to embed the real company logo image, anchored in the first
         # two columns; if Pillow/the image can't be loaded, fall back to a
         # plain text letterhead so the export still looks professional.
+        # The logo is sized to snugly fill the S.No + Name column width so
+        # there's no big empty white gap between the logo and the company
+        # name/address text that starts right after it.
         logo_embedded = False
         try:
             from openpyxl.drawing.image import Image as XLImage
             img_bytes = io.BytesIO(base64.b64decode(MIIM_LOGO_B64))
             xl_img = XLImage(img_bytes)
-            # Scale to a clean letterhead size (keep aspect ratio)
-            target_w = 180
+            # Approx Excel-column-width-units -> pixels (standard Calibri 11 conversion)
+            logo_col_span_units = COLUMNS[0][1] + COLUMNS[1][1]  # S.No + Name widths
+            logo_area_px = int(round(logo_col_span_units * 7 + 5))
+            target_w = max(150, logo_area_px - 6)  # small clean margin, no big gap
             scale = target_w / xl_img.width
             xl_img.width = target_w
             xl_img.height = int(xl_img.height * scale)
