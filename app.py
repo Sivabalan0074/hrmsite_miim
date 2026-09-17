@@ -2957,6 +2957,21 @@ def export_accounts_excel_status():
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+def _ist_now():
+    """Current wall-clock time in India Standard Time (UTC+05:30).
+
+    `datetime.now()` returns whatever the *server's* clock says. On a hosted
+    box that is almost always UTC, so an export made at 10:09 AM in Coimbatore
+    was stamped 04:39 AM. Anchoring to UTC and converting to a fixed +05:30
+    offset makes the "Generated" line and the filename show the real local
+    time no matter where the app runs. India has no daylight saving, so a
+    fixed offset is exact year-round.
+    """
+    import datetime as _d
+    return _d.datetime.now(_d.timezone.utc).astimezone(
+        _d.timezone(_d.timedelta(hours=5, minutes=30)))
+
+
 @app.route('/api/accounts/export-bank-details-excel', methods=['GET'])
 @require_auth
 def export_bank_details_excel():
@@ -3125,7 +3140,7 @@ def export_bank_details_excel():
         ws.merge_cells(start_row=4, start_column=info_col, end_row=4, end_column=LETTERHEAD_END)
         g = ws.cell(row=4, column=info_col)
         g.value = ("Bank Details Export -- Generated: "  # type: ignore[assignment]
-                   + _dt.datetime.now().strftime('%d %B %Y, %I:%M %p')
+                   + _ist_now().strftime('%d %B %Y, %I:%M %p')
                    + "   |   Employees: " + str(len(rows)))
         g.font = Font(italic=True, size=9, color=SUBTXT, name="Calibri")
         g.alignment = Alignment(horizontal="left", vertical="center", indent=1)
@@ -3196,7 +3211,7 @@ def export_bank_details_excel():
         ws.page_setup.fitToHeight = 0
         ws.sheet_properties.pageSetUpPr.fitToPage = True  # type: ignore[attr-defined]
 
-        timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = _ist_now().strftime("%Y%m%d_%H%M%S")
         filename = "MIIM_Bank_Details_" + timestamp + ".xlsx"
         buf = io.BytesIO()
         wb.save(buf)
