@@ -2978,7 +2978,16 @@ def export_bank_details_excel():
     """Export Name, Phone Number, Account Number, IFSC Code to Excel --
     only for employees whose bank account has actually been saved
     (account_number AND ifsc_code both present). Includes the real
-    company logo, properly aligned as a letterhead at the top."""
+    company logo, properly aligned as a letterhead at the top.
+
+    Optional ?period=YYYY-MM: when given, the export becomes a payroll
+    disbursement sheet for that month -- it only includes employees whose
+    salary for that exact month has been Fully Approved (Account + Management
+    sign-off), and adds three columns: Salary Month, Pay Date and Net Salary,
+    each its own column so the payment amount is never mixed in with the
+    bank fields. Without ?period=, the export is unchanged: plain bank
+    details for every employee with a saved account, as before.
+    """
     import io, os, base64, datetime as _dt
     import openpyxl  # type: ignore[import]
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side  # type: ignore[import]
@@ -2987,17 +2996,55 @@ def export_bank_details_excel():
         return jsonify({"success": False, "error": "openpyxl not installed. Run: pip install openpyxl"}), 500
 
     try:
+        period_param = (request.args.get('period', '') or '').strip()
+        period_filter = period_param[:7] if period_param else ''  # YYYY-MM
+        with_salary = bool(period_filter)
+        # Declared up front (not just inside the `if with_salary:` blocks
+        # below) purely so every reference to these names is guaranteed
+        # bound from the type checker's point of view -- Pylance treats each
+        # `if with_salary:` as a separate, unrelated branch and can't tell
+        # that they all share the same guard, so it flags the later reads as
+        # "possibly unbound" even though at runtime they're only ever read
+        # when with_salary is True (the same branch that sets them for real).
+        period_display = ''
+        SALARY_MONTH_IDX = 0
+        PAY_DATE_IDX = 0
+        NET_SALARY_IDX = 0
+
         conn = _db()
-        rows = conn.execute("""
-            SELECT e.username AS name, e.mobile AS phone,
-                   a.account_number, a.ifsc_code, a.branch
-            FROM employees e
-            JOIN accounts a ON a.emp_id = e.id
-            WHERE e.status = 'active'
-              AND TRIM(COALESCE(a.account_number, '')) != ''
-              AND TRIM(COALESCE(a.ifsc_code, '')) != ''
-            ORDER BY e.username
-        """).fetchall()
+        if with_salary:
+            # INNER JOIN on salary_structures is deliberate: an employee only
+            # appears here once their salary for *this* month has cleared
+            # both approval steps. Anyone still Pending, Acct-only-approved,
+            # Rejected, or with no salary structure at all for the month is
+            # left out -- this list is meant to drive an actual bank payment
+            # run, not a general roster.
+            rows = conn.execute("""
+                SELECT e.username AS name, e.mobile AS phone,
+                       a.account_number, a.ifsc_code, a.branch,
+                       ss.period AS salary_period, ss.pay_date, ss.net_pay
+                FROM employees e
+                JOIN accounts a ON a.emp_id = e.id
+                JOIN salary_structures ss
+                    ON ss.emp_id = e.id
+                   AND substr(ss.period, 1, 7) = ?
+                   AND ss.approval_status = 'Fully Approved'
+                WHERE e.status = 'active'
+                  AND TRIM(COALESCE(a.account_number, '')) != ''
+                  AND TRIM(COALESCE(a.ifsc_code, '')) != ''
+                ORDER BY e.username
+            """, (period_filter,)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT e.username AS name, e.mobile AS phone,
+                       a.account_number, a.ifsc_code, a.branch
+                FROM employees e
+                JOIN accounts a ON a.emp_id = e.id
+                WHERE e.status = 'active'
+                  AND TRIM(COALESCE(a.account_number, '')) != ''
+                  AND TRIM(COALESCE(a.ifsc_code, '')) != ''
+                ORDER BY e.username
+            """).fetchall()
         conn.close()
 
         HDR_BG = "F97316"      # Orange accent for header + brand
@@ -3027,8 +3074,24 @@ def export_bank_details_excel():
 
         COLUMNS = [("S.No", 8), ("Name", 26), ("Phone Number", 18),
                    ("Account Number", 24), ("IFSC Code", 16), ("Branch", branch_width)]
-        NC = len(COLUMNS)
         IFSC_COL_IDX = 5   # 1-based column index of "IFSC Code" -- kept centered like S.No below
+
+        # Payroll columns are appended, each as its own column, only for the
+        # period-filtered payroll-run version of this export -- never mixed
+        # into an existing column, so Salary Month / Pay Date / Net Salary
+        # each get their own header and their own alignment/number format.
+        if with_salary:
+            try:
+                period_display = _dt.datetime.strptime(
+                    period_filter + '-01', '%Y-%m-%d').strftime('%B %Y')
+            except Exception:
+                period_display = period_filter
+            COLUMNS += [("Salary Month", 16), ("Pay Date", 14), ("Net Salary", 16)]
+            SALARY_MONTH_IDX = len(COLUMNS) - 2
+            PAY_DATE_IDX = len(COLUMNS) - 1
+            NET_SALARY_IDX = len(COLUMNS)
+
+        NC = len(COLUMNS)
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -3150,9 +3213,15 @@ def export_bank_details_excel():
 
         ws.merge_cells(start_row=4, start_column=info_col, end_row=4, end_column=LETTERHEAD_END)
         g = ws.cell(row=4, column=info_col)
-        g.value = ("Bank Details Export -- Generated: "  # type: ignore[assignment]
-                   + _ist_now().strftime('%d %B %Y, %I:%M %p')
-                   + "   |   Employees: " + str(len(rows)))
+        if with_salary:
+            g.value = ("Bank Payment List -- Fully Approved Salary for "  # type: ignore[assignment]
+                       + period_display + " -- Generated: "
+                       + _ist_now().strftime('%d %B %Y, %I:%M %p')
+                       + "   |   Employees: " + str(len(rows)))
+        else:
+            g.value = ("Bank Details Export -- Generated: "  # type: ignore[assignment]
+                       + _ist_now().strftime('%d %B %Y, %I:%M %p')
+                       + "   |   Employees: " + str(len(rows)))
         g.font = Font(italic=True, size=9, color=SUBTXT, name="Calibri")
         g.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
@@ -3191,14 +3260,33 @@ def export_bank_details_excel():
             vals = [ri, d.get('name') or '-', d.get('phone') or '-',
                     d.get('account_number') or '-', d.get('ifsc_code') or '-',
                     d.get('branch') or '-']
+            if with_salary:
+                # Net pay is a real number (right-aligned, thousands-separated,
+                # 2 decimals) so it sums/sorts correctly in Excel -- it is
+                # never rendered as text like the identifier columns are.
+                try:
+                    net_val = round(float(d.get('net_pay') or 0), 2)
+                except Exception:
+                    net_val = 0
+                vals += [period_display, d.get('pay_date') or '-', net_val]
+
             rfill = PatternFill("solid", fgColor=(ROW_A if ri % 2 == 1 else ROW_B))
             for ci, val in enumerate(vals, start=1):
                 c = ws.cell(row=rn, column=ci)
                 c.value = val  # type: ignore[assignment]
                 c.fill = rfill
                 c.font = Font(size=10, color=TXT, name="Calibri")
-                is_centered = ci in (1, IFSC_COL_IDX)
-                c.alignment = Alignment(vertical="center", horizontal="center" if is_centered else "left", indent=0 if is_centered else 1)
+                if with_salary and ci == NET_SALARY_IDX:
+                    # Currency-style column: right-aligned, grouped thousands,
+                    # fixed 2 decimals -- distinct from the plain identifier
+                    # columns so amounts are visually and numerically correct.
+                    c.number_format = '#,##0.00'
+                    c.alignment = Alignment(vertical="center", horizontal="right", indent=1)
+                elif with_salary and ci in (SALARY_MONTH_IDX, PAY_DATE_IDX):
+                    c.alignment = Alignment(vertical="center", horizontal="center")
+                else:
+                    is_centered = ci in (1, IFSC_COL_IDX)
+                    c.alignment = Alignment(vertical="center", horizontal="center" if is_centered else "left", indent=0 if is_centered else 1)
                 c.border = brd
             ws.row_dimensions[rn].height = 20
 
@@ -3223,7 +3311,10 @@ def export_bank_details_excel():
         ws.sheet_properties.pageSetUpPr.fitToPage = True  # type: ignore[attr-defined]
 
         timestamp = _ist_now().strftime("%Y%m%d_%H%M%S")
-        filename = "MIIM_Bank_Details_" + timestamp + ".xlsx"
+        if with_salary:
+            filename = "MIIM_Bank_Payment_" + period_filter.replace('-', '_') + "_" + timestamp + ".xlsx"
+        else:
+            filename = "MIIM_Bank_Details_" + timestamp + ".xlsx"
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
