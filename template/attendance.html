@@ -230,6 +230,8 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .gv-half{background:rgba(234,88,12,0.18);color:#ea580c;}
 .gv-holiday{background:rgba(20,184,166,0.18);color:#14b8a6;}
 .gv-pending{background:rgba(239,68,68,0.15);color:var(--red);}
+.gv-badge.gv-pmpresent{background:var(--orange-dim);color:var(--orange);width:auto;min-width:26px;padding:0 3px;font-size:7.5px;letter-spacing:0.2px;}
+.gv-badge.gv-offp{background:rgba(234,88,12,0.18);color:#ea580c;width:auto;min-width:26px;padding:0 2px;font-size:7.5px;letter-spacing:0.2px;}
 
 .qcell-pop{position:fixed;z-index:600;background:var(--bg3);border:1px solid var(--orange);border-radius:10px;padding:10px 12px;box-shadow:0 12px 40px rgba(0,0,0,0.9);min-width:190px;}
 .qcell-name{font-size:11px;color:var(--t2);margin-bottom:7px;font-weight:600;border-bottom:1px solid var(--border);padding-bottom:5px;}
@@ -1458,10 +1460,21 @@ tr.emp-row td {
           <input type="date" class="leave-form-input" id="leaveDate">
         </div>
         <div class="leave-form-group">
-          <label class="leave-form-label">📝 Reason (Optional)</label>
-          <input type="text" class="leave-form-input" id="leaveReason" placeholder="e.g. Doctor appointment…">
+          <label class="leave-form-label" id="leaveReasonLbl">📝 Reason (Optional)</label>
+          <input type="text" class="leave-form-input" id="leaveReason" placeholder="e.g. Doctor appointment…" oninput="updateLeaveApplyBtn()">
         </div>
       </div>
+      <div class="leave-form-row" id="pmTimeFieldsRow" style="display:none;">
+        <div class="leave-form-group">
+          <label class="leave-form-label">🕐 From</label>
+          <input type="time" class="leave-form-input" id="leavePmFrom" onchange="onPmFromChange()">
+        </div>
+        <div class="leave-form-group">
+          <label class="leave-form-label">🕐 To <span style="color:var(--t3);font-weight:400;">(max 2 hrs)</span></label>
+          <input type="time" class="leave-form-input" id="leavePmTo" onchange="onPmToChange()">
+        </div>
+      </div>
+      <div id="pmTimeHint" style="display:none;font-size:11px;color:var(--t3);margin-top:-4px;margin-bottom:8px;"></div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeLeaveModal()">Cancel</button>
         <button class="btn-apply" id="leaveApplyBtn" onclick="applyLeave()" disabled>Apply Leave</button>
@@ -1745,9 +1758,36 @@ function inFY(y, m, fyStartYear){
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
-const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6'};
-const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-half',pending:'gv-pending',holiday:'gv-holiday'};
-const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'LOP',half_day:'½',pending:'?',holiday:'H'};
+const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6',pm_present:'var(--orange)'};
+const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-offp',pending:'gv-pending',holiday:'gv-holiday',pm_present:'gv-pmpresent'};
+// Labels: half_day (4-7h worked) shows as "OFF+P", lop (<4h / no checkin) shows
+// as "A" (same visual meaning as a full absent day), pm_present is the
+// combined "Permission + real check-in that day" badge ("P+PM").
+const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'A',half_day:'OFF+P',pending:'?',holiday:'H',pm_present:'P+PM'};
+
+// ── Admin-role detection (superadmin / admin designation or dept) ──────────
+// Per business rule: admin-role employees should never show a plain "Absent"
+// badge anywhere in the grids/day-table/popups. If they have a real check-in
+// that day they should show as Present instead; if not, the cell is simply
+// left blank (no status forced on them at all).
+function isAdminEmp(emp){
+  if(!emp) return false;
+  const role=deriveRoleFromDesig(emp.desig||emp.designation||'', emp.dept||'');
+  if(role==='admin') return true;
+  const uname=(emp.username||'').toLowerCase();
+  if(['superadmin','sivabalan.m'].includes(uname)) return true;
+  return false;
+}
+// Turns a raw status into what should actually be rendered, applying two
+// business rules on top of the raw backend status:
+//  1. Permission (pm) + a real check-in that same day → "pm_present" (P+PM)
+//  2. Admin-role employee marked "absent" → Present (if checked in) or blank
+function effectiveDisplaySt(emp, rawSt, rec){
+  const hasCheckin = !!(rec && (rec.checkin || (rec.entries && rec.entries.some(e=>e && e.in))));
+  if(rawSt==='pm' && hasCheckin) return 'pm_present';
+  if(rawSt==='absent' && isAdminEmp(emp)) return hasCheckin ? 'present' : '';
+  return rawSt;
+}
 
 // ════════════════════════════════════════════════════
 // ROLE CONFIG
@@ -1842,6 +1882,19 @@ function isPermanent(t){return t==='Regular'||t==='Regular(PIP)';}
 // ════════════════════════════════════════════════════
 let employees=[],attCache={},balances={},selected=new Set();
 let hasChanges=false,statusFilter='',currentView='month',calOpen=false;
+// Keep the active Day/Week/Month tab across a page reload (the Refresh
+// button does a full location.reload()) — without this, Refresh always
+// silently jumped back to the Month tab regardless of what was open.
+try{
+  const _savedView = sessionStorage.getItem('miim_att_view');
+  if(_savedView && ['day','week','month'].includes(_savedView)) currentView=_savedView;
+}catch(e){}
+function syncViewTabs(){
+  ['day','week','month'].forEach(x=>{
+    const btn=document.getElementById(`vtab-${x}`);
+    if(btn) btn.classList.toggle('active',x===currentView);
+  });
+}
 const TODAY=new Date();TODAY.setHours(0,0,0,0);
 let viewDate=new Date(TODAY);
 // Keep the currently-viewed date across a page reload (Refresh button, F5,
@@ -1856,7 +1909,7 @@ try{
   }
 }catch(e){}
 window.addEventListener('beforeunload', ()=>{
-  try{ sessionStorage.setItem('miim_att_viewdate', dk(viewDate)); }catch(e){}
+  try{ sessionStorage.setItem('miim_att_viewdate', dk(viewDate)); sessionStorage.setItem('miim_att_view', currentView); }catch(e){}
 });
 let calYear=viewDate.getFullYear(),calMonth=viewDate.getMonth();
 let activePopup=null;
@@ -1984,10 +2037,8 @@ function goBack(e){
 }
 function setView(v){
   currentView=v;
-  ['day','week','month'].forEach(x=>{
-    const btn=document.getElementById(`vtab-${x}`);
-    if(btn) btn.classList.toggle('active',x===v);
-  });
+  try{ sessionStorage.setItem('miim_att_view', v); }catch(e){}
+  syncViewTabs();
   const cfg=getRoleCfg();
   document.getElementById('toolbarEl').style.display=(!cfg.readOnly&&v==='day')?'flex':'none';
   // Summary bar only in day view for editable roles
@@ -2907,7 +2958,13 @@ function renderDayTable(){
 }
 
 function buildDayRow(emp,idx,att,cfg){
-  const d=att[emp.id]||{};const status=d.status||'';
+  const d=att[emp.id]||{};const rawStatus=d.status||'';
+  const isAdminRow=isAdminEmp(emp);
+  const _hasCk=!!(d.checkin || (d.entries && d.entries.some(e=>e&&e.in)));
+  // Admin-role employees never show a plain "Absent" badge: show Present
+  // instead if they actually checked in that day, otherwise treat the day
+  // as simply not-marked (blank) rather than forcing Absent onto them.
+  const status=(rawStatus==='absent' && isAdminRow) ? (_hasCk?'present':'') : rawStatus;
   const isSel=selected.has(emp.id);
   // ★ CHANGE 1: detect if this row belongs to the logged-in user
   const isOwnRow=(emp.id===currentUserId);
@@ -2933,7 +2990,9 @@ function buildDayRow(emp,idx,att,cfg){
   else if(anyCheckin)                          rowStateClass = 'row-checkin-only';
 
   let statusBtns='';
-  const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm:'🕐 PM'};
+  // pm + a real check-in that day → combined "P+PM" badge instead of plain "PM"
+  const pmWithCheckin = status==='pm' && _hasCk;
+  const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 P+PM' : '🕐 PM'};
   const leaveBadgeColor={cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
   const leaveActive=['cl','sl','el','pm'].includes(status);
   const holidayActive=status==='holiday';
@@ -2946,7 +3005,7 @@ function buildDayRow(emp,idx,att,cfg){
     } else if(holidayActive){
       statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>`;
     } else {
-      const stLabel={present:'P',absent:'A',off:'Off',lop:'LOP',half_day:'½ Day'}[status]||status;
+      const stLabel={present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status;
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
       statusBtns=`<span class="qbtn ${stClass} active" style="cursor:default;">${stLabel}</span>`;
     }
@@ -2956,7 +3015,7 @@ function buildDayRow(emp,idx,att,cfg){
     if(!status){
       statusBtns=`<div class="status-btns">
         <button class="qbtn p" onclick="setStatus(${emp.id},'present',event)">P</button>
-        <button class="qbtn a" onclick="setStatus(${emp.id},'absent',event)">A</button>
+        ${isAdminRow?'':`<button class="qbtn a" onclick="setStatus(${emp.id},'absent',event)">A</button>`}
         <button class="qbtn off" onclick="setStatus(${emp.id},'off',event)">Off</button>
       </div>`;
     } else if(leaveActive){
@@ -2973,7 +3032,7 @@ function buildDayRow(emp,idx,att,cfg){
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
       </div>`;
     } else {
-      const stLabel={present:'P',absent:'A',off:'Off',lop:'LOP',half_day:'½ Day'}[status]||status;
+      const stLabel={present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status;
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
       statusBtns=`<div class="status-btns">
         <button class="qbtn ${stClass} active" onclick="setStatus(${emp.id},'${status}',event)">${stLabel}</button>
@@ -3031,7 +3090,16 @@ function editPendingLeave(reqId){
   closeApprovalModal();
   leaveEditReqId=req.id;
   openLeaveModal(req.empId, req.date);
-  document.getElementById('leaveReason').value=req.reason||'';
+  if(req.type==='pm'){
+    const parsed=parsePmReason(req.reason);
+    document.getElementById('leavePmFrom').value=parsed.from;
+    document.getElementById('leavePmTo').value=parsed.to;
+    document.getElementById('leaveReason').value=parsed.desc;
+    showPmFields(true);
+  }else{
+    document.getElementById('leaveReason').value=req.reason||'';
+  }
+  updateLeaveApplyBtn();
   document.getElementById('leaveApplyBtn').textContent='💾 Update Leave Request';
   const titleEl=document.getElementById('leaveModalTitleTxt');
   if(titleEl)titleEl.textContent='✏️ Edit Leave Request';
@@ -3053,6 +3121,9 @@ function openLeaveModal(empId, dKey, e, preselect){
   document.getElementById('leaveModalEmpName').textContent=emp?`${emp.username} · ${emp.dept} · ${emp.type}`:'';
   document.getElementById('leaveDate').value=dKey;
   document.getElementById('leaveReason').value='';
+  document.getElementById('leavePmFrom').value='';
+  document.getElementById('leavePmTo').value='';
+  showPmFields(false);
   document.getElementById('leaveApplyBtn').disabled=true;
   document.getElementById('leaveApplyBtn').textContent='Apply Leave';
   const _titleEl=document.getElementById('leaveModalTitleTxt');
@@ -3158,6 +3229,16 @@ function openLeaveModal(empId, dKey, e, preselect){
   if(['cl','sl','el','pm'].includes(curStatus)){
     selectedLeaveType=curStatus;
     updateLTCardSelection();
+    if(curStatus==='pm'){
+      showPmFields(true);
+      const existingReq=pendingLeaves.find(l=>String(l.empId)===String(empId)&&l.date===dKey);
+      if(existingReq){
+        const parsed=parsePmReason(existingReq.reason);
+        document.getElementById('leavePmFrom').value=parsed.from;
+        document.getElementById('leavePmTo').value=parsed.to;
+        document.getElementById('leaveReason').value=parsed.desc;
+      }
+    }
     updateLeaveApplyBtn();
   }else if(preselect && _ltBalanceMap[preselect]){
     // e.g. the "🕐 Apply Permission" CTA on a LOP day — only auto-select if
@@ -3165,6 +3246,7 @@ function openLeaveModal(empId, dKey, e, preselect){
     // the disabled card's "No balance left" note speaks for itself.
     selectedLeaveType=preselect;
     updateLTCardSelection();
+    if(preselect==='pm') showPmFields(true);
     updateLeaveApplyBtn();
   }
   document.getElementById('leaveModal').classList.add('open');
@@ -3177,14 +3259,83 @@ function selectLeaveType(type){
   }
   selectedLeaveType=selectedLeaveType===type?null:type;
   updateLTCardSelection();
+  showPmFields(selectedLeaveType==='pm');
   updateLeaveApplyBtn();
 }
 function updateLTCardSelection(){
   ['sl','el','cl','pm'].forEach(t=>{document.getElementById('ltcard-'+t)?.classList.toggle('selected',selectedLeaveType===t);});
 }
+// ── Permission (pm) time + description fields ──────────────────────────────
+// Permission requests need a From/To time (max 2 hrs, auto-filled) and a
+// REQUIRED description. There's no dedicated time column on leave_requests,
+// so — to avoid a DB migration — the time range + description get encoded
+// into the existing `reason` text as "Permission HH:MM-HH:MM: <description>"
+// when sent to the backend, and parsed back out when editing.
+function showPmFields(show){
+  const row=document.getElementById('pmTimeFieldsRow');
+  const hint=document.getElementById('pmTimeHint');
+  const lbl=document.getElementById('leaveReasonLbl');
+  const reasonInput=document.getElementById('leaveReason');
+  if(row) row.style.display=show?'flex':'none';
+  if(hint) hint.style.display=show?'block':'none';
+  if(lbl) lbl.textContent=show?'📝 Description (Required)':'📝 Reason (Optional)';
+  if(reasonInput) reasonInput.placeholder=show?'What is the permission for?…':'e.g. Doctor appointment…';
+}
+function clampPmTimes(){
+  const fromEl=document.getElementById('leavePmFrom'), toEl=document.getElementById('leavePmTo');
+  const hint=document.getElementById('pmTimeHint');
+  if(!fromEl||!toEl) return;
+  const from=fromEl.value, to=toEl.value;
+  if(!from||!to){ if(hint) hint.textContent='Permission is capped at 2 hours.'; return; }
+  const [fh,fm]=from.split(':').map(Number), [th,tm]=to.split(':').map(Number);
+  let diffMin=(th*60+tm)-(fh*60+fm);
+  if(diffMin<0) diffMin+=24*60; // safety net for a stray past-midnight range
+  if(diffMin>120){
+    // Hard-trim anything over 2 hours: push "To" back to From + 2h
+    const capMin=(fh*60+fm+120)%(24*60);
+    toEl.value=`${String(Math.floor(capMin/60)).padStart(2,'0')}:${String(capMin%60).padStart(2,'0')}`;
+    diffMin=120;
+    if(hint) hint.textContent='⚠ Permission is capped at 2 hours — end time was adjusted.';
+  } else if(hint){
+    hint.textContent=diffMin>0?`Duration: ${Math.floor(diffMin/60)}h ${diffMin%60}m (max 2 hrs)`:'Permission is capped at 2 hours.';
+  }
+}
+function onPmFromChange(){
+  const fromEl=document.getElementById('leavePmFrom'), toEl=document.getElementById('leavePmTo');
+  if(fromEl && fromEl.value && toEl && !toEl.value){
+    // Auto-fill End = Start + 2h
+    const [fh,fm]=fromEl.value.split(':').map(Number);
+    const capMin=(fh*60+fm+120)%(24*60);
+    toEl.value=`${String(Math.floor(capMin/60)).padStart(2,'0')}:${String(capMin%60).padStart(2,'0')}`;
+  }
+  clampPmTimes();
+  updateLeaveApplyBtn();
+}
+function onPmToChange(){ clampPmTimes(); updateLeaveApplyBtn(); }
+// Builds the encoded reason string sent to the backend for a Permission request.
+function buildPmReason(){
+  const from=document.getElementById('leavePmFrom')?.value||'';
+  const to=document.getElementById('leavePmTo')?.value||'';
+  const desc=(document.getElementById('leaveReason')?.value||'').trim();
+  return `Permission ${from}-${to}: ${desc}`;
+}
+// Parses a previously-encoded "Permission HH:MM-HH:MM: <description>" string
+// back into {from,to,desc} so the edit flow can repopulate the separate fields.
+function parsePmReason(reason){
+  const m=/^Permission\s+(\d{2}:\d{2})-(\d{2}:\d{2}):\s*([\s\S]*)$/.exec(reason||'');
+  if(!m) return {from:'',to:'',desc:reason||''};
+  return {from:m[1],to:m[2],desc:m[3]};
+}
 function updateLeaveApplyBtn(){
   const btn=document.getElementById('leaveApplyBtn');
-  btn.disabled=!selectedLeaveType;
+  let ok=!!selectedLeaveType;
+  if(selectedLeaveType==='pm'){
+    const from=document.getElementById('leavePmFrom')?.value||'';
+    const to=document.getElementById('leavePmTo')?.value||'';
+    const desc=(document.getElementById('leaveReason')?.value||'').trim();
+    ok = ok && !!from && !!to && !!desc;
+  }
+  btn.disabled=!ok;
   btn.textContent=selectedLeaveType?`Apply ${selectedLeaveType.toUpperCase()}`:'Apply Leave';
 }
 
@@ -3287,8 +3438,22 @@ const appliedLeaveLog={};
 async function applyLeave(){
   if(!selectedLeaveType){showToast('error','Select Leave Type','Choose a leave type first');return;}
   const dKey=document.getElementById('leaveDate').value||leaveModalDKey;
-  const reason=document.getElementById('leaveReason').value;
   if(!dKey){showToast('error','Date required','Please select a date');return;}
+  let reason=document.getElementById('leaveReason').value;
+  // Permission requires a time range (max 2 hrs) + a description — validate
+  // and encode them into the reason text sent to the backend.
+  if(selectedLeaveType==='pm'){
+    const pmFrom=document.getElementById('leavePmFrom').value;
+    const pmTo=document.getElementById('leavePmTo').value;
+    const pmDesc=reason.trim();
+    if(!pmFrom||!pmTo){showToast('error','Time required','Select a From and To time for the permission');return;}
+    const [fh,fm]=pmFrom.split(':').map(Number),[th,tm]=pmTo.split(':').map(Number);
+    let diffMin=(th*60+tm)-(fh*60+fm); if(diffMin<0) diffMin+=24*60;
+    if(diffMin<=0){showToast('error','Invalid time range','"To" must be after "From"');return;}
+    if(diffMin>120){showToast('error','Max 2 hours','Permission cannot exceed 2 hours');return;}
+    if(!pmDesc){showToast('error','Description required','Please describe the reason for this permission');return;}
+    reason=buildPmReason();
+  }
   const emp=employees.find(e=>String(e.id)===String(leaveModalEmpId));
 
   // ── EDIT MODE: updating an existing PENDING leave request in place ─────────
@@ -3860,9 +4025,10 @@ function renderWeekView(days){
     const cells=days.map(d=>{
       const dKey=dk(d);
       if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:10px;">·</span></td>`;
-      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const displaySt=isPend&&!st?'pending':st;
+      const effSt=effectiveDisplaySt(emp,st,rec);
+      const displaySt=isPend&&!st?'pending':effSt;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
       const badge=displaySt?`<span class="gv-badge ${GV_CLS[displaySt]||''}">${GV_LBL[displaySt]||'?'}</span>`:`<span style="color:var(--t3);font-size:10px;">·</span>`;
       return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badge}</td>`;
@@ -3881,10 +4047,11 @@ function renderMonthView(days){
     const cells=days.map(d=>{
       const dKey=dk(d);
       if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:9px;">·</span></td>`;
-      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       // Show "pending" badge if leave is pending approval (not yet approved)
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const displaySt=isPend?'pending':st;
+      const effSt=effectiveDisplaySt(emp,st,rec);
+      const displaySt=isPend?'pending':effSt;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
       const badge=displaySt?`<span class="gv-badge ${GV_CLS[displaySt]||''}" style="width:22px;height:18px;font-size:8px;line-height:18px;">${GV_LBL[displaySt]||'?'}</span>`:`<span style="color:var(--t3);font-size:9px;">·</span>`;
       return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badge}</td>`;
@@ -3912,9 +4079,10 @@ function renderWeekViewFiltered(days){
     const cells=days.map(d=>{
       const dKey=dk(d);
       if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:10px;">·</span></td>`;
-      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const displaySt=isPend&&!st?'pending':st;
+      const effSt=effectiveDisplaySt(emp,st,rec);
+      const displaySt=isPend&&!st?'pending':effSt;
       // Dim cells that don't match the filter
       const dimmed=statusFilter&&st!==statusFilter;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
@@ -3945,9 +4113,10 @@ function renderMonthViewFiltered(days){
     const cells=days.map(d=>{
       const dKey=dk(d);
       if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:9px;">·</span></td>`;
-      const att=attCache[dKey]||{};const st=(att[emp.id]||{}).status||'';
+      const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const displaySt=isPend?'pending':st;
+      const effSt=effectiveDisplaySt(emp,st,rec);
+      const displaySt=isPend?'pending':effSt;
       const dimmed=statusFilter&&displaySt!==statusFilter;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
       const badge=displaySt
@@ -3966,9 +4135,10 @@ function gridCellClick(empId,empType,dKey,e){
   const cfg=getRoleCfg();
   const emp=employees.find(x=>x.id===empId)||{username:'?'};
   const att=attCache[dKey]||{};const cur=(att[empId]||{}).status||'';
-  let btns=[
-    {s:'present',l:'✅ P',c:'qbtn p'},{s:'absent',l:'❌ A',c:'qbtn a'},{s:'off',l:'🔘 Off',c:'qbtn off'}
-  ].map(b=>`<button class="${b.c}${cur===b.s?' active':''}" onclick="setCellSt(${empId},'${dKey}','${b.s}',event)">${b.l}</button>`).join('');
+  // Admin-role employees never get a plain "Absent" option — quick-set only offers P / Off for them.
+  let btnDefs=[{s:'present',l:'✅ P',c:'qbtn p'},{s:'absent',l:'❌ A',c:'qbtn a'},{s:'off',l:'🔘 Off',c:'qbtn off'}];
+  if(isAdminEmp(emp)) btnDefs=btnDefs.filter(b=>b.s!=='absent');
+  let btns=btnDefs.map(b=>`<button class="${b.c}${cur===b.s?' active':''}" onclick="setCellSt(${empId},'${dKey}','${b.s}',event)">${b.l}</button>`).join('');
   if(cfg.canMarkAll||cfg.canMarkDept){
     const leaveActive=['cl','sl','el','pm'].includes(cur);
     btns+=`<button class="qbtn${leaveActive?' active':''}" style="${leaveActive?'background:var(--blue-dim);color:var(--blue);':'background:var(--bg4);color:var(--t2);'}" onclick="closePopupAndOpenLeave(${empId},'${dKey}',event)">Leave ▾</button>`;
@@ -4210,10 +4380,23 @@ function applyBulk(){
 function countSt(attMap,empList){
   let p=0,a=0,off=0,cl=0,sl=0,el=0,pm=0,u=0;
   (empList||employees).forEach(e=>{
-    const s=(attMap[e.id]||{}).status||'';
+    const rec=attMap[e.id]||{};
+    const s=rec.status||'';
+    const hasCk=!!(rec.checkin || (rec.entries && rec.entries.some(x=>x&&x.in)));
+    // Admin-role employees are never counted as Absent — count them as
+    // Present if they actually checked in that day, otherwise skip them
+    // (not counted at all, rather than being force-counted into anything).
+    if(s==='absent' && isAdminEmp(e)){
+      if(hasCk) p++;
+      return;
+    }
+    if(s==='pm' && hasCk){ pm++; p++; return; } // "P+PM" counts toward both Present and Permission
     if(s==='present')p++;else if(s==='absent')a++;else if(s==='off')off++;
     else if(s==='cl')cl++;else if(s==='sl')sl++;else if(s==='el')el++;
-    else if(s==='pm')pm++;else u++;
+    else if(s==='pm')pm++;
+    else if(s==='lop')a++;       // <4h worked ("A") counts toward Absent
+    else if(s==='half_day')p++;  // 4–7h worked ("OFF+P") counts toward Present
+    else u++;
   });
   return{p,a,off,cl,sl,el,pm,u};
 }
@@ -4244,9 +4427,12 @@ function filterStatus(s){
 // ════════════════════════════════════════════════════
 async function saveAttendance(){
   const dKey=dk(viewDate);const vis=getVisibleEmployees(dKey);const att=attCache[dKey]||{};
-  const unmarked=vis.filter(e=>!att[e.id]?.status);
+  // Admin-role employees are excluded from the "not marked → Absent" auto-fill
+  // and from the whole unmarked-count prompt: they simply aren't forced into
+  // any status just because the day wasn't explicitly marked for them.
+  const unmarked=vis.filter(e=>!att[e.id]?.status && !isAdminEmp(e));
   if(unmarked.length>0){if(!confirm(`${unmarked.length} employees not marked. Save anyway? (→ Absent)`))return;unmarked.forEach(e=>{if(!att[e.id])att[e.id]={};att[e.id].status='absent';});attCache[dKey]=att;}
-  const records=vis.map(e=>{
+  const records=vis.filter(e=>!(isAdminEmp(e) && !att[e.id]?.status)).map(e=>{
     const d=att[e.id]||{};const s=d.status||'absent';
     let apiSt='absent';
     if(s==='present') apiSt='present';
@@ -5354,6 +5540,7 @@ async function boot(){
   loadPendingHolidayRequests();
 
   applyRoleUI();
+  syncViewTabs();
   updateRangeLabel();
   renderCal();
 
