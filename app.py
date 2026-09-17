@@ -3119,19 +3119,25 @@ def export_bank_details_excel():
         # The letterhead reserves extra "virtual" columns (F..K) purely so the
         # merged title/address rows have room to wrap -- but those columns are
         # still filled/widthed cells, so Excel counts them as "used" content.
-        # Without an explicit print area, Excel's default page-break-preview
-        # boundary lands wherever its default page width happens to cut off
-        # across that wider used range, showing a stray vertical line through
-        # the letterhead/logo area that has nothing to do with our formatting.
-        # Pin the print area to the table's real width and fit it to one page
-        # so that boundary always sits at the table's actual right edge.
+        # If the print area only covers the table's own width (A..E) while
+        # that filled letterhead formatting still reaches further out (to K),
+        # Excel/LibreOffice will draw a boundary line in Normal view marking
+        # exactly where the (narrower) print area ends and the (wider) used
+        # range continues -- which is precisely the stray vertical line at
+        # column F. The fix is not to shrink the print area to the table's
+        # width, but to make it cover the *entire* used range (through K) so
+        # there is nothing left outside it for Excel to mark a boundary
+        # around. The table itself still only has borders/fill through
+        # column E, and the columns beyond it are plain white with no grid
+        # lines showing, so it still reads as ending cleanly at the table's
+        # own edge -- there's just no separate boundary line drawn anymore.
         last_row = header_row + len(rows)
-        last_col_letter = get_column_letter(NC)
-        ws.print_area = "A1:" + last_col_letter + str(last_row)  # type: ignore[assignment]
+        last_used_col_letter = get_column_letter(LETTERHEAD_END)
+        ws.print_area = "A1:" + last_used_col_letter + str(last_row)  # type: ignore[assignment]
         ws.page_setup.orientation = 'portrait'
         ws.page_setup.fitToWidth = 1
         ws.page_setup.fitToHeight = 0
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.sheet_properties.pageSetUpPr.fitToPage = True  # type: ignore[attr-defined]
 
         timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = "MIIM_Bank_Details_" + timestamp + ".xlsx"
