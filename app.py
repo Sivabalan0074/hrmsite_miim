@@ -2975,7 +2975,7 @@ def export_bank_details_excel():
         conn = _db()
         rows = conn.execute("""
             SELECT e.username AS name, e.mobile AS phone,
-                   a.account_number, a.ifsc_code
+                   a.account_number, a.ifsc_code, a.branch
             FROM employees e
             JOIN accounts a ON a.emp_id = e.id
             WHERE e.status = 'active'
@@ -3000,8 +3000,9 @@ def export_bank_details_excel():
         sep_border = Border(bottom=sep_thin)
 
         COLUMNS = [("S.No", 8), ("Name", 26), ("Phone Number", 18),
-                   ("Account Number", 24), ("IFSC Code", 16)]
+                   ("Account Number", 24), ("IFSC Code", 16), ("Branch", 20)]
         NC = len(COLUMNS)
+        IFSC_COL_IDX = 5   # 1-based column index of "IFSC Code" -- kept centered like S.No below
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -3034,24 +3035,50 @@ def export_bank_details_excel():
         for c in range(NC + 1, LETTERHEAD_END + 1):
             ws.column_dimensions[get_column_letter(c)].width = 14
 
-        # Try to embed the real company logo image, anchored in the first
-        # two columns; if Pillow/the image can't be loaded, fall back to a
-        # plain text letterhead so the export still looks professional.
-        # The logo is sized to snugly fill the S.No + Name column width so
-        # there's no big empty white gap between the logo and the company
-        # name/address text that starts right after it.
+        # Try to embed the real company logo image, sized to actually fill
+        # the LOGO_ROWS block it sits in, and spanning however many columns
+        # its aspect ratio needs at that height; if Pillow/the image can't
+        # be loaded, fall back to a plain text letterhead so the export
+        # still looks professional.
+        #
+        # Sizing it off a fixed 2-column guess (old approach) made the logo
+        # noticeably shorter than the LOGO_ROWS block's actual pixel height,
+        # leaving a visible gap of blank space below the image before the
+        # separator rule. Instead, size the logo from the real available
+        # height (the 4 letterhead rows, converted to pixels) and derive its
+        # width from that using the image's own aspect ratio -- so it fills
+        # the block vertically with only a small clean margin. The company
+        # text then starts right after however many columns that width
+        # actually spans, computed from the real column widths, so it never
+        # overlaps the (now bigger) logo.
         logo_embedded = False
+        logo_span_cols = 2  # fallback column span if the image can't be read
         try:
             from openpyxl.drawing.image import Image as XLImage
             img_bytes = io.BytesIO(base64.b64decode(MIIM_LOGO_B64))
             xl_img = XLImage(img_bytes)
-            # Approx Excel-column-width-units -> pixels (standard Calibri 11 conversion)
-            logo_col_span_units = COLUMNS[0][1] + COLUMNS[1][1]  # S.No + Name widths
-            logo_area_px = int(round(logo_col_span_units * 7 + 5))
-            target_w = max(150, logo_area_px - 6)  # small clean margin, no big gap
-            scale = target_w / xl_img.width
+
+            # Pixel height of the 4 letterhead rows (Excel row height is in
+            # points; 1pt = 96/72 px), minus a small top/bottom margin.
+            letterhead_px_h = sum(20 for _ in range(LOGO_ROWS)) * (96 / 72)
+            target_h = max(40, int(letterhead_px_h) - 10)
+            aspect = xl_img.width / xl_img.height
+            target_w = int(target_h * aspect)
+
+            xl_img.height = target_h
             xl_img.width = target_w
-            xl_img.height = int(xl_img.height * scale)
+
+            # Figure out how many leading table columns that width needs
+            # (Excel column-width-units -> pixels: units*7 + 5 per column),
+            # so the letterhead text starts right after the logo, not under it.
+            cum_px = 0
+            logo_span_cols = 0
+            for _cn, _cw in COLUMNS:
+                cum_px += _cw * 7
+                logo_span_cols += 1
+                if cum_px + 5 >= target_w or logo_span_cols >= NC - 1:
+                    break
+
             ws.add_image(xl_img, "A1")
             logo_embedded = True
         except Exception as _logo_ex:
@@ -3059,7 +3086,7 @@ def export_bank_details_excel():
 
         # Company name / address / phone, right of the logo, vertically
         # centered against the logo block, all consistently left-aligned.
-        info_col = 3 if logo_embedded else 1
+        info_col = (logo_span_cols + 1) if logo_embedded else 1
         ws.merge_cells(start_row=1, start_column=info_col, end_row=1, end_column=LETTERHEAD_END)
         t = ws.cell(row=1, column=info_col)
         t.value = "MISSION IMPOSSIBLE INDUSTRIAL MANAGEMENT"  # type: ignore[assignment]
@@ -3102,14 +3129,16 @@ def export_bank_details_excel():
             rn = header_row + ri
             d = dict(r)
             vals = [ri, d.get('name') or '-', d.get('phone') or '-',
-                    d.get('account_number') or '-', d.get('ifsc_code') or '-']
+                    d.get('account_number') or '-', d.get('ifsc_code') or '-',
+                    d.get('branch') or '-']
             rfill = PatternFill("solid", fgColor=(ROW_A if ri % 2 == 1 else ROW_B))
             for ci, val in enumerate(vals, start=1):
                 c = ws.cell(row=rn, column=ci)
                 c.value = val  # type: ignore[assignment]
                 c.fill = rfill
                 c.font = Font(size=10, color=TXT, name="Calibri")
-                c.alignment = Alignment(vertical="center", horizontal="center" if ci in (1, 5) else "left", indent=0 if ci in (1, 5) else 1)
+                is_centered = ci in (1, IFSC_COL_IDX)
+                c.alignment = Alignment(vertical="center", horizontal="center" if is_centered else "left", indent=0 if is_centered else 1)
                 c.border = brd
             ws.row_dimensions[rn].height = 20
 
