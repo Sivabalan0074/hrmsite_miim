@@ -3014,8 +3014,19 @@ def export_bank_details_excel():
         sep_thin = Side(style='thin', color=HDR_BG)
         sep_border = Border(bottom=sep_thin)
 
+        # The Branch column previously had a fixed width, so a longer branch
+        # name (e.g. "Periyanayakan Palayam (IOB)") ran past the column's
+        # right edge and spilled visibly outside the table, since the cell
+        # to its right is blank and Excel lets overflow text bleed into it
+        # once a real border/fill sits there. Size the column instead to the
+        # longest branch value actually in this export, so it always fits;
+        # cap it so one unusually long name can't blow the layout out.
+        branch_values = [str(dict(r).get('branch') or '-') for r in rows]
+        longest_branch = max((len(v) for v in branch_values), default=6)
+        branch_width = max(18, min(40, longest_branch + 4))
+
         COLUMNS = [("S.No", 8), ("Name", 26), ("Phone Number", 18),
-                   ("Account Number", 24), ("IFSC Code", 16), ("Branch", 24)]
+                   ("Account Number", 24), ("IFSC Code", 16), ("Branch", branch_width)]
         NC = len(COLUMNS)
         IFSC_COL_IDX = 5   # 1-based column index of "IFSC Code" -- kept centered like S.No below
 
