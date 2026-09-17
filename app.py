@@ -3011,15 +3011,25 @@ def export_bank_details_excel():
 
         # Reserve rows 1-4 for the letterhead (logo + company info) on a
         # clean white background, with a thin orange rule separating it
-        # from the data table below.
+        # from the data table below. The letterhead text (company name,
+        # address) can be much longer than the data table is wide, so it
+        # gets extra "virtual" columns of its own to merge across --
+        # otherwise a merged cell clips its text at the merge boundary
+        # instead of wrapping or overflowing.
         LOGO_ROWS = 4
+        LETTERHEAD_EXTRA_COLS = 6
+        LETTERHEAD_END = NC + LETTERHEAD_EXTRA_COLS
         for r in range(1, LOGO_ROWS + 1):
             ws.row_dimensions[r].height = 20
-            for c in range(1, NC + 1):
+            for c in range(1, LETTERHEAD_END + 1):
                 cell = ws.cell(row=r, column=c)
                 cell.fill = PatternFill("solid", fgColor=TITLE_BG)
                 if r == LOGO_ROWS:
                     cell.border = sep_border
+        # Give the extra letterhead-only columns a sensible width so the
+        # merged title/address rows have real room to breathe.
+        for c in range(NC + 1, LETTERHEAD_END + 1):
+            ws.column_dimensions[get_column_letter(c)].width = 14
 
         # Try to embed the real company logo image, anchored in the first
         # two columns; if Pillow/the image can't be loaded, fall back to a
@@ -3042,25 +3052,25 @@ def export_bank_details_excel():
         # Company name / address / phone, right of the logo, vertically
         # centered against the logo block, all consistently left-aligned.
         info_col = 3 if logo_embedded else 1
-        ws.merge_cells(start_row=1, start_column=info_col, end_row=1, end_column=NC)
+        ws.merge_cells(start_row=1, start_column=info_col, end_row=1, end_column=LETTERHEAD_END)
         t = ws.cell(row=1, column=info_col)
         t.value = "MISSION IMPOSSIBLE INDUSTRIAL MANAGEMENT"  # type: ignore[assignment]
         t.font = Font(bold=True, size=14, color=HDR_BG, name="Calibri")
         t.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
-        ws.merge_cells(start_row=2, start_column=info_col, end_row=2, end_column=NC)
+        ws.merge_cells(start_row=2, start_column=info_col, end_row=2, end_column=LETTERHEAD_END)
         a1 = ws.cell(row=2, column=info_col)
         a1.value = "NO.31, CHINNAN CHETTIYAR STREET, VELANDIPALAYAM, COIMBATORE - 641025"  # type: ignore[assignment]
         a1.font = Font(size=10, color=TXT, name="Calibri")
         a1.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
-        ws.merge_cells(start_row=3, start_column=info_col, end_row=3, end_column=NC)
+        ws.merge_cells(start_row=3, start_column=info_col, end_row=3, end_column=LETTERHEAD_END)
         a2 = ws.cell(row=3, column=info_col)
         a2.value = "Phone: +91-97901 43406"  # type: ignore[assignment]
         a2.font = Font(size=10, color=TXT, name="Calibri")
         a2.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
-        ws.merge_cells(start_row=4, start_column=info_col, end_row=4, end_column=NC)
+        ws.merge_cells(start_row=4, start_column=info_col, end_row=4, end_column=LETTERHEAD_END)
         g = ws.cell(row=4, column=info_col)
         g.value = ("Bank Details Export -- Generated: "  # type: ignore[assignment]
                    + _dt.datetime.now().strftime('%d %B %Y, %I:%M %p')
