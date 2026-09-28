@@ -778,6 +778,31 @@ def update_employee_salary_status(emp_id):
 
 # Attendance
 
+def _attach_pm_slots(conn, records):
+    """Adds 'pm_slots' (e.g. "10:00-11:00, 15:00-15:30") to attendance records that
+    carry an approved Permission, by reading the HH:MM-HH:MM range that the client
+    encodes into leave_requests.reason as "Permission HH:MM-HH:MM: <desc>".
+    Used by the day view to show the permission time next to the P+PM badge."""
+    import re as _re
+    for rec in records:
+        rec['pm_slots'] = ''
+        ids = [x for x in str(rec.get('pm_leave_ids') or '').split(',') if x.strip().isdigit()]
+        if not ids:
+            continue
+        slots = []
+        for lid in ids:
+            try:
+                row = conn.execute("SELECT reason FROM leave_requests WHERE id=?", (int(lid),)).fetchone()
+            except Exception:
+                row = None
+            if not row:
+                continue
+            m = _re.match(r'^\s*Permission\s+(\d{2}:\d{2})-(\d{2}:\d{2})', (row['reason'] if hasattr(row, 'keys') else row[0]) or '')
+            if m:
+                slots.append(f"{m.group(1)}-{m.group(2)}")
+        rec['pm_slots'] = ', '.join(slots)
+    return records
+
 
 @app.route('/api/attendance', methods=['GET'])
 @require_auth
@@ -787,8 +812,8 @@ def get_attendance():
         conn = _db()
         rows = conn.execute("""SELECT a.*, e.username as name, e.empid as e_emp_id, a.emp_id FROM attendance a
             JOIN employees e ON e.id=a.emp_id WHERE a.date=? ORDER BY a.checkin ASC""", (date,)).fetchall()
+        records = _attach_pm_slots(conn, [dict(r) for r in rows])
         conn.close()
-        records = [dict(r) for r in rows]
         return jsonify({"records": records, "success": True})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
@@ -4170,8 +4195,9 @@ def get_attendance_range():
         to_date = request.args.get('to', '')
         conn = _db()
         rows = conn.execute("SELECT a.*, e.username as emp_name, e.empid as e_emp_id FROM attendance a JOIN employees e ON e.id=a.emp_id WHERE a.date BETWEEN ? AND ? ORDER BY a.date", (from_date, to_date)).fetchall()
+        _recs = _attach_pm_slots(conn, [dict(r) for r in rows])
         conn.close()
-        return jsonify({"records": [dict(r) for r in rows], "success": True})
+        return jsonify({"records": _recs, "success": True})
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
