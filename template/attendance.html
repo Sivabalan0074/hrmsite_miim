@@ -1706,7 +1706,7 @@ tr.emp-row td {
         <div class="policy-cards">
           <div class="policy-card">
             <div class="pc-title">🌴 <span style="color:var(--blue)">Casual Leave (CL)</span></div>
-            <div class="pc-row"><span class="pc-key">Quota</span><span class="pc-val gr">12 days/year</span></div>
+            <div class="pc-row"><span class="pc-key">Quota</span><span class="pc-val gr">6 days/year</span></div>
             <div class="pc-row"><span class="pc-key">Carry-over</span><span class="pc-val re">Lapsed year-end</span></div>
           </div>
           <div class="policy-card">
@@ -1795,7 +1795,9 @@ function autoHoursStatus(emp, st, rec, dKey){
     const _p=String(dKey).split('-').map(Number);
     if(_p.length===3 && new Date(_p[0],_p[1]-1,_p[2]).getDay()===0){
       const _ck=!!(rec.checkin || (rec.entries && rec.entries.some(e=>e&&e.in)));
-      return ((st==='half_day'||st==='lop') && _ck) ? 'present' : st;
+      if(_ck) return (st==='half_day'||st==='lop') ? 'present' : st;
+      // Sunday & nobody checked in -> leave it blank (never A / OFF+P)
+      return (st==='absent'||st==='lop'||st==='half_day') ? '' : st;
     }
   }
   if(st!=='present') return st;
@@ -2196,7 +2198,7 @@ function loadDemo(){
     const elUsed=perm?(elAccrued>=1?Math.floor(Math.random()*Math.floor(elAccrued)):0):0;
     const remaining_earned=Math.max(0,elAccrued-elUsed);
     const clUsed=perm?Math.floor(Math.random()*4):0;
-    const remaining_casual=perm?Math.max(0,12-clUsed):0;
+    const remaining_casual=perm?Math.max(0,6-clUsed):0;
     // Probationary/Intern: single shared 1 day/month pool (MIIM Leave Policy
     // V24) — Permission is NOT a separate 2/month quota for them.
     const probUsedThisMonth=perm?0:Math.floor(Math.random()*2);
@@ -2214,8 +2216,8 @@ function loadDemo(){
       pm:pmUsed>0&&mi===nowMonth-2?1:0
     }));
     balances[emp.id]={
-      remaining_casual:perm?12:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:perm?2:1,
-      total_casual:12, total_sick:slTotal||12, total_earned:6, total_pm:perm?2:1, total_earned_accrued:elAccrued,
+      remaining_casual:perm?6:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:perm?2:1,
+      total_casual:6, total_sick:slTotal||12, total_earned:6, total_pm:perm?2:1, total_earned_accrued:elAccrued,
       // Always start at 0 — actual used count comes from miim_approved_leaves only
       used_casual:0, used_sick:0, used_earned:0, used_pm:0,
       probation_quota_month:perm?0:1, probation_used_month:perm?0:0, probation_remaining_month:perm?0:1,
@@ -2332,11 +2334,11 @@ async function loadEmployees(){
         if(d.success&&d.balance){
           const b=d.balance;
           balances[emp.id]={
-            remaining_casual:  (b.cl && b.cl.remaining)        ?? 12,
+            remaining_casual:  (b.cl && b.cl.remaining)        ?? 6,
             remaining_sick:    (b.sl && b.sl.remaining)        ?? 12,
             remaining_earned:  (b.el && b.el.remaining)        ?? 0,
             remaining_pm:      (b.pm && b.pm.remaining_month)  ?? 2,
-            total_casual:      (b.cl && b.cl.total)            ?? 12,
+            total_casual:      (b.cl && b.cl.total)            ?? 6,
             total_sick:        (b.sl && b.sl.total)            ?? 12,
             total_earned:      (b.el && b.el.total)            ?? 0,
             total_pm:          (b.pm && b.pm.month_total)      ?? 2,
@@ -2694,7 +2696,7 @@ function buildVisualLeaveCards(b, empType, empId){
   // ── Policy totals (fixed, not accrued-so-far) ──
   const SL_YEAR_TOTAL = 12;   // 1/month × 12
   const EL_YEAR_TOTAL = 6;    // 0.5/month × 12
-  const CL_YEAR_TOTAL = 12;
+  const CL_YEAR_TOTAL = 6;
   const PM_MONTH_TOTAL = 2;
   const PM_YEAR_TOTAL  = 24;
 
@@ -2817,7 +2819,7 @@ function buildVisualLeaveCards(b, empType, empId){
     }),
     card({
       icon:'🌤️', title:'Casual Leave', titleColor:'#3b82f6',
-      desc:'12 days per year. No carry-over, no encashment.',
+      desc:'6 days per year. No carry-over, no encashment.',
       tag:`${fy.label}`, tagBg:'rgba(59,130,246,.15)', tagColor:'#3b82f6', tagBorder:'rgba(59,130,246,.3)',
       border:'rgba(59,130,246,.35)', barColor:'#3b82f6',
       left: cl, pct: clUsedPct, alwaysShow: false,
@@ -3207,7 +3209,7 @@ function openLeaveModal(empId, dKey, e, preselect){
   const _upm = b.used_pm     || 0;
   const sl = perm ? (b.remaining_sick   ?? 12) : 0;
   const el = perm ? (b.remaining_earned ?? 6)  : 0;
-  const cl = perm ? (b.remaining_casual ?? 12) : 0;
+  const cl = perm ? (b.remaining_casual ?? 6) : 0;
   const pm = b.remaining_pm ?? 2;
   const _curMonthLabel = `${MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`;
 
@@ -3224,7 +3226,7 @@ function openLeaveModal(empId, dKey, e, preselect){
   const ltypes = perm ? [
     {id:'sl',cls:'lt-sl',icon:'🤒',name:'Sick Leave',desc:'1 day per month. Carries over (max 32 days).',bal:sl,total:12,used:_usl,disabled:false,period:'Accrued this year'},
     {id:'el',cls:'lt-el',icon:'⭐',name:'Earned Leave',desc:'½ day per month. Encashed with April salary.',bal:el,total:6,used:_uel,disabled:false,period:_fy2.label},
-    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'12 days per year. No carry-over at year end.',bal:cl,total:12,used:_ucl,disabled:false,period:_fy2.label},
+    {id:'cl',cls:'lt-cl',icon:'🌴',name:'Casual Leave',desc:'6 days per year. No carry-over at year end.',bal:cl,total:6,used:_ucl,disabled:false,period:_fy2.label},
     {id:'pm',cls:'lt-pm',icon:'🕐',name:'Permission',desc:'Max 2 per month, up to 2 hours each.',bal:pm,total:2,used:_upm,disabled:false,period:_curMonthLabel},
   ] : [
     {id:'sl',cls:'lt-sl',icon:'🤒',name:'Sick Leave',desc:'Not a separate quota during probation.',bal:0,total:0,used:0,disabled:true,period:'Accrued this year'},
@@ -3403,7 +3405,7 @@ function deductLeaveBalance(empId, leaveType){
     b.remaining_sick=Math.max(0,(b.remaining_sick??b.total_sick??0)-1);
   } else if(leaveType==='cl'){
     b.used_casual=(b.used_casual||0)+1;
-    b.remaining_casual=Math.max(0,(b.remaining_casual??12)-1);
+    b.remaining_casual=Math.max(0,(b.remaining_casual??6)-1);
   } else if(leaveType==='el'){
     b.used_earned=(b.used_earned||0)+1;
     b.remaining_earned=Math.max(0,(b.remaining_earned??0)-1);
@@ -4465,9 +4467,18 @@ async function saveAttendance(){
   // Admin-role employees are excluded from the "not marked → Absent" auto-fill
   // and from the whole unmarked-count prompt: they simply aren't forced into
   // any status just because the day wasn't explicitly marked for them.
-  const unmarked=vis.filter(e=>!att[e.id]?.status && !isAdminEmp(e));
+  const _sp=String(dKey).split('-').map(Number);
+  const _isSun=_sp.length===3 && new Date(_sp[0],_sp[1]-1,_sp[2]).getDay()===0;
+  // Sunday is a special-class day: only people who actually came get saved (as P);
+  // everyone else stays blank instead of being auto-marked Absent.
+  const unmarked=_isSun ? [] : vis.filter(e=>!att[e.id]?.status && !isAdminEmp(e));
   if(unmarked.length>0){if(!confirm(`${unmarked.length} employees not marked. Save anyway? (→ Absent)`))return;unmarked.forEach(e=>{if(!att[e.id])att[e.id]={};att[e.id].status='absent';});attCache[dKey]=att;}
-  const records=vis.filter(e=>!(isAdminEmp(e) && !att[e.id]?.status)).map(e=>{
+  const records=vis.filter(e=>!(isAdminEmp(e) && !att[e.id]?.status)).filter(e=>{
+    if(!_isSun) return true;
+    const dd=att[e.id]||{}; const ss=dd.status||'';
+    const ck=!!(dd.checkin || (dd.entries && dd.entries.some(x=>x&&x.in)));
+    return ck || !['','absent','lop','half_day','off'].includes(ss);
+  }).map(e=>{
     const d=att[e.id]||{};const s=d.status||'absent';
     let apiSt='absent';
     if(s==='present') apiSt='present';
