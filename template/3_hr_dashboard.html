@@ -11241,7 +11241,8 @@ function _renderTeamAtt() {
               date: dKey,
               status: st,           // keep raw: present/absent/off/sl/cl/el/pm
               checkin: rec.checkin || '',
-              checkout: rec.checkout || ''
+              checkout: rec.checkout || '',
+              pm_minutes: Number(rec.pm_minutes) || 0
             };
           }
         });
@@ -11299,7 +11300,10 @@ function _renderTeamAtt() {
       var cell_bg, cell_fg, cell_lbl;
 
       // Priority: attendance status FIRST, then holiday/weekend
-      if (st === 'present' || st === 'late') {
+      if ((st === 'present' || st === 'late') && rec && Number(rec.pm_minutes) > 0) {
+        // Present + approved Permission credit → combined "P+PM" (matches attendance.html)
+        cell_bg='rgba(249,115,22,.2)'; cell_fg='#f97316'; cell_lbl='P+PM'; counts.present++; counts.leave++;
+      } else if (st === 'present' || st === 'late') {
         cell_bg='rgba(34,197,94,.2)'; cell_fg='#22c55e'; cell_lbl='P'; counts.present++;
       } else if (st === 'absent' && isAdminMe) {
         // Admin-role: never show plain Absent — Present if checked in, else blank/not-marked.
