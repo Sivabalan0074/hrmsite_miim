@@ -2432,12 +2432,18 @@ function mapLeaveTypeToBackend(code){
 }
 
 // ── Parse one API attendance record into frontend status ─────────────────────
-// Formats stored permission slots ("10:00-11:00, 15:00-15:30") into "10:00 AM–11:00 AM".
-function fmtPmSlots(slots){
-  const f=t=>{const [H,M]=t.split(':').map(Number);const ap=H>=12?'PM':'AM';return `${String(H%12||12).padStart(2,'0')}:${String(M).padStart(2,'0')} ${ap}`;};
-  return String(slots||'').split(',').map(x=>x.trim()).filter(Boolean).map(x=>{
-    const m=/^(\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(x); return m?`${f(m[1])}–${f(m[2])}`:'';
-  }).filter(Boolean).join(', ');
+// Permission slots: stored as "10:00-11:00,15:00-15:30" (24h) -> [{from,to}]
+function parsePmSlots(slots){
+  return String(slots||'').split(',').map(x=>x.trim()).map(x=>/^(\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(x)).filter(Boolean).map(m=>({from:m[1],to:m[2]}));
+}
+function _fmt12(t){const [H,M]=String(t).split(':').map(Number);const ap=H>=12?'PM':'AM';return `${String(H%12||12).padStart(2,'0')}:${String(M).padStart(2,'0')} ${ap}`;}
+function fmtPmSlots(slots){return parsePmSlots(slots).map(s=>`${_fmt12(s.from)} – ${_fmt12(s.to)}`).join(', ');}
+// Earliest check-in of the day ('' if none)
+function _firstCheckin(entries){const ins=(entries||[]).map(e=>e.in).filter(Boolean).sort();return ins[0]||'';}
+// true when a permission starts before the first check-in (morning permission) -> badge "PM+P"
+function isMorningPm(slots, entries){
+  const fi=_firstCheckin(entries); const sl=parsePmSlots(slots);
+  return !!fi && sl.length>0 && sl.some(s=>s.from<fi);
 }
 function _parseAttRec(r){
   const st=r.status||'';
@@ -3036,10 +3042,10 @@ function buildDayRow(emp,idx,att,cfg){
   const pmWithCheckin = status==='pm' && _hasCk;
   // present + approved-permission credit => show P+PM (not plain P) in day view
   const pmPresent = (status==='present'||status==='half_day') && (Number(d.pm_minutes)||0)>0;
-  const pmTimeTxt = (pmPresent || pmWithCheckin) ? fmtPmSlots(d.pm_slots) : '';
-  const pmTimeHtml = pmTimeTxt ? `<div style="font-size:9px;font-weight:700;color:var(--orange);margin-top:3px;white-space:nowrap;">🕐 PM ${pmTimeTxt}</div>` : '';
+  const pmLabel = isMorningPm(d.pm_slots, entries) ? 'PM+P' : 'P+PM';
+  const pmTimeHtml = '';
   const pmStyle = pmPresent ? 'width:auto;padding:0 8px;background:rgba(249,115,22,.18);color:var(--orange);border-color:rgba(249,115,22,.45);' : '';
-  const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 P+PM' : '🕐 PM'};
+  const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 '+pmLabel : '🕐 PM'};
   const leaveBadgeColor={cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
   const leaveActive=['cl','sl','el','pm'].includes(status);
   const holidayActive=status==='holiday';
@@ -3052,7 +3058,7 @@ function buildDayRow(emp,idx,att,cfg){
     } else if(holidayActive){
       statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>`;
     } else {
-      const stLabel=pmPresent?'P+PM':({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
+      const stLabel=pmPresent?pmLabel:({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
       statusBtns=`<div><span class="qbtn ${stClass} active" style="cursor:default;${pmStyle}">${stLabel}</span>${pmTimeHtml}</div>`;
     }
@@ -3079,7 +3085,7 @@ function buildDayRow(emp,idx,att,cfg){
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
       </div>`;
     } else {
-      const stLabel=pmPresent?'P+PM':({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
+      const stLabel=pmPresent?pmLabel:({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
       statusBtns=`<div class="status-btns">
         <button class="qbtn ${stClass} active" style="${pmStyle}" onclick="setStatus(${emp.id},'${status}',event)">${stLabel}</button>
@@ -4290,6 +4296,13 @@ function fmtHrsMins(mins){
 
 function buildMultiInOutCell(empId, d, editable, disTime, dKey){
   const entries=getEntries(empId, dKey);
+  // Permission time row(s): before the check-in rows if the permission is earlier
+  // than the first check-in (morning), otherwise after them.
+  const _pmSl=disTime?[]:parsePmSlots(d&&d.pm_slots);
+  const _fi=_firstCheckin(entries);
+  const _pmRow=s=>`<div class="multi-inout-row pm-slot-row" style="margin:2px 0;"><span style="font-size:10.5px;font-weight:700;color:var(--orange);white-space:nowrap;">🕐 PM&nbsp; ${_fmt12(s.from)} <span style="color:var(--t3);margin:0 3px;">→</span> ${_fmt12(s.to)}</span></div>`;
+  const _pmBefore=_pmSl.filter(s=>_fi&&s.from<_fi).map(_pmRow).join('');
+  const _pmAfter =_pmSl.filter(s=>!(_fi&&s.from<_fi)).map(_pmRow).join('');
   if(!editable){
     // Read-only: show all entries as text with color
     const rows=entries.map((e,i)=>{
@@ -4300,7 +4313,7 @@ function buildMultiInOutCell(empId, d, editable, disTime, dKey){
       const outLabel = e.out ? `■ ${outTxt}` : `■ —`;
       return `<div class="multi-inout-row"><span class="multi-inout-lbl">${i+1}.</span><span style="color:${inColor};font-size:11px;font-weight:600;">▶ ${inTxt}</span><span style="color:var(--t3);margin:0 3px;">→</span><span style="color:${outColor};font-size:11px;font-weight:600;">${outLabel}</span></div>`;
     }).join('');
-    return `<div class="multi-inout-wrap">${rows}</div>`;
+    return `<div class="multi-inout-wrap">${_pmBefore}${rows}${_pmAfter}</div>`;
   }
   // Editable
   const rows=entries.map((e,i)=>{
@@ -4317,7 +4330,7 @@ function buildMultiInOutCell(empId, d, editable, disTime, dKey){
     </div>`;
   }).join('');
   const addBtn=disTime?'':` <button class="add-inout-btn" onclick="addInOutEntry(${empId},'${dKey}',event)">+ Add</button>`;
-  return `<div class="multi-inout-wrap">${rows}${addBtn}</div>`;
+  return `<div class="multi-inout-wrap">${_pmBefore}${rows}${_pmAfter}${addBtn}</div>`;
 }
 
 function _isHousekeepingEmp(empId){
