@@ -1787,8 +1787,18 @@ function isAdminEmp(emp){
 // < 4h -> lop ("A").  Skipped for: Housekeeping, admin-role, days with an
 // approved Permission credit (P+PM), and days with a missing check-in/out punch
 // (still working / not closed yet).
-function autoHoursStatus(emp, st, rec){
-  if(st!=='present' || !rec) return st;
+function autoHoursStatus(emp, st, rec, dKey){
+  if(!rec) return st;
+  // Sunday = special-class day: any check-in/out counts as a full P, no hours rule
+  // (also lifts an old auto half_day/lop status that was saved for a Sunday).
+  if(dKey){
+    const _p=String(dKey).split('-').map(Number);
+    if(_p.length===3 && new Date(_p[0],_p[1]-1,_p[2]).getDay()===0){
+      const _ck=!!(rec.checkin || (rec.entries && rec.entries.some(e=>e&&e.in)));
+      return ((st==='half_day'||st==='lop') && _ck) ? 'present' : st;
+    }
+  }
+  if(st!=='present') return st;
   if((Number(rec.pm_minutes)||0)>0) return st;
   if(emp && (isAdminEmp(emp) || _isHousekeepingEmp(emp.id))) return st;
   const ents=(rec.entries&&rec.entries.length)?rec.entries:[{in:rec.checkin||'',out:rec.checkout||''}];
@@ -1800,14 +1810,14 @@ function autoHoursStatus(emp, st, rec){
   if(mins>=480) return st;
   return mins>=240?'half_day':'lop';
 }
-function effectiveDisplaySt(emp, rawSt, rec){
+function effectiveDisplaySt(emp, rawSt, rec, dKey){
   const hasCheckin = !!(rec && (rec.checkin || (rec.entries && rec.entries.some(e=>e && e.in))));
   if(rawSt==='pm' && hasCheckin) return 'pm_present';
   // Approved Permission is stored as status 'present' + pm_minutes (see backend
   // _sync_leave_to_attendance) -> must still render as the combined P+PM badge.
   if((rawSt==='present'||rawSt==='half_day') && (Number(rec&&rec.pm_minutes)||0)>0) return 'pm_present';
   if(rawSt==='absent' && isAdminEmp(emp)) return hasCheckin ? 'present' : '';
-  return autoHoursStatus(emp, rawSt, rec);
+  return autoHoursStatus(emp, rawSt, rec, dKey);
 }
 
 // ════════════════════════════════════════════════════
@@ -2985,7 +2995,7 @@ function buildDayRow(emp,idx,att,cfg){
   // Admin-role employees never show a plain "Absent" badge: show Present
   // instead if they actually checked in that day, otherwise treat the day
   // as simply not-marked (blank) rather than forcing Absent onto them.
-  const status=autoHoursStatus(emp, (rawStatus==='absent' && isAdminRow) ? (_hasCk?'present':'') : rawStatus, d);
+  const status=autoHoursStatus(emp, (rawStatus==='absent' && isAdminRow) ? (_hasCk?'present':'') : rawStatus, d, dk(viewDate));
   const isSel=selected.has(emp.id);
   // ★ CHANGE 1: detect if this row belongs to the logged-in user
   const isOwnRow=(emp.id===currentUserId);
@@ -4051,7 +4061,7 @@ function renderWeekView(days){
       if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:10px;">·</span></td>`;
       const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const effSt=effectiveDisplaySt(emp,st,rec);
+      const effSt=effectiveDisplaySt(emp,st,rec,dKey);
       const displaySt=isPend&&!st?'pending':effSt;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
       const badge=displaySt?`<span class="gv-badge ${GV_CLS[displaySt]||''}">${GV_LBL[displaySt]||'?'}</span>`:`<span style="color:var(--t3);font-size:10px;">·</span>`;
@@ -4074,7 +4084,7 @@ function renderMonthView(days){
       const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       // Show "pending" badge if leave is pending approval (not yet approved)
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const effSt=effectiveDisplaySt(emp,st,rec);
+      const effSt=effectiveDisplaySt(emp,st,rec,dKey);
       const displaySt=isPend?'pending':effSt;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
       const badge=displaySt?`<span class="gv-badge ${GV_CLS[displaySt]||''}" style="width:22px;height:18px;font-size:8px;line-height:18px;">${GV_LBL[displaySt]||'?'}</span>`:`<span style="color:var(--t3);font-size:9px;">·</span>`;
@@ -4105,7 +4115,7 @@ function renderWeekViewFiltered(days){
       if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:10px;">·</span></td>`;
       const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const effSt=effectiveDisplaySt(emp,st,rec);
+      const effSt=effectiveDisplaySt(emp,st,rec,dKey);
       const displaySt=isPend&&!st?'pending':effSt;
       // Dim cells that don't match the filter
       const dimmed=statusFilter&&st!==statusFilter;
@@ -4139,7 +4149,7 @@ function renderMonthViewFiltered(days){
       if(!hasJoinedByDate(emp,dKey)) return `<td class="gv-cell"><span style="color:var(--t3);font-size:9px;">·</span></td>`;
       const att=attCache[dKey]||{};const rec=att[emp.id]||{};const st=rec.status||'';
       const isPend=pendingLeaves.some(l=>l.empId===emp.id&&l.date===dKey&&l.status==='pending');
-      const effSt=effectiveDisplaySt(emp,st,rec);
+      const effSt=effectiveDisplaySt(emp,st,rec,dKey);
       const displaySt=isPend?'pending':effSt;
       const dimmed=statusFilter&&displaySt!==statusFilter;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
@@ -4401,11 +4411,11 @@ function applyBulk(){
 // ════════════════════════════════════════════════════
 // SUMMARY
 // ════════════════════════════════════════════════════
-function countSt(attMap,empList){
+function countSt(attMap,empList,dKey){
   let p=0,a=0,off=0,cl=0,sl=0,el=0,pm=0,u=0;
   (empList||employees).forEach(e=>{
     const rec=attMap[e.id]||{};
-    const s=autoHoursStatus(e, rec.status||'', rec);
+    const s=autoHoursStatus(e, rec.status||'', rec, dKey);
     const hasCk=!!(rec.checkin || (rec.entries && rec.entries.some(x=>x&&x.in)));
     // Admin-role employees are never counted as Absent — count them as
     // Present if they actually checked in that day, otherwise skip them
@@ -4434,8 +4444,8 @@ function setSummaryUI(c){
   });
   const fu=document.getElementById('fUnmarked');if(fu)fu.textContent=(c.u??0)?`${c.u} not marked`:'✓ All marked';
 }
-function updateSummaryForDay(dKey){const vis=getVisibleEmployees(dKey);setSummaryUI(countSt(attCache[dKey]||{},vis));}
-function updateSummaryForRange(dKeys){let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0};dKeys.forEach(dKey=>{const vis=getVisibleEmployees(dKey);const c=countSt(attCache[dKey]||{},vis);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
+function updateSummaryForDay(dKey){const vis=getVisibleEmployees(dKey);setSummaryUI(countSt(attCache[dKey]||{},vis,dKey));}
+function updateSummaryForRange(dKeys){let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0};dKeys.forEach(dKey=>{const vis=getVisibleEmployees(dKey);const c=countSt(attCache[dKey]||{},vis,dKey);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
 function filterStatus(s){
   statusFilter=statusFilter===s?'':s;
   document.querySelectorAll('.sum-pill').forEach(p=>p.classList.remove('active'));
