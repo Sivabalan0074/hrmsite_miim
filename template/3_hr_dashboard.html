@@ -11221,7 +11221,16 @@ function _renderTeamAtt() {
 
     var myAttMap = {};
     var attArr = Array.isArray(attData) ? attData : (attData.records || attData.data || []);
-    attArr.forEach(function(r){ myAttMap[r.date] = r; });
+    attArr.forEach(function(r){
+      // A day can have several session rows (multi check-in/out) -> keep all of
+      // them so total worked hours can be computed for the 8-hour rule.
+      var prev = myAttMap[r.date];
+      var sess = (prev && prev._sessions) ? prev._sessions : [];
+      sess.push({ i: r.checkin, o: r.checkout });
+      r._sessions = sess;
+      r.pm_minutes = Math.max(Number(r.pm_minutes) || 0, prev ? (Number(prev.pm_minutes) || 0) : 0);
+      myAttMap[r.date] = r;
+    });
 
     // ── ALWAYS merge from miim_att_cache (written by attendance.html on Save) ──
     // localStorage data overrides API data for any saved day (more up-to-date)
@@ -11242,12 +11251,41 @@ function _renderTeamAtt() {
               status: st,           // keep raw: present/absent/off/sl/cl/el/pm
               checkin: rec.checkin || '',
               checkout: rec.checkout || '',
-              pm_minutes: Number(rec.pm_minutes) || 0
+              pm_minutes: Number(rec.pm_minutes) || 0,
+              _sessions: (rec.entries && rec.entries.length) ? rec.entries.map(function(e){ return { i: e.in, o: e.out }; }) : [{ i: rec.checkin, o: rec.checkout }]
             };
           }
         });
       }
     } catch(e) {}
+
+    // ── 8-hour rule: "present" with < 8h worked → OFF+P (4–8h) / A (<4h) ──
+    // Skipped for admin-role, Housekeeping, P+PM days and days with a missing punch.
+    var _isHkMe = ['housekeeping','housing keeping','house keeping'].indexOf(String(myDept||'').trim().toLowerCase().replace(/-/g,' ')) > -1;
+    function _tmin(t) {
+      if (!t || t === '--') return null;
+      var m = String(t).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/);
+      if (!m) return null;
+      var h = +m[1], mi = +m[2];
+      if (m[3]) { var ap = m[3].toLowerCase(); if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; }
+      return h * 60 + mi;
+    }
+    if (!isAdminMe && !_isHkMe) {
+      Object.keys(myAttMap).forEach(function(k) {
+        var r = myAttMap[k];
+        if (!r || r.status !== 'present' || Number(r.pm_minutes) > 0) return;
+        var sess = (r._sessions || []).filter(function(s){ return (s.i && s.i !== '--') || (s.o && s.o !== '--'); });
+        if (!sess.length) return;
+        var mins = 0, open = false;
+        sess.forEach(function(s) {
+          var a = _tmin(s.i), b = _tmin(s.o);
+          if (a === null || b === null) { open = true; return; }
+          if (b > a) mins += (b - a);
+        });
+        if (open || mins <= 0 || mins >= 480) return;
+        r.status = mins >= 240 ? 'half_day' : 'lop';
+      });
+    }
 
     var holidaySet = {};
     holidays.forEach(function(h){ if (h.date) holidaySet[h.date] = true; });
