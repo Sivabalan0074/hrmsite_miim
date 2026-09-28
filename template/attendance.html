@@ -1782,6 +1782,24 @@ function isAdminEmp(emp){
 // business rules on top of the raw backend status:
 //  1. Permission (pm) + a real check-in that same day → "pm_present" (P+PM)
 //  2. Admin-role employee marked "absent" → Present (if checked in) or blank
+// Hours rule (same as backend /api/checkout): a "present" day only counts as a
+// full P when the total worked time is >= 8h.  4h..8h -> half_day ("OFF+P"),
+// < 4h -> lop ("A").  Skipped for: Housekeeping, admin-role, days with an
+// approved Permission credit (P+PM), and days with a missing check-in/out punch
+// (still working / not closed yet).
+function autoHoursStatus(emp, st, rec){
+  if(st!=='present' || !rec) return st;
+  if((Number(rec.pm_minutes)||0)>0) return st;
+  if(emp && (isAdminEmp(emp) || _isHousekeepingEmp(emp.id))) return st;
+  const ents=(rec.entries&&rec.entries.length)?rec.entries:[{in:rec.checkin||'',out:rec.checkout||''}];
+  const real=ents.filter(e=>e&&(e.in||e.out));
+  if(!real.length) return st;
+  if(real.some(e=>!e.in||!e.out)) return st;
+  const mins=calcTotalMins(real);
+  if(mins<=0) return st;
+  if(mins>=480) return st;
+  return mins>=240?'half_day':'lop';
+}
 function effectiveDisplaySt(emp, rawSt, rec){
   const hasCheckin = !!(rec && (rec.checkin || (rec.entries && rec.entries.some(e=>e && e.in))));
   if(rawSt==='pm' && hasCheckin) return 'pm_present';
@@ -1789,7 +1807,7 @@ function effectiveDisplaySt(emp, rawSt, rec){
   // _sync_leave_to_attendance) -> must still render as the combined P+PM badge.
   if((rawSt==='present'||rawSt==='half_day') && (Number(rec&&rec.pm_minutes)||0)>0) return 'pm_present';
   if(rawSt==='absent' && isAdminEmp(emp)) return hasCheckin ? 'present' : '';
-  return rawSt;
+  return autoHoursStatus(emp, rawSt, rec);
 }
 
 // ════════════════════════════════════════════════════
@@ -2967,7 +2985,7 @@ function buildDayRow(emp,idx,att,cfg){
   // Admin-role employees never show a plain "Absent" badge: show Present
   // instead if they actually checked in that day, otherwise treat the day
   // as simply not-marked (blank) rather than forcing Absent onto them.
-  const status=(rawStatus==='absent' && isAdminRow) ? (_hasCk?'present':'') : rawStatus;
+  const status=autoHoursStatus(emp, (rawStatus==='absent' && isAdminRow) ? (_hasCk?'present':'') : rawStatus, d);
   const isSel=selected.has(emp.id);
   // ★ CHANGE 1: detect if this row belongs to the logged-in user
   const isOwnRow=(emp.id===currentUserId);
@@ -4387,7 +4405,7 @@ function countSt(attMap,empList){
   let p=0,a=0,off=0,cl=0,sl=0,el=0,pm=0,u=0;
   (empList||employees).forEach(e=>{
     const rec=attMap[e.id]||{};
-    const s=rec.status||'';
+    const s=autoHoursStatus(e, rec.status||'', rec);
     const hasCk=!!(rec.checkin || (rec.entries && rec.entries.some(x=>x&&x.in)));
     // Admin-role employees are never counted as Absent — count them as
     // Present if they actually checked in that day, otherwise skip them
