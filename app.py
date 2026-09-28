@@ -779,28 +779,47 @@ def update_employee_salary_status(emp_id):
 # Attendance
 
 def _attach_pm_slots(conn, records):
-    """Adds 'pm_slots' (e.g. "10:00-11:00, 15:00-15:30") to attendance records that
-    carry an approved Permission, by reading the HH:MM-HH:MM range that the client
-    encodes into leave_requests.reason as "Permission HH:MM-HH:MM: <desc>".
-    Used by the day view to show the permission time next to the P+PM badge."""
+    """Adds 'pm_slots' (e.g. "10:00-11:00,15:00-15:30") to attendance records that
+    carry an approved Permission. The HH:MM-HH:MM range is encoded by the client into
+    leave_requests.reason as "Permission HH:MM-HH:MM: <desc>".
+    Looks up by pm_leave_ids first; falls back to matching the employee's approved
+    Permission requests for that date (covers older approvals whose pm_leave_ids is empty)."""
     import re as _re
+    pat = _re.compile(r'^\s*Permission\s+(\d{2}:\d{2})-(\d{2}:\d{2})')
+    def _reason(row):
+        return (row['reason'] if hasattr(row, 'keys') else row[0]) or ''
+    cache = {}
     for rec in records:
         rec['pm_slots'] = ''
-        ids = [x for x in str(rec.get('pm_leave_ids') or '').split(',') if x.strip().isdigit()]
-        if not ids:
+        if not (int(rec.get('pm_minutes') or 0) > 0 or str(rec.get('pm_leave_ids') or '').strip()):
+            continue
+        key = (rec.get('emp_id'), str(rec.get('date'))[:10])
+        if key in cache:
+            rec['pm_slots'] = cache[key]
             continue
         slots = []
-        for lid in ids:
-            try:
-                row = conn.execute("SELECT reason FROM leave_requests WHERE id=?", (int(lid),)).fetchone()
-            except Exception:
-                row = None
-            if not row:
-                continue
-            m = _re.match(r'^\s*Permission\s+(\d{2}:\d{2})-(\d{2}:\d{2})', (row['reason'] if hasattr(row, 'keys') else row[0]) or '')
-            if m:
-                slots.append(f"{m.group(1)}-{m.group(2)}")
-        rec['pm_slots'] = ', '.join(slots)
+        ids = [x for x in str(rec.get('pm_leave_ids') or '').split(',') if x.strip().isdigit()]
+        try:
+            rows = []
+            for lid in ids:
+                r = conn.execute("SELECT reason FROM leave_requests WHERE id=?", (int(lid),)).fetchone()
+                if r:
+                    rows.append(r)
+            if not rows:
+                rows = conn.execute(
+                    "SELECT reason FROM leave_requests WHERE emp_id=? AND from_date<=? AND to_date>=? "
+                    "AND LOWER(leave_type) IN ('permission','pm') AND LOWER(COALESCE(status,'')) IN ('approved','approve') "
+                    "ORDER BY id", (rec.get('emp_id'), key[1], key[1])).fetchall()
+            for r in rows:
+                m = pat.match(_reason(r))
+                if m:
+                    sl = f"{m.group(1)}-{m.group(2)}"
+                    if sl not in slots:
+                        slots.append(sl)
+        except Exception as _ex:
+            print(f"[pm_slots] lookup failed: {_ex}")
+        cache[key] = ','.join(slots)
+        rec['pm_slots'] = cache[key]
     return records
 
 
