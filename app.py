@@ -3993,9 +3993,49 @@ def attendance_monthly_summary():
 
         # This month's attendance
         rows = conn.execute(
-            "SELECT date, status FROM attendance WHERE emp_id=? AND date LIKE ?",
+            "SELECT date, status, checkin, checkout, pm_minutes FROM attendance WHERE emp_id=? AND date LIKE ?",
             (emp_id, f"{period}-%")
         ).fetchall()
+
+        # Collapse multi-session days to ONE row per date and apply the
+        # 8-hour rule: 'present' with < 8h worked -> half_day (>=4h) / lop (<4h).
+        # Exempt: Housekeeping, admin, P+PM days, days with a missing punch.
+        _dept_row = conn.execute("SELECT dept, desig FROM employees WHERE id=?", (emp_id,)).fetchone()
+        _dept = ((_dept_row['dept'] if _dept_row else '') or '').strip().lower().replace('-', ' ')
+        _desig = ((_dept_row['desig'] if _dept_row else '') or '').lower()
+        _exempt_hours = _dept in ('housekeeping', 'housing keeping', 'house keeping', 'admin') or 'admin' in _desig
+        def _tmin(t):
+            t = (t or '').strip()
+            if not t or t == '--':
+                return None
+            for fmt in ('%H:%M', '%H:%M:%S', '%I:%M %p', '%I:%M:%S %p'):
+                try:
+                    x = datetime.datetime.strptime(t, fmt)
+                    return x.hour * 60 + x.minute
+                except Exception:
+                    pass
+            return None
+        _by_date = {}
+        for r in rows:
+            _by_date.setdefault(str(r['date'])[:10], []).append(r)
+        _day_rows = []
+        for _d, _rs in _by_date.items():
+            _st = (_rs[-1]['status'] or '').lower().strip()
+            if _st in ('present', 'p') and not _exempt_hours and not any((x['pm_minutes'] or 0) > 0 for x in _rs):
+                _mins, _open, _any = 0, False, False
+                for x in _rs:
+                    a, b = _tmin(x['checkin']), _tmin(x['checkout'])
+                    if a is None and b is None:
+                        continue
+                    _any = True
+                    if a is None or b is None:
+                        _open = True
+                    elif b > a:
+                        _mins += (b - a)
+                if _any and not _open and 0 < _mins < 480:
+                    _st = 'half_day' if _mins >= 240 else 'lop'
+            _day_rows.append({'date': _d, 'status': _st})
+        rows = _day_rows
 
         counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0, "half_day": 0, "holiday": 0, "other": 0}
         marked_dates = set()
