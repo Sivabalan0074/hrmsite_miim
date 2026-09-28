@@ -1785,6 +1785,9 @@ function isAdminEmp(emp){
 function effectiveDisplaySt(emp, rawSt, rec){
   const hasCheckin = !!(rec && (rec.checkin || (rec.entries && rec.entries.some(e=>e && e.in))));
   if(rawSt==='pm' && hasCheckin) return 'pm_present';
+  // Approved Permission is stored as status 'present' + pm_minutes (see backend
+  // _sync_leave_to_attendance) -> must still render as the combined P+PM badge.
+  if((rawSt==='present'||rawSt==='half_day') && (Number(rec&&rec.pm_minutes)||0)>0) return 'pm_present';
   if(rawSt==='absent' && isAdminEmp(emp)) return hasCheckin ? 'present' : '';
   return rawSt;
 }
@@ -2992,6 +2995,9 @@ function buildDayRow(emp,idx,att,cfg){
   let statusBtns='';
   // pm + a real check-in that day → combined "P+PM" badge instead of plain "PM"
   const pmWithCheckin = status==='pm' && _hasCk;
+  // present + approved-permission credit => show P+PM (not plain P) in day view
+  const pmPresent = (status==='present'||status==='half_day') && (Number(d.pm_minutes)||0)>0;
+  const pmStyle = pmPresent ? 'width:auto;padding:0 8px;background:rgba(249,115,22,.18);color:var(--orange);border-color:rgba(249,115,22,.45);' : '';
   const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 P+PM' : '🕐 PM'};
   const leaveBadgeColor={cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
   const leaveActive=['cl','sl','el','pm'].includes(status);
@@ -3005,9 +3011,9 @@ function buildDayRow(emp,idx,att,cfg){
     } else if(holidayActive){
       statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>`;
     } else {
-      const stLabel={present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status;
+      const stLabel=pmPresent?'P+PM':({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
-      statusBtns=`<span class="qbtn ${stClass} active" style="cursor:default;">${stLabel}</span>`;
+      statusBtns=`<span class="qbtn ${stClass} active" style="cursor:default;${pmStyle}">${stLabel}</span>`;
     }
   }else{
     // Editable: if a status is set, show only that status badge + a small change button
@@ -3032,10 +3038,10 @@ function buildDayRow(emp,idx,att,cfg){
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
       </div>`;
     } else {
-      const stLabel={present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status;
+      const stLabel=pmPresent?'P+PM':({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
       statusBtns=`<div class="status-btns">
-        <button class="qbtn ${stClass} active" onclick="setStatus(${emp.id},'${status}',event)">${stLabel}</button>
+        <button class="qbtn ${stClass} active" style="${pmStyle}" onclick="setStatus(${emp.id},'${status}',event)">${stLabel}</button>
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Change status">✎</button>
       </div>`;
     }
@@ -4391,6 +4397,7 @@ function countSt(attMap,empList){
       return;
     }
     if(s==='pm' && hasCk){ pm++; p++; return; } // "P+PM" counts toward both Present and Permission
+    if((s==='present'||s==='half_day') && (Number(rec.pm_minutes)||0)>0){ pm++; p++; return; } // present + approved PM credit
     if(s==='present')p++;else if(s==='absent')a++;else if(s==='off')off++;
     else if(s==='cl')cl++;else if(s==='sl')sl++;else if(s==='el')el++;
     else if(s==='pm')pm++;
