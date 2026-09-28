@@ -11273,7 +11273,14 @@ function _renderTeamAtt() {
     if (!isAdminMe && !_isHkMe) {
       Object.keys(myAttMap).forEach(function(k) {
         var r = myAttMap[k];
-        if (!r || r.status !== 'present' || Number(r.pm_minutes) > 0) return;
+        if (!r) return;
+        var _pp = String(k).split('-').map(Number);
+        if (_pp.length === 3 && new Date(_pp[0], _pp[1]-1, _pp[2]).getDay() === 0) {
+          // Sunday special class → any check-in counts as full P (lifts old half_day/lop)
+          if ((r.status === 'half_day' || r.status === 'lop') && r.checkin && r.checkin !== '--') r.status = 'present';
+          return;
+        }
+        if (r.status !== 'present' || Number(r.pm_minutes) > 0) return;
         var sess = (r._sessions || []).filter(function(s){ return (s.i && s.i !== '--') || (s.o && s.o !== '--'); });
         if (!sess.length) return;
         var mins = 0, open = false;
