@@ -1284,7 +1284,7 @@ def get_leave_balance():
         year = request.args.get('year', str(datetime.date.today().year))
         row = conn.execute("SELECT * FROM leave_balances WHERE emp_id=? AND year=?", (emp_id, year)).fetchone()
         conn.close()
-        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 12, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
+        if not row: return jsonify({"annual": 18, "sick": 10, "casual": 6, "earned": 0, "used_annual": 0, "used_sick": 0, "used_casual": 0})
         return jsonify(dict(row))
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
@@ -3631,7 +3631,7 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
       - Probationary/Intern (any leave_code other than pm): 1 day/month
         total, shared across CL/SL/EL only.
       - Permanent (Regular / Regular(PIP)), other than pm:
-          CL -> 12/year flat, no carry-over.
+          CL -> 6/year flat, no carry-over.
           SL -> carry-over aware running balance (see _sl_balance_asof).
           EL -> accrues 0.5/month, capped 6/year.
     """
@@ -3673,7 +3673,7 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
     fy_end_date = datetime.date(fy_start_date.year + 1, 3, 31)
 
     if leave_code == 'cl':
-        quota = 12.0
+        quota = CL_YEAR_QUOTA
     elif leave_code == 'el':
         quota = min(month_in_fy * 0.5, 6.0)
     else:
@@ -3705,7 +3705,7 @@ def leave_balance_report():
             "Apr 2026 - Mar 2027". Defaults to the current financial year.)
 
     MIIM Leave Policy V24, applied per leave type:
-      CL (Casual Leave)  -> 12/year flat quota. Lapses at year-end (no
+      CL (Casual Leave)  -> 6/year flat quota. Lapses at year-end (no
                              carry-over into the next FY).
       SL (Sick Leave)    -> accrues 1/month (12/year). Carries over into
                              future years, capped at a running 32-day
@@ -3765,7 +3765,7 @@ def leave_balance_report():
         q += " ORDER BY dept, username"
         emps = conn.execute(q, tuple(params)).fetchall()
 
-        cl_total = 12
+        cl_total = CL_YEAR_QUOTA
         el_accrued = round(min(month_in_fy * 0.5, 6.0), 1)
         pm_fy_total = 2 * month_in_fy
 
@@ -3955,7 +3955,7 @@ def attendance_monthly_summary():
         apply to them.
       - Regular / Regular(PIP) (permanent): CL/SL/EL are paid leave, up to
         each type's accrued quota for the year so far:
-          CL -> 12 days/year, flat (no monthly accrual, no carry-over)
+          CL -> 6 days/year, flat (no monthly accrual, no carry-over)
           SL -> accrues 1/month, capped at 12/year
           EL -> accrues 0.5/month, capped at 6/year
         Any usage beyond the accrued-to-date quota is LOP.
@@ -4020,14 +4020,20 @@ def attendance_monthly_summary():
         for r in rows:
             _by_date.setdefault(str(r['date'])[:10], []).append(r)
         _day_rows = []
+        sunday_worked = 0  # Sundays actually worked (special class) -> extra paid day each
         for _d, _rs in _by_date.items():
             _st = (_rs[-1]['status'] or '').lower().strip()
             try:
                 _is_sunday = datetime.datetime.strptime(_d, '%Y-%m-%d').weekday() == 6
             except Exception:
                 _is_sunday = False
-            if _is_sunday and _st in ('half_day', 'half-day', 'half', 'lop') and any((x['checkin'] or '--') != '--' for x in _rs):
-                _st = 'present'  # Sunday special class: any check-in = full P
+            _has_ck = any((x['checkin'] or '--') != '--' for x in _rs)
+            if _is_sunday:
+                if not _has_ck and _st in ('absent', 'a', 'lop', 'half_day', 'half-day', 'half', 'off'):
+                    continue  # Sunday not worked -> blank, never Absent/LOP
+                if _has_ck and _st in ('half_day', 'half-day', 'half', 'lop', 'present', 'p', 'late'):
+                    _st = 'present'  # Sunday special class: any check-in = full P
+                    sunday_worked += 1
             if _st in ('present', 'p') and not _is_sunday and not _exempt_hours and not any((x['pm_minutes'] or 0) > 0 for x in _rs):
                 _mins, _open, _any = 0, False, False
                 for x in _rs:
@@ -4095,7 +4101,7 @@ def attendance_monthly_summary():
                 used_before[t] = (row['c'] if row else 0) or 0
 
             accrued = {
-                "cl": 12.0,                                       # flat annual quota, no monthly accrual
+                "cl": float(CL_YEAR_QUOTA),                       # flat annual quota, no monthly accrual
                 "sl": min(month_in_fy, 12) * 1.0,                   # 1/month, capped 12/year (Apr-Mar)
                 "el": min(month_in_fy * 0.5, 6.0),                  # 0.5/month, capped 6/year (Apr-Mar)
             }
@@ -4113,6 +4119,8 @@ def attendance_monthly_summary():
         # Payable / worked days = every day in the month EXCEPT Absent and LOP leave,
         # with a Half Day (insufficient checkout hours) counting as 0.5 payable day.
         days_worked = total_days - counts['absent'] - lop_leave_days - (half_day_count * 0.5)
+        # Sunday special-class days are paid ON TOP of the normal month.
+        days_worked += sunday_worked
         conn.close()
 
         # "Unpaid days" = every day that actually reduced Days Worked above —
@@ -4147,6 +4155,7 @@ def attendance_monthly_summary():
             "lop_leave_days": lop_leave_days,
             "lop_breakdown": lop_breakdown,
             "unpaid_days": unpaid_days,
+            "sunday_worked": sunday_worked,
             "days_worked": days_worked
         })
     except Exception as ex:
@@ -4860,7 +4869,7 @@ def get_leave_balance_by_id(emp_id):
                     counts_month[st] += 1
 
         sl_remaining = round(_sl_balance_asof(conn, emp_id, joindate, today), 1) if is_perm else 0
-        cl_total = 12.0
+        cl_total = float(CL_YEAR_QUOTA)
         el_total = 6.0
         el_accrued = round(min(cur_month_in_fy * 0.5, 6.0), 1)
 
@@ -5080,6 +5089,48 @@ def _log_approval_history(conn, emp_id, leave_type, leave_date, action, actioned
     except Exception as ex:
         print(f"[_log_approval_history] {ex}")
         return False
+
+
+# Casual Leave: 6 days per financial year (was 12). Single source of truth.
+CL_YEAR_QUOTA = 6
+
+
+def _convert_excess_cl_to_sl(conn, username='prakash', cl_cap=CL_YEAR_QUOTA):
+    """One-time (idempotent) data fix: when an employee has used MORE CL than
+    the yearly cap (6), the extra (latest) CL days are converted to SL.
+    Only runs for the named employee, and only when CL count > cap, so it is
+    safe to run on every start-up (a no-op once fixed)."""
+    try:
+        emp = conn.execute("SELECT id FROM employees WHERE LOWER(username)=?", (username.lower(),)).fetchone()
+        if not emp:
+            return
+        emp_id = emp['id']
+        today = datetime.date.today()
+        fy_start, _lbl, _m = _fy_bounds(today.year, today.month)
+        fy_start_date = datetime.date.fromisoformat(fy_start)
+        fy_end_date = datetime.date(fy_start_date.year + 1, 3, 31)
+        rows = conn.execute(
+            "SELECT id, date FROM attendance WHERE emp_id=? AND status='cl' AND date>=? AND date<=? ORDER BY date, id",
+            (emp_id, fy_start_date.isoformat(), fy_end_date.isoformat())
+        ).fetchall()
+        if len(rows) <= cl_cap:
+            return
+        excess = rows[cl_cap:]
+        cl_names = ('cl', 'casual leave', 'casual')
+        for r in excess:
+            d = str(r['date'])[:10]
+            conn.execute("UPDATE attendance SET status='sl', updated_at=? WHERE id=?", (str(datetime.datetime.now()), r['id']))
+            for eid in (emp_id, str(emp_id)):
+                conn.execute(
+                    "UPDATE leave_requests SET leave_type='sl' WHERE emp_id=? AND LOWER(leave_type) IN (?,?,?) AND from_date=? AND to_date=?",
+                    (eid, *cl_names, d, d))
+                conn.execute(
+                    "UPDATE approval_history SET leave_type='sl' WHERE emp_id=? AND LOWER(leave_type) IN (?,?,?) AND leave_date=?",
+                    (eid, *cl_names, d))
+        conn.commit()
+        print(f"[DB] Converted {len(excess)} excess CL day(s) to SL for {username}.")
+    except Exception as ex:
+        print(f"[_convert_excess_cl_to_sl] {ex}")
 
 
 def _backfill_approval_history_from_leave_requests(conn):
@@ -5824,7 +5875,7 @@ def init_db():
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER, year TEXT,
         annual INTEGER DEFAULT 18, sick INTEGER DEFAULT 10,
-        casual INTEGER DEFAULT 12, earned INTEGER DEFAULT 0,
+        casual INTEGER DEFAULT 6, earned INTEGER DEFAULT 0,
         used_annual INTEGER DEFAULT 0, used_sick INTEGER DEFAULT 0,
         used_casual INTEGER DEFAULT 0
     )""")
@@ -6110,6 +6161,9 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.commit()
+
+    # ── CL is now 6/year: Prakash's extra CL days beyond 6 become SL ──
+    _convert_excess_cl_to_sl(conn, 'prakash')
 
     # ── Recover any leave that was approved/rejected before approval_history
     # logging was made reliable (see _log_approval_history / action_leave) ──
