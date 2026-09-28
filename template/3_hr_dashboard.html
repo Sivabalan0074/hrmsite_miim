@@ -4617,7 +4617,7 @@ window.highlightSubItem = window.highlightSubItem || function(el) {
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
                 <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
                   <div style="color:#3b82f6;font-weight:700;margin-bottom:6px;">🏖️ Casual Leave (CL)</div>
-                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Quota</span><span style="color:#3b82f6;font-weight:700;">12 days/year</span></div>
+                  <div style="display:flex;justify-content:space-between;color:#999;"><span>Quota</span><span style="color:#3b82f6;font-weight:700;">6 days/year</span></div>
                   <div style="display:flex;justify-content:space-between;color:#999;"><span>Carry-over</span><span style="color:#ef4444;">Lapsed year-end</span></div>
                 </div>
                 <div style="background:#1a1a1a;border:1px solid #262626;border-radius:8px;padding:10px 12px;font-size:11.5px;">
@@ -10833,7 +10833,7 @@ async function _loadMyLeaveBalance() {
 
   var slPct = slTotal > 0 ? Math.round(slRem/slTotal*100) : 0;
   var elPct = Math.round(elAccrued/6*100);
-  var clPct = Math.round(clRem/12*100);
+  var clPct = Math.round(clRem/6*100);
   var pmPct = Math.round(pmRem/2*100);
 
   // Probationary/Intern — MIIM Leave Policy V24: ONE paid leave day/month,
@@ -10853,8 +10853,8 @@ async function _loadMyLeaveBalance() {
       + card('el','⭐','Earned Leave','½ day/month. Encashed with April salary.',elAccrued+' months accrued',elPct,
           row('THIS MONTH','0/0.5') + row('THIS YEAR',elUsed+'/6'),
           elRem, '🌟 Encashed with April salary')
-      + card('cl','🌴','Casual Leave','12 days per year. No carry-over, no encashment.',fy.label,clPct,
-          row('THIS YEAR',clUsed+'/12'),
+      + card('cl','🌴','Casual Leave','6 days per year. No carry-over, no encashment.',fy.label,clPct,
+          row('THIS YEAR',clUsed+'/6'),
           clRem, '⚠️ No carry-over to next year')
       + card('pm','🕐','Permission','Max 2/month. Each up to 2 hours.',MONTHS_F[nowM-1]+' '+yr,pmPct,
           row('THIS MONTH',pmUsed+'/2') + row('THIS YEAR',pmUsedYear+'/24'),
@@ -11103,7 +11103,7 @@ async function _renderDashLeaveBalance() {
 
   var slPct = Math.min(100, Math.round(approvedSl / slTotal  * 100));
   var elPct = Math.min(100, Math.round(approvedEl / EL_TOTAL * 100));
-  var clPct = Math.min(100, Math.round(approvedCl / 12      * 100));
+  var clPct = Math.min(100, Math.round(approvedCl / 6       * 100));
   var pmPct = Math.min(100, Math.round(approvedPmMonth / pmTotalMonth * 100));
 
   // Probationary/Intern — MIIM Leave Policy V24: ONE paid leave day/month,
@@ -11140,7 +11140,7 @@ async function _renderDashLeaveBalance() {
   }
 
   var clCard = isPerm
-    ? mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'12 days per year. No carry-over, no encashment.',tag:fy.label,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/12'}],note:'\u26A0\uFE0F No carry-over to next year'})
+    ? mc({icon:'\uD83C\uDF24\uFE0F',title:'Casual Leave',tc:'#3b82f6',desc:'6 days per year. No carry-over, no encashment.',tag:fy.label,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:remCasual,pct:clPct,always:false,rows:[{k:'THIS YEAR',v:approvedCl+'/12'}],note:'\u26A0\uFE0F No carry-over to next year'})
     : mc({icon:'\uD83D\uDDD3\uFE0F',title:'Monthly Leave',tc:'#3b82f6',desc:'1 paid day/month during probation. Shared with Permission.',tag:MONTH_S[nowM-1]+' '+yr,tbg:'rgba(59,130,246,.15)',tbd:'rgba(59,130,246,.3)',br:'rgba(59,130,246,.35)',bc:'#3b82f6',left:probRemM,pct:probPct,always:true,rows:[{k:'THIS MONTH',v:probUsedM+'/'+probQuota}],note:'\u26A0\uFE0F Beyond this = LOP'});
 
   var pmCard = isPerm
@@ -11270,6 +11270,15 @@ function _renderTeamAtt() {
       if (m[3]) { var ap = m[3].toLowerCase(); if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; }
       return h * 60 + mi;
     }
+    // Sunday & no check-in → blank (never A / OFF+P / LOP)
+    Object.keys(myAttMap).forEach(function(k) {
+      var r0 = myAttMap[k]; if (!r0) return;
+      var p0 = String(k).split('-').map(Number);
+      if (p0.length === 3 && new Date(p0[0], p0[1]-1, p0[2]).getDay() === 0) {
+        var ck0 = r0.checkin && r0.checkin !== '--';
+        if (!ck0 && ['absent','lop','half_day'].indexOf(r0.status) > -1) delete myAttMap[k];
+      }
+    });
     if (!isAdminMe && !_isHkMe) {
       Object.keys(myAttMap).forEach(function(k) {
         var r = myAttMap[k];
