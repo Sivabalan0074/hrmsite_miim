@@ -2432,6 +2432,13 @@ function mapLeaveTypeToBackend(code){
 }
 
 // ── Parse one API attendance record into frontend status ─────────────────────
+// Formats stored permission slots ("10:00-11:00, 15:00-15:30") into "10:00 AM–11:00 AM".
+function fmtPmSlots(slots){
+  const f=t=>{const [H,M]=t.split(':').map(Number);const ap=H>=12?'PM':'AM';return `${String(H%12||12).padStart(2,'0')}:${String(M).padStart(2,'0')} ${ap}`;};
+  return String(slots||'').split(',').map(x=>x.trim()).filter(Boolean).map(x=>{
+    const m=/^(\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(x); return m?`${f(m[1])}–${f(m[2])}`:'';
+  }).filter(Boolean).join(', ');
+}
 function _parseAttRec(r){
   const st=r.status||'';
   let feSt='';
@@ -2457,7 +2464,8 @@ function _parseAttRec(r){
     // -- see _sync_leave_to_attendance() on the backend. Folded into Total
     // Hrs so an approved 2hr permission shows the day as a full day, not
     // short by the permission's duration.
-    pm_minutes: Number(r.pm_minutes)||0
+    pm_minutes: Number(r.pm_minutes)||0,
+    pm_slots: r.pm_slots||''
   };
 }
 function _mergeAttRec(existing, r){
@@ -2467,6 +2475,7 @@ function _mergeAttRec(existing, r){
   existing.entries=existing.entries||[{in:existing.checkin||'',out:existing.checkout||''}];
   existing.entries.push({in:ci,out:co});
   existing.pm_minutes=Math.max(existing.pm_minutes||0, Number(r.pm_minutes)||0);
+  if(r.pm_slots) existing.pm_slots=existing.pm_slots||r.pm_slots;
   // Always keep sessions sorted by check-in time (HH:MM strings sort correctly lexically).
   // Entries with no check-in time are pushed to the end.
   existing.entries.sort((a,b)=>{
@@ -3027,6 +3036,8 @@ function buildDayRow(emp,idx,att,cfg){
   const pmWithCheckin = status==='pm' && _hasCk;
   // present + approved-permission credit => show P+PM (not plain P) in day view
   const pmPresent = (status==='present'||status==='half_day') && (Number(d.pm_minutes)||0)>0;
+  const pmTimeTxt = (pmPresent || pmWithCheckin) ? fmtPmSlots(d.pm_slots) : '';
+  const pmTimeHtml = pmTimeTxt ? `<div style="font-size:9px;font-weight:700;color:var(--orange);margin-top:3px;white-space:nowrap;">🕐 PM ${pmTimeTxt}</div>` : '';
   const pmStyle = pmPresent ? 'width:auto;padding:0 8px;background:rgba(249,115,22,.18);color:var(--orange);border-color:rgba(249,115,22,.45);' : '';
   const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 P+PM' : '🕐 PM'};
   const leaveBadgeColor={cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
@@ -3037,13 +3048,13 @@ function buildDayRow(emp,idx,att,cfg){
     if(!status){
       statusBtns=`<div style="font-size:11px;color:var(--t3);font-weight:600;">—</div>`;
     } else if(leaveActive){
-      statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:${leaveBadgeColor[status]};border:1px solid ${leaveBadgeColor[status]}33;">${leaveBadgeMap[status]}</span>`;
+      statusBtns=`<div><span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:${leaveBadgeColor[status]};border:1px solid ${leaveBadgeColor[status]}33;">${leaveBadgeMap[status]}</span>${pmTimeHtml}</div>`;
     } else if(holidayActive){
       statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>`;
     } else {
       const stLabel=pmPresent?'P+PM':({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
-      statusBtns=`<span class="qbtn ${stClass} active" style="cursor:default;${pmStyle}">${stLabel}</span>`;
+      statusBtns=`<div><span class="qbtn ${stClass} active" style="cursor:default;${pmStyle}">${stLabel}</span>${pmTimeHtml}</div>`;
     }
   }else{
     // Editable: if a status is set, show only that status badge + a small change button
@@ -3073,7 +3084,7 @@ function buildDayRow(emp,idx,att,cfg){
       statusBtns=`<div class="status-btns">
         <button class="qbtn ${stClass} active" style="${pmStyle}" onclick="setStatus(${emp.id},'${status}',event)">${stLabel}</button>
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Change status">✎</button>
-      </div>`;
+      </div>${pmTimeHtml}`;
     }
   }
 
