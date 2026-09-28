@@ -4153,10 +4153,23 @@ def save_attendance():
             # "UPDATE ... WHERE emp_id=? AND date=?" touched every existing
             # row without ever deleting the extra ones, so removed/duplicate
             # sessions kept reappearing after Save & Update.
+            # Keep the PM (Permission) credit that _sync_leave_to_attendance()
+            # stored on this day. Without this, "Save & Update" deleted the row
+            # and re-inserted it with pm_minutes=0, so an approved permission
+            # silently lost its "P+PM" badge and its +2h credit.
+            prev_pm = conn.execute(
+                "SELECT pm_minutes, pm_leave_ids FROM attendance WHERE emp_id=? AND date=? "
+                "ORDER BY COALESCE(pm_minutes,0) DESC LIMIT 1", (emp_id, date)).fetchone()
+            keep_pm_min = (prev_pm['pm_minutes'] or 0) if prev_pm else 0
+            keep_pm_ids = (prev_pm['pm_leave_ids'] or '') if prev_pm else ''
+            if str(status).lower() in ('absent', 'off', 'holiday'):
+                keep_pm_min, keep_pm_ids = 0, ''
             conn.execute("DELETE FROM attendance WHERE emp_id=? AND date=?", (emp_id, date))
-            for s in sessions:
-                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                             (emp_id, date, s.get('checkin', '--'), s.get('checkout', '--'), status, note, marked_by, now_str))
+            for i, s in enumerate(sessions):
+                # credit stored on the first session row only (avoids double count)
+                conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at,pm_minutes,pm_leave_ids) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                             (emp_id, date, s.get('checkin', '--'), s.get('checkout', '--'), status, note, marked_by, now_str,
+                              keep_pm_min if i == 0 else 0, keep_pm_ids if i == 0 else ''))
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:
