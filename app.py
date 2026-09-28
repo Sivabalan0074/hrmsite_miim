@@ -3431,7 +3431,8 @@ def checkout():
                 hours = (t_out - t_in).total_seconds() / 3600.0
                 if hours < 0:
                     hours += 24  # safety net for a stray past-midnight checkin
-                if hours >= 8:
+                if hours >= 8 or _dt.date.today().weekday() == 6:
+                    # >= 8h, or Sunday special class (any hours = full present)
                     new_status = 'present'
                 elif hours >= 4:
                     new_status = 'half_day'
@@ -4021,7 +4022,13 @@ def attendance_monthly_summary():
         _day_rows = []
         for _d, _rs in _by_date.items():
             _st = (_rs[-1]['status'] or '').lower().strip()
-            if _st in ('present', 'p') and not _exempt_hours and not any((x['pm_minutes'] or 0) > 0 for x in _rs):
+            try:
+                _is_sunday = datetime.datetime.strptime(_d, '%Y-%m-%d').weekday() == 6
+            except Exception:
+                _is_sunday = False
+            if _is_sunday and _st in ('half_day', 'half-day', 'half', 'lop') and any((x['checkin'] or '--') != '--' for x in _rs):
+                _st = 'present'  # Sunday special class: any check-in = full P
+            if _st in ('present', 'p') and not _is_sunday and not _exempt_hours and not any((x['pm_minutes'] or 0) > 0 for x in _rs):
                 _mins, _open, _any = 0, False, False
                 for x in _rs:
                     a, b = _tmin(x['checkin']), _tmin(x['checkout'])
