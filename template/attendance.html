@@ -1890,6 +1890,12 @@ function autoHoursStatus(emp, st, rec, dKey){
   if(st!=='present') return st;
   if((Number(rec.pm_minutes)||0)>0) return st;
   if(emp && (isAdminEmp(emp) || _isHousekeepingEmp(emp.id))) return st;
+  // Only classify into half_day ("OFF+P") / lop ("A") once the day has actually
+  // ended. Today (and any future date) always stays plain "present" (P) here,
+  // even if the only session closed so far totals under 8h — the employee may
+  // still check in again later the same day. The hours rule only kicks in from
+  // the next day onward, once the day is fully over and the hours are final.
+  if(dKey && String(dKey)>=dk(new Date())) return st;
   const ents=(rec.entries&&rec.entries.length)?rec.entries:[{in:rec.checkin||'',out:rec.checkout||''}];
   const real=ents.filter(e=>e&&(e.in||e.out));
   if(!real.length) return st;
