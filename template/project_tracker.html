@@ -2509,7 +2509,9 @@ function accAddRow(rowId, toolName) {
   var td = getToolPhaseData(toolName);
   equalizeToolPhase(td);
   var allPhases = ['concept', 'finish', 'draft2d'];
-  var emptyRow = { station: '', name: '', complexity: '', hours: 0, overall: 0, totalPhaseHrs: 0, start: '', end: '', completion: '', internal: '', changes: '', customer: '', approved: '', pct: 0, nextHrs: 0 };
+  var _sdA = window._summaryToolData && window._summaryToolData[rowId];
+  var _wdA = getWhdToolDates(_sdA ? _sdA.product : '', toolName);
+  var emptyRow = { station: '', name: '', complexity: '', hours: 0, overall: 0, totalPhaseHrs: 0, start: _wdA.startDate || '', end: _wdA.endDate || '', completion: '', internal: '', changes: '', customer: '', approved: '', pct: 0, nextHrs: 0 };
   allPhases.forEach(function(ph) {
     td[ph].push(Object.assign({}, emptyRow, { sno: td[ph].length + 1 }));
   });
@@ -2544,6 +2546,19 @@ function renderAccTable(rowId, toolName) {
   var rgb = hexToRgb(col);
   var rows = getToolPhaseData(toolName)[phase] || [];
   var tools = toolColumns[phase] || [];
+
+  // Pre-fill empty Start/End from the dates entered in the WHD modal for this tool
+  var _sdInfo = window._summaryToolData && window._summaryToolData[rowId];
+  var _wd = getWhdToolDates(_sdInfo ? _sdInfo.product : '', toolName);
+  if (_wd.startDate || _wd.endDate) {
+    var _filled = false;
+    rows.forEach(function(r){
+      if (!r || typeof r !== 'object') return;
+      if (!r.start && _wd.startDate) { r.start = _wd.startDate; _filled = true; }
+      if (!r.end   && _wd.endDate)   { r.end   = _wd.endDate;   _filled = true; }
+    });
+    if (_filled && !(_isGuest && !_isEmployee)) { try { savePhaseDataStorage(); } catch(e){} }
+  }
   var safeName = toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   var safeRowId = rowId.replace(/'/g,"\\'");
 
@@ -3991,6 +4006,32 @@ function whdRenderSummaryFilters(zoneNums) {
   // Top-level STN/Zone filter removed — filtering is per-product via product header buttons
 }
 
+/* ── WHD tool date helpers: carry WHD start/end dates into summary + dropdown ── */
+function _whdMergeDates(obj, r) {
+  var sd = (r && r.startDate) || '', ed = (r && r.endDate) || '';
+  if (sd && (!obj.startDate || sd < obj.startDate)) obj.startDate = sd;
+  if (ed && (!obj.endDate   || ed > obj.endDate))   obj.endDate   = ed;
+}
+function getWhdToolDates(product, toolName) {
+  var out = { startDate:'', endDate:'' };
+  var rowsAll = window._whdRows || {};
+  Object.keys(rowsAll).forEach(function(key){
+    var m = key.match(/^(\d+)_(.+)$/);
+    if (!m) return;
+    if (product && m[2] !== product) return;
+    (rowsAll[key] || []).forEach(function(r){
+      if ((r.toolName || '').trim() === toolName) _whdMergeDates(out, r);
+    });
+  });
+  return out;
+}
+function _fmtWhdDate(d) {
+  if (!d) return '—';
+  var x = new Date(d + 'T00:00:00');
+  if (isNaN(x)) return d;
+  return x.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+
 function renderWhdSummary() {
   // Build productMap: { productName -> { toolName -> {concept,finish,draft,zones} } }
   var productMap = {};
@@ -4012,6 +4053,7 @@ function renderWhdSummary() {
         if (r.finish)  productMap[product][tname].finish  = true;
         if (r.draft)   productMap[product][tname].draft   = true;
         if (productMap[product][tname].zones.indexOf(zn) === -1) productMap[product][tname].zones.push(zn);
+        _whdMergeDates(productMap[product][tname], r);
         // also populate flat toolMap for legacy accordion
         var flatKey = product + ' > ' + tname;
         if (!toolMap[flatKey]) toolMap[flatKey] = {concept:false,finish:false,draft:false,zones:[],product:product,toolName:tname};
@@ -4019,6 +4061,7 @@ function renderWhdSummary() {
         if (r.finish)  toolMap[flatKey].finish  = true;
         if (r.draft)   toolMap[flatKey].draft   = true;
         if (toolMap[flatKey].zones.indexOf(zn) === -1) toolMap[flatKey].zones.push(zn);
+        _whdMergeDates(toolMap[flatKey], r);
       });
     });
   } else {
@@ -4357,6 +4400,7 @@ function renderWhdSummaryBody() {
           + '<span id="' + rowId + '-arrow" style="font-size:0.72rem;color:var(--orange);transition:transform 0.2s;flex-shrink:0;">&#9658;</span>'
           + '<span style="font-family:Rajdhani,sans-serif;font-size:0.9rem;font-weight:700;color:var(--text);white-space:nowrap;">' + escHtml(tname) + '</span>'
           + (_whdProductType === 'general' ? '' : '<span style="font-size:0.65rem;color:var(--muted);white-space:nowrap;flex-shrink:0;">(' + zoneLabels + ')</span>')
+          + ((t.startDate || t.endDate) ? '<span class="tool-date-badge" style="display:inline-flex;align-items:center;gap:5px;font-size:0.68rem;font-family:\'Exo 2\',sans-serif;color:#cbd5e1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:2px 10px;white-space:nowrap;flex-shrink:0;">&#128197; ' + _fmtWhdDate(t.startDate) + ' &rarr; ' + _fmtWhdDate(t.endDate) + '</span>' : '')
           + '<div class="tool-stats-wrap" style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;margin-left:12px;">'
           + '<span style="font-size:0.6rem;color:#888;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-weight:600;white-space:nowrap;">Total Hrs</span>'
           + '<span class="tool-total-hrs" style="font-size:0.8rem;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--orange);white-space:nowrap;">0 hrs</span>'
