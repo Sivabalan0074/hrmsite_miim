@@ -1426,11 +1426,7 @@ tr.emp-row td {
 
 <!-- TOOLBAR -->
 <div class="toolbar" id="toolbarEl" style="display:none;">
-  <div class="search-wrap">
-    <span class="search-icon">🔍</span>
-    <input class="search-input" id="searchInput" placeholder="Search employee…" oninput="renderDayTable()">
-  </div>
-  <select class="sel" id="deptFilter" onchange="renderDayTable()">
+  <select class="sel" id="deptFilter" onchange="onDeptFilterChange()">
     <option value="">All Departments</option>
     <option value="Design">Design</option>
     <option value="Simulation">Simulation</option>
@@ -1438,7 +1434,10 @@ tr.emp-row td {
     <option value="HR">HR</option>
     <option value="Admin">Admin</option>
   </select>
-  <select class="sel" id="typeFilter" onchange="renderDayTable()">
+  <select class="sel" id="empFilter" style="min-width:170px;" onchange="applyToolbarFilter()">
+    <option value="">All Employees</option>
+  </select>
+  <select class="sel" id="typeFilter" onchange="applyToolbarFilter()">
     <option value="">All Types</option>
     <option value="Regular">Regular</option>
     <option value="Probationary">Probationary</option>
@@ -2154,15 +2153,15 @@ function applyRoleUI(){
   // stay separately gated by cfg.canMarkAll just below, so read-only roles
   // still can't edit — they can only search/filter within what they're
   // allowed to see (PM/SM: own dept, Employee: just themselves).
-  const showTb=currentView==='day';
+  const showTb=true;
   document.getElementById('toolbarEl').style.display=showTb?'flex':'none';
-  document.getElementById('bulkBarEl').style.display=cfg.canMarkAll?'flex':'none';
+  document.getElementById('bulkBarEl').style.display=(cfg.canMarkAll&&currentView==='day')?'flex':'none';
   const ds=document.getElementById('deptFilter');
   if(cfg.canMarkDept||cfg.selfOnly||currentRole==='employee'||currentRole==='member'){
     // These roles can only ever see their own department (or just themselves)
     // no matter what — lock the filter to it instead of letting them pick a
     // department that would just show an empty table.
-    ds.value=currentUserDept;ds.disabled=true;
+    ds.value=currentUserDept;ds.disabled=true;populateEmpFilter(true);
   }
   else ds.disabled=false;
   // Show Approval History button for admin, senior_hr, hr, sm, pm (all who can approve)
@@ -2249,7 +2248,9 @@ function setView(v){
   try{ sessionStorage.setItem('miim_att_view', v); }catch(e){}
   syncViewTabs();
   const cfg=getRoleCfg();
-  document.getElementById('toolbarEl').style.display=(!cfg.readOnly&&v==='day')?'flex':'none';
+  document.getElementById('toolbarEl').style.display=(!cfg.readOnly)?'flex':'none';
+  document.getElementById('bulkBarEl').style.display=(cfg.canMarkAll&&v==='day')?'flex':'none';
+  populateEmpFilter();
   // Summary bar only in day view for editable roles
   document.getElementById('summaryBar').style.display=cfg.readOnly?'none':'';
   document.getElementById('footerEl').style.display=cfg.readOnly?'none':'';
@@ -2836,6 +2837,7 @@ async function fetchAttRange(days){
 // ════════════════════════════════════════════════════
 async function render(){
   if(_navigatingAway)return;
+  populateEmpFilter();
   if(expandedEmpId&&currentView==='day'){
     await fetchAtt(dk(viewDate));
     renderEmployeeDetail(expandedEmpId);
@@ -3145,16 +3147,38 @@ function getVisibleEmployees(dKey){
   return list;
 }
 
-function dayFiltered(){
-  const q=(document.getElementById('searchInput')?.value||'').toLowerCase();
+// ── Toolbar filters (Department → Employee, Type) — shared by Day / Week / Month ──
+function applyToolbarFilters(list){
   const dept=document.getElementById('deptFilter')?.value||'';
   const type=document.getElementById('typeFilter')?.value||'';
-  const dKey=dk(viewDate);const att=attCache[dKey]||{};
-  return getVisibleEmployees(dKey).filter(e=>{
+  const emp=document.getElementById('empFilter')?.value||'';
+  return list.filter(e=>{
     if(dept&&e.dept!==dept)return false;
     if(type&&e.type!==type)return false;
+    if(emp&&String(e.id)!==String(emp))return false;
+    return true;
+  });
+}
+function populateEmpFilter(resetSel){
+  const sel=document.getElementById('empFilter'); if(!sel) return;
+  const dept=document.getElementById('deptFilter')?.value||'';
+  const prev=resetSel?'':sel.value;
+  const list=getVisibleEmployees().filter(e=>!dept||e.dept===dept)
+    .slice().sort((a,b)=>String(a.username).localeCompare(String(b.username)));
+  sel.innerHTML='<option value="">All Employees'+(dept?' ('+_hEsc(dept)+')':'')+'</option>'+
+    list.map(e=>`<option value="${_hEsc(e.id)}">${_hEsc(e.username)}</option>`).join('');
+  sel.value=list.some(e=>String(e.id)===String(prev))?prev:'';
+}
+function onDeptFilterChange(){ populateEmpFilter(true); applyToolbarFilter(); }
+function applyToolbarFilter(){
+  if(currentView==='day') renderDayTable();
+  else render().catch(e=>console.warn('render error:',e));
+}
+
+function dayFiltered(){
+  const dKey=dk(viewDate);const att=attCache[dKey]||{};
+  return applyToolbarFilters(getVisibleEmployees(dKey)).filter(e=>{
     if(statusFilter&&(att[e.id]?.status||'')!==statusFilter)return false;
-    if(q&&!e.username.toLowerCase().includes(q)&&!e.dept.toLowerCase().includes(q))return false;
     return true;
   });
 }
@@ -4337,7 +4361,7 @@ function weekCellBody(emp,dKey,rec,st,badgeHtml,dimmed){
 
 function renderWeekView(days){
   const mc=document.getElementById('mainContent');
-  const cfg=getRoleCfg();const vis=getVisibleEmployees();
+  const cfg=getRoleCfg();const vis=applyToolbarFilters(getVisibleEmployees());
   const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span>${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
@@ -4359,7 +4383,7 @@ function renderWeekView(days){
 
 function renderMonthView(days){
   const mc=document.getElementById('mainContent');
-  const vis=getVisibleEmployees();
+  const vis=applyToolbarFilters(getVisibleEmployees());
   const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:34px;padding:5px 2px;text-align:center;"><div class="gv-wday">${DAYS_S[d.getDay()]}</div>${d.getDate()}${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
@@ -4383,7 +4407,7 @@ function renderMonthView(days){
 function renderWeekViewFiltered(days){
   const mc=document.getElementById('mainContent');
   const cfg=getRoleCfg();
-  let vis=getVisibleEmployees();
+  let vis=applyToolbarFilters(getVisibleEmployees());
   // Apply status filter: keep only employees who have that status on ANY day in range
   if(statusFilter){
     vis=vis.filter(emp=>days.some(d=>{
@@ -4418,7 +4442,7 @@ function renderWeekViewFiltered(days){
 
 function renderMonthViewFiltered(days){
   const mc=document.getElementById('mainContent');
-  let vis=getVisibleEmployees();
+  let vis=applyToolbarFilters(getVisibleEmployees());
   // Apply status filter: keep only employees who have that status on ANY day in range
   if(statusFilter){
     vis=vis.filter(emp=>days.some(d=>{
