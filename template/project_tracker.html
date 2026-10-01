@@ -2528,6 +2528,7 @@ function accDeleteRow(rowId, toolName, phase, idx) {
       td[ph].forEach(function(r,i){ r.sno=i+1; });
     }
   });
+  Object.keys(_accSel).forEach(function(k){ if (k.indexOf(rowId + '|' + toolName + '|') === 0) _accSel[k].rows = {}; });
   savePhaseDataStorage();
   renderAccTable(rowId, toolName);
   showToast('🗑️ Row deleted.');
@@ -2645,7 +2646,7 @@ function accGetSel(rowId, toolName, phase) {
 function accFillBarHtml(rowId, toolName, phase) {
   return '<div id="accfill-'+rowId+'" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;background:rgba(249,115,22,0.07);border-bottom:1px solid rgba(249,115,22,0.25);position:sticky;left:0;">'
     + '<span id="accfill-info-'+rowId+'" style="font-size:0.74rem;font-family:Rajdhani,sans-serif;font-weight:700;letter-spacing:.5px;color:#fdba74;"></span>'
-    + '<input id="accfill-date-'+rowId+'" type="date" style="background:var(--input-bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-family:\'Exo 2\',sans-serif;font-size:0.78rem;">'
+    + '<input id="accfill-date-'+rowId+'" type="date" onchange="accOnFillDate(\''+rowId.replace(/'/g,"\\'")+'\',\''+toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',\''+phase+'\',this.value)" style="background:var(--input-bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-family:\'Exo 2\',sans-serif;font-size:0.78rem;">'
     + '<button onclick="accApplyFill(\''+rowId.replace(/'/g,"\\'")+'\',\''+toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',\''+phase+'\')" style="background:var(--orange);border:none;color:#fff;border-radius:6px;padding:5px 14px;font-size:0.76rem;font-weight:700;cursor:pointer;">Fill Date</button>'
     + '<button onclick="accClearSel(\''+rowId.replace(/'/g,"\\'")+'\',\''+toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',\''+phase+'\')" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 12px;font-size:0.76rem;cursor:pointer;">Clear</button>'
     + '</div>';
@@ -2687,23 +2688,37 @@ function accClearSel(rowId, toolName, phase) {
   _accSel[rowId + '|' + toolName + '|' + phase] = { rows:{}, cols:{} };
   renderAccTable(rowId, toolName);
 }
-function accApplyFill(rowId, toolName, phase) {
+function accOnFillDate(rowId, toolName, phase, v) {
+  // auto-fill as soon as a complete, sensible date is picked (ignores partial typing like 0002-..)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return;
+  var y = +v.slice(0, 4); if (y < 2000 || y > 2100) return;
+  var sel = accGetSel(rowId, toolName, phase);
+  if (!Object.keys(sel.cols).some(function(k){ return sel.cols[k]; })) { showToast('⚠️ Tick a date column first.'); return; }
+  if (!Object.keys(sel.rows).some(function(k){ return sel.rows[k]; })) { showToast('⚠️ Tick the unit checkbox(es) first.'); return; }
+  accApplyFill(rowId, toolName, phase, v);
+}
+function accApplyFill(rowId, toolName, phase, dateArg) {
   var dEl = document.getElementById('accfill-date-'+rowId);
-  var date = dEl ? dEl.value : '';
+  var date = (typeof dateArg === 'string' && dateArg) ? dateArg : (dEl ? dEl.value : '');
   if (!date) { showToast('⚠️ Pick a date first.'); return; }
   var sel = accGetSel(rowId, toolName, phase);
   var cols = Object.keys(sel.cols).filter(function(k){ return sel.cols[k]; });
   if (!cols.length) { showToast('⚠️ Tick a date column first.'); return; }
   var rows = getToolPhaseData(toolName)[phase] || [];
+  var anyRowSel = Object.keys(sel.rows).some(function(k){ return sel.rows[k]; });
   var targets = [];
-  rows.forEach(function(r, i){ if (r && typeof r === 'object' && (sel.rows[i] || !Object.keys(sel.rows).some(function(k){ return sel.rows[k]; }))) targets.push(i); });
+  rows.forEach(function(r, i){ if (r && typeof r === 'object' && (!anyRowSel || sel.rows[i])) targets.push(i); });
   if (!targets.length) { showToast('⚠️ No units to fill.'); return; }
-  targets.forEach(function(i){
-    cols.forEach(function(f){ rows[i][f] = date; });
-    autoCalcUWC(toolName, phase, i);
-  });
-  savePhaseDataStorage();
+
+  // 1) write the date into EVERY selected row/column first (nothing below can stop it half-way)
+  targets.forEach(function(i){ cols.forEach(function(f){ rows[i][f] = date; }); });
+  // 2) recalc unit-wise completion for each row without saving each time
+  targets.forEach(function(i){ try { autoCalcUWC(toolName, phase, i, true); } catch(e) { console.error(e); } });
+  // 3) save once
+  try { savePhaseDataStorage(); } catch(e) { console.error(e); }
+  // 4) redraw table, keep the picked date visible in the fill bar
   renderAccTable(rowId, toolName);
+  var nb = document.getElementById('accfill-date-'+rowId); if (nb) nb.value = date;
   try { refreshToolHeader(rowId, toolName); } catch(e) {}
   showToast('✅ ' + cols.length + ' column(s) filled for ' + targets.length + ' unit(s).');
 }
@@ -5094,7 +5109,7 @@ function calcPhaseUWC(phaseKey, rowData) {
   return Math.round((filled / fields.length) * weights[phaseKey]);
 }
 
-function autoCalcUWC(toolName, changedPhase, idx) {
+function autoCalcUWC(toolName, changedPhase, idx, skipSave) {
   var td = getToolPhaseData(toolName || _accTool);
   var rows = td[changedPhase] || [];
   if (!rows[idx]) return;
@@ -5106,7 +5121,7 @@ function autoCalcUWC(toolName, changedPhase, idx) {
   rows[idx].phaseOverall[changedPhase] = phaseVal;
   // Keep overall = this phase's value (only used when this phase tab is active)
   rows[idx].overall = phaseVal;
-  savePhaseDataStorage();
+  if (!skipSave) savePhaseDataStorage();
 
   // Update UWC bar for changed phase only
   var barId = 'uwcbar-' + changedPhase + '-' + idx;
