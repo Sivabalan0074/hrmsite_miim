@@ -1067,6 +1067,13 @@ tr.emp-row td {
 #rhEmpList .rh-row input[type=checkbox]{width:15px !important;height:15px !important;min-width:0 !important;margin:0 !important;padding:0 !important;justify-self:center;accent-color:#f97316;cursor:pointer;}
 #rhEmpList .rh-name{font-weight:600;text-align:left;text-transform:uppercase;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #rhEmpList .rh-dept{color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:right;white-space:nowrap;}
+
+/* Comp-Off (earned by working 8h+ on a Sunday) */
+.gv-compoff{background:rgba(6,182,212,0.18);color:#22d3ee;}
+.lt-compoff{--ltc-color:#06b6d4;}.lt-compoff .ltc-name{color:#22d3ee;}.lt-compoff .ltc-stat-val{color:#22d3ee;}
+.pill-compoff{--pill-color:#06b6d4;}.pill-compoff.active{background:rgba(6,182,212,0.15);}.pill-compoff .sum-count{color:#22d3ee;}
+.co-strip{background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.35);border-radius:8px;padding:9px 14px;font-size:11px;color:#22d3ee;margin-bottom:12px;line-height:1.6;}
+.co-strip b{color:#67e8f9;}.co-strip .co-sub{color:var(--t3);font-size:10px;}
 </style>
 <style>
 /* ═══════════════════════════════════════════
@@ -1386,6 +1393,10 @@ tr.emp-row td {
     <span class="sum-icon">🕐</span>
     <div><div class="sum-label">PM</div><div class="sum-count" id="sc-pm">0</div></div>
   </div>
+  <div class="sum-pill pill-compoff" onclick="filterStatus('compoff')" id="spill-compoff" title="Comp Off taken (earned by working 8h+ on a Sunday)">
+    <span class="sum-icon">🔄</span>
+    <div><div class="sum-label">Comp Off</div><div class="sum-count" id="sc-compoff">0</div></div>
+  </div>
   <div class="sum-pill pill-hol" id="spill-hol" title="Holidays (office + religious) on the selected day/range" style="cursor:default;">
     <span class="sum-icon">🎉</span>
     <div><div class="sum-label">Holiday</div><div class="sum-count" id="sc-hol">0</div></div>
@@ -1478,7 +1489,7 @@ tr.emp-row td {
       <div class="leave-form-row">
         <div class="leave-form-group">
           <label class="leave-form-label">📅 Date</label>
-          <input type="date" class="leave-form-input" id="leaveDate">
+          <input type="date" class="leave-form-input" id="leaveDate" onchange="refreshCompoffCard()">
         </div>
         <div class="leave-form-group">
           <label class="leave-form-label" id="leaveReasonLbl">📝 Reason (Optional)</label>
@@ -1816,12 +1827,12 @@ function inFY(y, m, fyStartYear){
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
-const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6',rh:'#c084fc',pm_present:'var(--orange)'};
-const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-offp',pending:'gv-pending',holiday:'gv-holiday',rh:'gv-rh',pm_present:'gv-pmpresent'};
+const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6',rh:'#c084fc',pm_present:'var(--orange)',compoff:'#06b6d4'};
+const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-offp',pending:'gv-pending',holiday:'gv-holiday',rh:'gv-rh',pm_present:'gv-pmpresent',compoff:'gv-compoff'};
 // Labels: half_day (4-7h worked) shows as "OFF+P", lop (<4h / no checkin) shows
 // as "A" (same visual meaning as a full absent day), pm_present is the
 // combined "Permission + real check-in that day" badge ("P+PM").
-const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'A',half_day:'OFF+P',pending:'?',holiday:'H',rh:'RH',pm_present:'P+PM'};
+const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'A',half_day:'OFF+P',pending:'?',holiday:'H',rh:'RH',pm_present:'P+PM',compoff:'CO'};
 
 // ── Admin-role detection (superadmin / admin designation or dept) ──────────
 // Per business rule: admin-role employees should never show a plain "Absent"
@@ -2492,6 +2503,7 @@ async function loadEmployees(){
             probation_quota_month:     (b.probation && b.probation.quota_month)     ?? 1,
             probation_used_month:      (b.probation && b.probation.used_month)      ?? 0,
             probation_remaining_month: (b.probation && b.probation.remaining_month) ?? 1,
+            compoff:           b.compoff || {earned:0,used:0,remaining:0,earned_dates:[],used_dates:[]},
             monthly:           d.monthly || [],
             year:              yr
           };
@@ -2564,11 +2576,11 @@ async function loadEmployees(){
 }
 
 function mapLeaveType(lt){
-  const m={'Sick':'sl','Casual':'cl','Earned':'el','Annual':'el','Permission':'pm','Unpaid':'cl'};
+  const m={'Sick':'sl','Casual':'cl','Earned':'el','Annual':'el','Permission':'pm','Unpaid':'cl','Comp Off':'compoff','Comp-Off':'compoff','Compoff':'compoff'};
   return m[lt]||'cl';
 }
 function mapLeaveTypeToBackend(code){
-  const m={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission'};
+  const m={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission',compoff:'Comp Off'};
   return m[code]||'Casual';
 }
 
@@ -2594,12 +2606,13 @@ function _parseAttRec(r){
   else if(st==='off')             feSt='off';
   else if(st==='leave'){
     const note=(r.note||r.remarks||'').toLowerCase();
-    if(note.includes('sick')||note.includes('sl'))        feSt='sl';
+    if(note.includes('comp off')||note.includes('comp-off')||note.includes('compoff')) feSt='compoff';
+    else if(note.includes('sick')||note.includes('sl'))        feSt='sl';
     else if(note.includes('casual')||note.includes('cl')) feSt='cl';
     else if(note.includes('earned')||note.includes('el')) feSt='el';
     else if(note.includes('permission')||note.includes('pm')) feSt='pm';
     else feSt='cl';
-  } else if(['sl','cl','el','pm'].includes(st)) feSt=st;
+  } else if(['sl','cl','el','pm','compoff'].includes(st)) feSt=st;
   else if(st==='holiday'||st==='rh') feSt=st;
   const ci=(r.checkin&&r.checkin!=='--')?r.checkin:'';
   const co=(r.checkout&&r.checkout!=='--')?r.checkout:'';
@@ -3163,7 +3176,7 @@ function buildDayRow(emp,idx,att,cfg){
   const isOwnRow=(emp.id===currentUserId);
   const dotColor=STATUS_DOT[status]||'var(--border)';
   const editable=canEdit(emp);
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el','compoff'].includes(status);
 
   // ── Check-in / Check-out state for row highlighting ──
   const entries=getEntries(emp.id, dk(viewDate));
@@ -3190,9 +3203,9 @@ function buildDayRow(emp,idx,att,cfg){
   const pmLabel = isMorningPm(d.pm_slots, entries) ? 'PM+P' : 'P+PM';
   const pmTimeHtml = '';
   const pmStyle = pmPresent ? 'width:auto;padding:0 8px;background:rgba(249,115,22,.18);color:var(--orange);border-color:rgba(249,115,22,.45);' : '';
-  const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 '+pmLabel : '🕐 PM'};
-  const leaveBadgeColor={cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
-  const leaveActive=['cl','sl','el','pm'].includes(status);
+  const leaveBadgeMap={compoff:'🔄 CO',cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 '+pmLabel : '🕐 PM'};
+  const leaveBadgeColor={compoff:'#22d3ee',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
+  const leaveActive=['cl','sl','el','pm','compoff'].includes(status);
   const holidayActive=(status==='holiday'||status==='rh');
   if(!editable){
     // Read-only: show only the current status as a single badge
@@ -3249,7 +3262,7 @@ function buildDayRow(emp,idx,att,cfg){
         ?`<button class="apply-leave-btn has-leave" onclick="event.stopPropagation();editPendingLeave(${myPendingReq.id})">✎ Edit Leave</button>`
         :isAutoLop
           ?`<button class="apply-leave-btn lop-cta" title="This day is auto-marked LOP (checked-in/out under 4 hrs). Apply Permission here if balance is available." onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event,'pm')">🕐 Apply Permission</button>`
-          :`<button class="apply-leave-btn${['cl','sl','el','pm'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`)
+          :`<button class="apply-leave-btn${['cl','sl','el','pm','compoff'].includes(status)?' has-leave':''}" onclick="openLeaveModal(${emp.id},'${dk(viewDate)}',event)">📋 Leave</button>`)
     :'';
 
   // Correction request button — visible to employees for own row, managers see all
@@ -3301,6 +3314,45 @@ function editPendingLeave(reqId){
   if(titleEl)titleEl.textContent='✏️ Edit Leave Request';
 }
 
+// ── COMP OFF ───────────────────────────────────────────────────────────────
+// Earned: work a Sunday for 8h+ (server computes it from the attendance table).
+// Usable: only on a working day AFTER the Sunday that earned it. Same rule as
+// the backend (_compoff_available_for) so the UI never offers what the server will refuse.
+function compoffInfo(empId){ return (balances[empId]||{}).compoff || {earned:0,used:0,remaining:0,earned_dates:[],used_dates:[]}; }
+function compoffAvailableFor(empId,dKey){
+  if(!dKey) return 0;
+  const _p=String(dKey).split('-').map(Number);
+  if(_p.length===3 && new Date(_p[0],_p[1]-1,_p[2]).getDay()===0) return 0;   // Sunday is already off
+  const c=compoffInfo(empId), e=c.earned_dates||[], u=(c.used_dates||[]).filter(d=>d!==dKey);
+  const eb=e.filter(d=>d<dKey).length, ub=u.filter(d=>d<dKey).length;
+  return Math.max(0,Math.min(eb-ub, e.length-u.length));
+}
+function compoffBlockMsg(empId,dKey){
+  const c=compoffInfo(empId);
+  const _p=String(dKey||'').split('-').map(Number);
+  if(_p.length===3 && new Date(_p[0],_p[1]-1,_p[2]).getDay()===0) return '🚫 Sunday is already an off day';
+  if((c.remaining||0)>0) return '🚫 Comp Off can only be used AFTER the Sunday you worked';
+  return '🚫 No Comp Off — work 8h+ on a Sunday to earn one';
+}
+function _fmtDM2(d){ const p=String(d).split('-'); return p.length===3?`${p[2]}/${p[1]}`:d; }
+function compoffStripHtml(empId){
+  const c=compoffInfo(empId);
+  const dates=(c.earned_dates||[]).slice(-6).map(_fmtDM2).join(', ');
+  return `<div class="co-strip">🔄 <b>Comp Off:</b> ${c.remaining||0} available <span class="co-sub">(earned ${c.earned||0} · used ${c.used||0})</span>${dates?`<div class="co-sub">Sundays worked 8h+: ${dates}${(c.earned_dates||[]).length>6?' …':''}</div>`:`<div class="co-sub">Work 8+ hours on a Sunday to earn a Comp Off.</div>`}</div>`;
+}
+function refreshCompoffCard(){
+  const card=document.getElementById('ltcard-compoff'); if(!card) return;
+  const dKey=document.getElementById('leaveDate')?.value||leaveModalDKey;
+  const ok=compoffAvailableFor(leaveModalEmpId,dKey)>0;
+  card.classList.toggle('disabled',!ok);
+  if(_ltBalanceMap) _ltBalanceMap.compoff=ok;
+  let note=card.querySelector('.co-block-note');
+  if(!ok){
+    if(!note){ note=document.createElement('div'); note.className='ltc-lop-note co-block-note'; card.appendChild(note); }
+    note.textContent=compoffBlockMsg(leaveModalEmpId,dKey);
+    if(selectedLeaveType==='compoff'){ selectedLeaveType=null; updateLTCardSelection(); updateLeaveApplyBtn(); }
+  } else if(note) note.remove();
+}
 function openLeaveModal(empId, dKey, e, preselect){
   if(e)e.stopPropagation();
   leaveModalEmpId=empId;
@@ -3337,6 +3389,8 @@ function openLeaveModal(empId, dKey, e, preselect){
       balCardsEl.innerHTML=`<div style="background:rgba(234,179,8,0.07);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yellow);margin-bottom:14px;">⚠️ ${emp?.type||''} — 1 <b>paid</b> leave day/month, shared across "Monthly Leave" &amp; "Permission" below (CL/SL/EL quotas don't apply). Used ${_probUsed}/1 this month${_probRem<=0?' — anything more this month is unpaid (LOP)':''}.</div>`;
       balCardsEl.style.display='block';
     }
+    balCardsEl.insertAdjacentHTML('beforeend', compoffStripHtml(empId));
+    balCardsEl.style.display='block';
   }
 
   const curStatus=(attCache[dKey]||{})[empId]?.status||'';
@@ -3395,12 +3449,18 @@ function openLeaveModal(empId, dKey, e, preselect){
     {id:'pm',cls:'lt-pm',icon:'🕐',name:'Permission',desc:`Part-day (up to 2 hrs). Shares the same 1 day/month quota as Monthly Leave.`,bal:_probRem,total:_probQuota,used:_probUsed,disabled:false,period:_curMonthLabel},
   ];
 
+  // Comp Off — available to every employee type (perm / probation / intern)
+  { const _co=compoffInfo(empId);
+    ltypes.push({id:'compoff',cls:'lt-compoff',icon:'🔄',name:'Comp Off',desc:'Earned by working 8+ hrs on a Sunday. Use it on any day after that Sunday.',
+      bal:_co.remaining||0,total:_co.earned||0,used:_co.used||0,disabled:false,period:'Sunday work credit',
+      avail:compoffAvailableFor(empId,dKey),blockMsg:compoffBlockMsg(empId,dKey)}); }
+
   const grid=document.getElementById('leaveTypeGrid');
   grid.innerHTML=ltypes.map(lt=>{
     const isSel=curStatus===lt.id;
-    const noBalance=lt.bal<=0&&!lt.disabled;
+    const noBalance=(lt.avail!==undefined?lt.avail<=0:lt.bal<=0)&&!lt.disabled;
     const blocked=lt.disabled||noBalance;
-    return `<div class="lt-card ${lt.cls}${isSel?' selected':''}${blocked?' disabled':''}" id="ltcard-${lt.id}" ${blocked?'':`onclick="selectLeaveType('${lt.id}')"`}>
+    return `<div class="lt-card ${lt.cls}${isSel?' selected':''}${blocked?' disabled':''}" id="ltcard-${lt.id}" ${(blocked&&lt.id!=='compoff')||lt.disabled?'':`onclick="selectLeaveType('${lt.id}')"`}>
       <div class="ltc-top">
         <span class="ltc-icon">${lt.icon}</span>
         <div><div class="ltc-name">${lt.name}</div><div class="ltc-desc">${lt.desc}</div></div>
@@ -3411,7 +3471,7 @@ function openLeaveModal(empId, dKey, e, preselect){
         <div class="ltc-stat"><div class="ltc-stat-label">Used</div><div class="ltc-stat-val" style="color:var(--t2);">${lt.disabled?'—':lt.used}</div></div>
         <div class="ltc-stat"><div class="ltc-stat-label">Total</div><div class="ltc-stat-val" style="color:var(--t3);">${lt.disabled?'—':lt.total}</div></div>
       </div>
-      ${noBalance?`<div class="ltc-lop-note">🚫 No balance left — cannot apply</div>`:''}
+      ${noBalance?`<div class="ltc-lop-note${lt.id==='compoff'?' co-block-note':''}">${lt.blockMsg||'🚫 No balance left — cannot apply'}</div>`:''}
       ${lt.disabled?`<div class="ltc-na-note">Not applicable for ${emp?.type||''}</div>`:''}
     </div>`;
   }).join('');
@@ -3420,9 +3480,9 @@ function openLeaveModal(empId, dKey, e, preselect){
   // can refuse a click that somehow still gets through (defensive, in addition
   // to the disabled/pointer-events:none card above).
   _ltBalanceMap = {};
-  ltypes.forEach(lt=>{ _ltBalanceMap[lt.id] = lt.disabled ? false : lt.bal>0; });
+  ltypes.forEach(lt=>{ _ltBalanceMap[lt.id] = lt.disabled ? false : (lt.avail!==undefined ? lt.avail>0 : lt.bal>0); });
 
-  if(['cl','sl','el','pm'].includes(curStatus)){
+  if(['cl','sl','el','pm','compoff'].includes(curStatus)){
     selectedLeaveType=curStatus;
     updateLTCardSelection();
     if(curStatus==='pm'){
@@ -3459,7 +3519,7 @@ function selectLeaveType(type){
   updateLeaveApplyBtn();
 }
 function updateLTCardSelection(){
-  ['sl','el','cl','pm'].forEach(t=>{document.getElementById('ltcard-'+t)?.classList.toggle('selected',selectedLeaveType===t);});
+  ['sl','el','cl','pm','compoff'].forEach(t=>{document.getElementById('ltcard-'+t)?.classList.toggle('selected',selectedLeaveType===t);});
 }
 // ── Permission (pm) time + description fields ──────────────────────────────
 // Permission requests need a From/To time (max 2 hrs, auto-filled) and a
@@ -3532,7 +3592,7 @@ function updateLeaveApplyBtn(){
     ok = ok && !!from && !!to && !!desc;
   }
   btn.disabled=!ok;
-  btn.textContent=selectedLeaveType?`Apply ${selectedLeaveType.toUpperCase()}`:'Apply Leave';
+  btn.textContent=selectedLeaveType?`Apply ${selectedLeaveType==='compoff'?'COMP OFF':selectedLeaveType.toUpperCase()}`:'Apply Leave';
 }
 
 // ════════════════════════════════════════════════════
@@ -3541,6 +3601,7 @@ function updateLeaveApplyBtn(){
 function deductLeaveBalance(empId, leaveType){
   const b=balances[empId];
   if(!b) return;
+  if(leaveType==='compoff'){ const c=b.compoff||(b.compoff={earned:0,used:0,remaining:0,earned_dates:[],used_dates:[]}); c.used=(c.used||0)+1; c.remaining=Math.max(0,(c.remaining||0)-1); return; }
   const _emp=employees.find(e=>String(e.id)===String(empId));
   const _perm=isPermanent(_emp?.type||'');
   if(!_perm){
@@ -3588,6 +3649,7 @@ function deductLeaveBalance(empId, leaveType){
 function restoreLeaveBalance(empId, leaveType){
   const b=balances[empId];
   if(!b) return;
+  if(leaveType==='compoff'){ const c=b.compoff||(b.compoff={earned:0,used:0,remaining:0,earned_dates:[],used_dates:[]}); c.used=Math.max(0,(c.used||0)-1); c.remaining=(c.remaining||0)+1; return; }
   const _emp=employees.find(e=>String(e.id)===String(empId));
   const _perm=isPermanent(_emp?.type||'');
   if(!_perm){
@@ -3636,6 +3698,9 @@ async function applyLeave(){
   const dKey=document.getElementById('leaveDate').value||leaveModalDKey;
   if(!dKey){showToast('error','Date required','Please select a date');return;}
   let reason=document.getElementById('leaveReason').value;
+  if(selectedLeaveType==='compoff' && compoffAvailableFor(leaveModalEmpId,dKey)<=0){
+    showToast('error','Comp Off not available',compoffBlockMsg(leaveModalEmpId,dKey).replace('🚫 ',''));return;
+  }
   // Permission requires a time range (max 2 hrs) + a description — validate
   // and encode them into the reason text sent to the backend.
   if(selectedLeaveType==='pm'){
@@ -3681,7 +3746,7 @@ async function applyLeave(){
     // Update the SAME record on the backend by its id (PUT), not a new POST —
     // avoids leaving a stale duplicate row behind if the date was changed.
     try{
-      const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission'};
+      const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission',compoff:'Comp Off'};
       const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
       const leaveId=req.leave_id||req.id;
       await fetch(`/api/leave/${leaveId}`,{
@@ -3785,7 +3850,7 @@ async function applyLeave(){
   // how many times "Fix Missing Attendance" was run (there was nothing
   // approved in the DB to fix). Now we capture the real id and attach it.
   try{
-    const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission'};
+    const leaveTypeMap={sl:'Sick',cl:'Casual',el:'Earned',pm:'Permission',compoff:'Comp Off'};
     const backendType=leaveTypeMap[selectedLeaveType]||'Casual';
     const _applyRes=await fetch('/api/leave/apply',{
       method:'POST',headers:getHeaders(),
@@ -3793,6 +3858,18 @@ async function applyLeave(){
     });
     const _applyData=await _applyRes.json().catch(()=>null);
     const _backendId=_applyData&&_applyData.success?_applyData.id:null;
+    if(_applyData && _applyData.success===false && _applyData.no_balance){
+      // Server refused (no balance / wrong date) - undo the local optimistic entry so UI matches the DB
+      pendingLeaves=pendingLeaves.filter(l=>!(String(l.empId)===String(leaveModalEmpId)&&l.date===dKey&&l.status==='pending'));
+      if(attCache[dKey]&&attCache[dKey][leaveModalEmpId]&&attCache[dKey][leaveModalEmpId].status===selectedLeaveType){ attCache[dKey][leaveModalEmpId].status=''; }
+      delete appliedLeaveLog[logKey];
+      persistPendingLeaves(); persistAttCache(); updatePendingBadge();
+      showToast('error','Cannot apply',_applyData.error||'No balance left');
+      closeLeaveModal();
+      if(currentView==='day')renderDayTable(); else if(currentView==='week'){renderWeekView(weekDays(viewDate));} else {renderMonthView(monthDays(viewDate));}
+      updateSummaryForDay(dk(viewDate)); renderCal();
+      return;
+    }
     if(_backendId){
       if(isAdminSelfApply){
         // Admin self-apply is auto-approved locally — mirror that on the
@@ -3841,8 +3918,8 @@ function closeLeaveModal(){
 // ════════════════════════════════════════════════════
 // APPROVAL MODAL
 // ════════════════════════════════════════════════════
-const LEAVE_TYPE_LABELS={sl:'🤒 Sick Leave',el:'⭐ Earned Leave',cl:'🌴 Casual Leave',pm:'🕐 Permission'};
-const LEAVE_TYPE_COLORS={sl:'#eab308',el:'#a855f7',cl:'#3b82f6',pm:'#f97316'};
+const LEAVE_TYPE_LABELS={compoff:'🔄 Comp Off',sl:'🤒 Sick Leave',el:'⭐ Earned Leave',cl:'🌴 Casual Leave',pm:'🕐 Permission'};
+const LEAVE_TYPE_COLORS={compoff:'#06b6d4',sl:'#eab308',el:'#a855f7',cl:'#3b82f6',pm:'#f97316'};
 
 function openApprovalModal(){
   const allPending=pendingLeaves.filter(l=>l.status==='pending');
@@ -4336,7 +4413,7 @@ function gridCellClick(empId,empType,dKey,e){
   if(isAdminEmp(emp)) btnDefs=btnDefs.filter(b=>b.s!=='absent');
   let btns=btnDefs.map(b=>`<button class="${b.c}${cur===b.s?' active':''}" onclick="setCellSt(${empId},'${dKey}','${b.s}',event)">${b.l}</button>`).join('');
   if(cfg.canMarkAll||cfg.canMarkDept){
-    const leaveActive=['cl','sl','el','pm'].includes(cur);
+    const leaveActive=['cl','sl','el','pm','compoff'].includes(cur);
     btns+=`<button class="qbtn${leaveActive?' active':''}" style="${leaveActive?'background:var(--blue-dim);color:var(--blue);':'background:var(--bg4);color:var(--t2);'}" onclick="closePopupAndOpenLeave(${empId},'${dKey}',event)">Leave ▾</button>`;
   }
   const pop=document.createElement('div');
@@ -4377,7 +4454,7 @@ function setStatus(empId,status,e){
   if(!attCache[dKey][empId])attCache[dKey][empId]={status:'',checkin:'',checkout:''};
   const prevStatus=attCache[dKey][empId].status||'';
   // If switching away from a leave type, restore its balance
-  if(['sl','cl','el','pm'].includes(prevStatus) && prevStatus!==status){
+  if(['sl','cl','el','pm','compoff'].includes(prevStatus) && prevStatus!==status){
     const logKey=`${empId}_${dKey}`;
     if(appliedLeaveLog[logKey]===prevStatus){
       restoreLeaveBalance(empId, prevStatus);
@@ -4507,7 +4584,7 @@ function updateTotalHrsCell(empId, dKey){
   const entries=getEntries(empId, dKey);
   const d=attCache[dKey]?.[empId]||{};
   const status=d.status||'';
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el','compoff'].includes(status);
   const pmMins=Number(d.pm_minutes)||0;
   if(disTime){el.textContent='—';el.className='total-hrs na';return;}
   const workedMins=calcTotalMins(entries);
@@ -4581,7 +4658,7 @@ function applyBulk(){
 // SUMMARY
 // ════════════════════════════════════════════════════
 function countSt(attMap,empList,dKey){
-  let p=0,a=0,off=0,cl=0,sl=0,el=0,pm=0,u=0,h=0;
+  let p=0,a=0,off=0,cl=0,sl=0,el=0,pm=0,u=0,h=0,co=0;
   (empList||employees).forEach(e=>{
     const rec=attMap[e.id]||{};
     const s=autoHoursStatus(e, rec.status||'', rec, dKey);
@@ -4599,16 +4676,17 @@ function countSt(attMap,empList,dKey){
     if(s==='present')p++;else if(s==='absent')a++;else if(s==='off')off++;
     else if(s==='cl')cl++;else if(s==='sl')sl++;else if(s==='el')el++;
     else if(s==='pm')pm++;
+    else if(s==='compoff')co++;
     else if(s==='lop')a++;       // <4h worked ("A") counts toward Absent
     else if(s==='half_day')p++;  // 4–7h worked ("OFF+P") counts toward Present
     else u++;
   });
-  return{p,a,off,cl,sl,el,pm,u,h};
+  return{p,a,off,cl,sl,el,pm,u,h,co};
 }
 function setSummaryUI(c){
-  const ids={present:'sc-present',absent:'sc-absent',off:'sc-off',cl:'sc-cl',sl:'sc-sl',el:'sc-el',pm:'sc-pm'};
-  const fids={p:'fp',a:'fa',off:'foff',cl:'fcl',sl:'fsl',el:'fel',pm:'fpm'};
-  [['present','p'],['absent','a'],['off','off'],['cl','cl'],['sl','sl'],['el','el'],['pm','pm']].forEach(([k,fk])=>{
+  const ids={present:'sc-present',absent:'sc-absent',off:'sc-off',cl:'sc-cl',sl:'sc-sl',el:'sc-el',pm:'sc-pm',compoff:'sc-compoff'};
+  const fids={p:'fp',a:'fa',off:'foff',cl:'fcl',sl:'fsl',el:'fel',pm:'fpm',co:'fco'};
+  [['present','p'],['absent','a'],['off','off'],['cl','cl'],['sl','sl'],['el','el'],['pm','pm'],['compoff','co']].forEach(([k,fk])=>{
     const e1=document.getElementById(ids[k]);if(e1)e1.textContent=c[fk]??c[k]??0;
     const e2=document.getElementById(fids[fk]);if(e2)e2.textContent=c[fk]??c[k]??0;
   });
@@ -4616,7 +4694,7 @@ function setSummaryUI(c){
   const fu=document.getElementById('fUnmarked');if(fu)fu.textContent=(c.u??0)?`${c.u} not marked`:'✓ All marked';
 }
 function updateSummaryForDay(dKey){const vis=getVisibleEmployees(dKey);setSummaryUI(countSt(attCache[dKey]||{},vis,dKey));}
-function updateSummaryForRange(dKeys){let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0,h:0};dKeys.forEach(dKey=>{const vis=getVisibleEmployees(dKey);const c=countSt(attCache[dKey]||{},vis,dKey);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
+function updateSummaryForRange(dKeys){let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0,h:0,co:0};dKeys.forEach(dKey=>{const vis=getVisibleEmployees(dKey);const c=countSt(attCache[dKey]||{},vis,dKey);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
 function filterStatus(s){
   statusFilter=statusFilter===s?'':s;
   document.querySelectorAll('.sum-pill').forEach(p=>p.classList.remove('active'));
@@ -4658,8 +4736,8 @@ async function saveAttendance(){
     let apiSt='absent';
     if(s==='present') apiSt='present';
     else if(s==='off') apiSt='absent';
-    else if(['cl','sl','el','pm'].includes(s)) apiSt='leave';
-    const noteMap={cl:'Casual Leave',sl:'Sick Leave',el:'Earned Leave',pm:'Permission',off:'Off Day'};
+    else if(['cl','sl','el','pm','compoff'].includes(s)) apiSt='leave';
+    const noteMap={compoff:'Comp Off',cl:'Casual Leave',sl:'Sick Leave',el:'Earned Leave',pm:'Permission',off:'Off Day'};
     // Send ALL sessions for this employee/day (not just a single
     // checkin/checkout pair) so sessions added via "+ Add" or removed via
     // the "✕" button actually get persisted. Without this, removing a
@@ -5911,9 +5989,9 @@ boot();
   var _origSetSummary = window.setSummaryUI;
   if (_origSetSummary) {
     window.setSummaryUI = function (c) {
-      var ids = {present:'sc-present',absent:'sc-absent',off:'sc-off',cl:'sc-cl',sl:'sc-sl',el:'sc-el',pm:'sc-pm'};
-      var fids = {p:'fp',a:'fa',off:'foff',cl:'fcl',sl:'fsl',el:'fel',pm:'fpm'};
-      [['present','p'],['absent','a'],['off','off'],['cl','cl'],['sl','sl'],['el','el'],['pm','pm']].forEach(function(pair) {
+      var ids = {present:'sc-present',absent:'sc-absent',off:'sc-off',cl:'sc-cl',sl:'sc-sl',el:'sc-el',pm:'sc-pm',compoff:'sc-compoff'};
+      var fids = {p:'fp',a:'fa',off:'foff',cl:'fcl',sl:'fsl',el:'fel',pm:'fpm',co:'fco'};
+      [['present','p'],['absent','a'],['off','off'],['cl','cl'],['sl','sl'],['el','el'],['pm','pm'],['compoff','co']].forEach(function(pair) {
         var k = pair[0], fk = pair[1];
         var newVal = c[fk] !== undefined ? c[fk] : (c[k] !== undefined ? c[k] : 0);
         var e1 = document.getElementById(ids[k]);
