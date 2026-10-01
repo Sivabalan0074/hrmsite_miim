@@ -213,13 +213,23 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .gv-emp-cell{min-width:140px;background:var(--bg3);position:sticky;left:0;z-index:4;}
 .gv-emp-name{font-size:12px;font-weight:600;}
 .gv-emp-dept{font-size:10px;color:var(--t3);}
-.gv-wk-times{margin-top:4px;display:flex;flex-direction:column;gap:1px;font-size:10px;line-height:1.35;font-weight:600;white-space:nowrap;}
-.gv-wk-times .wk-in{color:var(--yellow);}
-.gv-wk-times .wk-out{color:var(--green);}
-.gv-wk-times .wk-out.miss{color:var(--red);}
-.gv-wk-times .wk-tot{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:var(--green);margin-top:1px;}
-.gv-wk-times .wk-tot.low{color:var(--red);}
-.gv-wk-times .wk-tot.mid{color:var(--yellow);}
+.gv-week{table-layout:fixed;width:100%;min-width:1000px;}
+.gv-week thead th{padding:10px 6px;font-size:10px;}
+.gv-week thead th:first-child{width:170px;text-align:left;padding-left:12px;}
+.gv-week td.gv-cell{width:auto;height:86px;padding:6px;vertical-align:middle;}
+.gv-week td.gv-emp-cell{vertical-align:middle;padding-left:12px;}
+.wk-cell{max-width:150px;margin:0 auto;padding:6px 9px 7px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);border-radius:8px;text-align:left;}
+.wk-cell.wk-solo{border:none;background:transparent;display:flex;justify-content:center;padding:0;}
+.wk-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid rgba(255,255,255,.07);}
+.wk-top .gv-badge{flex-shrink:0;}
+.wk-tot{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:var(--green);letter-spacing:.2px;white-space:nowrap;}
+.wk-tot.low{color:var(--red);}
+.wk-tot.mid{color:var(--yellow);}
+.wk-line{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;line-height:1.7;}
+.wk-lbl{font-size:8.5px;font-weight:700;letter-spacing:.8px;color:var(--t3);}
+.wk-val{font-variant-numeric:tabular-nums;font-weight:600;color:var(--t1);white-space:nowrap;}
+.wk-val.miss{color:var(--red);}
+.wk-cell.wk-dim{opacity:.25;}
 .gv-wday{font-size:8px;font-weight:700;letter-spacing:.5px;opacity:.9;}
 .gv-cell{width:40px;text-align:center;transition:background .15s;}
 .gv-cell.can-edit{cursor:pointer;}
@@ -4297,11 +4307,12 @@ async function handleApproval(reqId,action){
 // ════════════════════════════════════════════════════
 // WEEK & MONTH GRID VIEWS
 // ════════════════════════════════════════════════════
-function weekCellTimes(emp,dKey,rec,st){
-  // Shows check-in / check-out / total hours under the badge in the WEEK grid
-  if(!rec||!st||['absent','off','holiday','rh','cl','sl','el','compoff'].includes(st)) return '';
+function weekCellBody(emp,dKey,rec,st,badgeHtml,dimmed){
+  // WEEK grid cell: [badge ... total hrs] / IN time / OUT time  (aligned card)
+  const solo=`<div class="wk-cell wk-solo">${badgeHtml}</div>`;
+  if(!rec||!st||['absent','off','holiday','rh','cl','sl','el','compoff'].includes(st)) return solo;
   const ents=((rec.entries&&rec.entries.length)?rec.entries:[{in:rec.checkin||'',out:rec.checkout||''}]).filter(e=>e&&(e.in||e.out));
-  if(!ents.length) return '';
+  if(!ents.length) return solo;
   const ins=ents.map(e=>e.in).filter(Boolean).sort();
   const outs=ents.map(e=>e.out).filter(Boolean).sort();
   const first=ins[0]||'', last=outs.length?outs[outs.length-1]:'';
@@ -4309,14 +4320,19 @@ function weekCellTimes(emp,dKey,rec,st){
   const pmMins=Number(rec.pm_minutes)||0;
   const mins=calcTotalMins(ents)+pmMins;
   const cls=_isHousekeepingEmp(emp.id)?'':(mins<240?'low':mins<480?'mid':'');
-  const tot=mins?`<span class=\"wk-tot ${cls}\" title=\"Total hours\">⏱ ${fmtHrsMins(mins)}</span>`:'';
-  return `<div class=\"gv-wk-times\"><span class=\"wk-in\">▶ ${first?_fmt12(first):'—'}</span><span class=\"wk-out${(!last||open)?' miss':''}\">■ ${last?_fmt12(last):'—'}</span>${tot}</div>`;
+  const tot=`<span class="wk-tot ${mins?cls:''}" title="Total hours${pmMins?' (incl. Permission credit)':''}">${mins?fmtHrsMins(mins):'—'}</span>`;
+  const outMiss=(!last||open);
+  return `<div class="wk-cell${dimmed?' wk-dim':''}">`+
+    `<div class="wk-top">${badgeHtml}${tot}</div>`+
+    `<div class="wk-line"><span class="wk-lbl">IN</span><span class="wk-val">${first?_fmt12(first):'—'}</span></div>`+
+    `<div class="wk-line"><span class="wk-lbl">OUT</span><span class="wk-val${outMiss?' miss':''}"${outMiss?' title="Check-out pending"':''}>${last?_fmt12(last):'—'}</span></div>`+
+    `</div>`;
 }
 
 function renderWeekView(days){
   const mc=document.getElementById('mainContent');
   const cfg=getRoleCfg();const vis=getVisibleEmployees();
-  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:96px;text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span>${hdrHolMark(d)}</th>`;}).join('');
+  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span>${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
@@ -4327,12 +4343,12 @@ function renderWeekView(days){
       const effSt=effectiveDisplaySt(emp,st,rec,dKey);
       const displaySt=isPend&&!st?'pending':effSt;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
-      const badge=(displaySt?gvBadge(displaySt,dKey,rec,``):`<span style="color:var(--t3);font-size:10px;">·</span>`)+weekCellTimes(emp,dKey,rec,st||displaySt);
+      const badge=weekCellBody(emp,dKey,rec,st||displaySt,(displaySt?gvBadge(displaySt,dKey,rec,``):`<span style="color:var(--t3);font-size:10px;">·</span>`));
       return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badge}</td>`;
     }).join('');
     return `<tr><td class="gv-emp-cell" onclick="openEmployeeDetail(${emp.id},event)" style="cursor:pointer;"><div class="gv-emp-name">${emp.username}${emp.id===currentUserId?' <span class="self-you-tag">YOU</span>':''}</div><div class="gv-emp-dept">${emp.dept}</div></td>${cells}</tr>`;
   }).join('');
-  mc.innerHTML=`<div class="grid-view"><table class="gv-table" style="width:100%;"><thead><tr><th style="min-width:140px;background:var(--bg2);position:sticky;left:0;z-index:10;">Employee</th>${hdr}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  mc.innerHTML=`<div class="grid-view"><table class="gv-table gv-week"><thead><tr><th style="background:var(--bg2);position:sticky;left:0;z-index:10;">Employee</th>${hdr}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderMonthView(days){
@@ -4370,7 +4386,7 @@ function renderWeekViewFiltered(days){
     }));
   }
   if(!vis.length){mc.innerHTML=`<div class="empty-state">🔍 No employees with status "${statusFilter}"</div>`;return;}
-  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:96px;text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span>${hdrHolMark(d)}</th>`;}).join('');
+  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span>${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
@@ -4386,12 +4402,12 @@ function renderWeekViewFiltered(days){
       const badgeFull=displaySt
         ?gvBadge(displaySt,dKey,rec,`${dimmed?'opacity:.2':''}`)
         :`<span style="color:var(--t3);font-size:10px;">·</span>`;
-      const _wt=weekCellTimes(emp,dKey,rec,st||displaySt);
-      return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badgeFull}${dimmed?`<div style="opacity:.25">${_wt}</div>`:_wt}</td>`;
+      const _wt=weekCellBody(emp,dKey,rec,st||displaySt,badgeFull,dimmed);
+      return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${_wt}</td>`;
     }).join('');
     return `<tr><td class="gv-emp-cell" onclick="openEmployeeDetail(${emp.id},event)" style="cursor:pointer;"><div class="gv-emp-name">${emp.username}${emp.id===currentUserId?' <span class="self-you-tag">YOU</span>':''}</div><div class="gv-emp-dept">${emp.dept}</div></td>${cells}</tr>`;
   }).join('');
-  mc.innerHTML=`<div class="grid-view"><table class="gv-table" style="width:100%;"><thead><tr><th style="min-width:140px;background:var(--bg2);position:sticky;left:0;z-index:10;">Employee</th>${hdr}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  mc.innerHTML=`<div class="grid-view"><table class="gv-table gv-week"><thead><tr><th style="min-width:140px;background:var(--bg2);position:sticky;left:0;z-index:10;">Employee</th>${hdr}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderMonthViewFiltered(days){
