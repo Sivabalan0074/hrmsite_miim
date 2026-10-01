@@ -9402,6 +9402,11 @@ function _qsSlipOpen(id,name,dept,desig,empno,type){
 .myleave-card.el{border:1.5px solid rgba(168,85,247,.35);}
 .myleave-card.cl{border:1.5px solid rgba(59,130,246,.35);}
 .myleave-card.pm{border:1.5px solid rgba(249,115,22,.35);}
+.myleave-card.compoff{border:1.5px solid rgba(6,182,212,.4);}
+.myleave-card.compoff .mlc-title,.myleave-card.compoff .mlc-left{color:#22d3ee;}
+.myleave-card.compoff .mlc-badge{background:rgba(6,182,212,.15);color:#22d3ee;border:1px solid rgba(6,182,212,.3);}
+.myleave-card.compoff .mlc-bar{background:#06b6d4;}
+.myatt-b-compoff{background:rgba(6,182,212,.18);color:#22d3ee;}
 .mlc-icon{font-size:24px;margin-bottom:5px;}
 .mlc-title{font-family:Rajdhani,sans-serif;font-size:1rem;font-weight:700;margin-bottom:4px;}
 .myleave-card.sl .mlc-title{color:#eab308;}
@@ -10597,10 +10602,10 @@ function _myAttFmt(dStr) {
 }
 
 function _myAttStatusBadge(st) {
-  var map = {present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off',lop:'LOP',half_day:'½','':{t:'—',c:'myatt-b-nd'}};
-  var labels = {present:'Present',absent:'Absent',sl:'Sick Leave',cl:'Casual Leave',el:'Earned Leave',pm:'Permission',off:'Off Day',lop:'Loss of Pay',half_day:'Half Day','':{t:'—'}};
-  var cls = {present:'myatt-b-p',absent:'myatt-b-a',sl:'myatt-b-sl',cl:'myatt-b-cl',el:'myatt-b-el',pm:'myatt-b-pm',off:'myatt-b-off',lop:'myatt-b-lop',half_day:'myatt-b-half','':'myatt-b-nd'};
-  var short = {present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off',lop:'LOP',half_day:'½','':{t:'—'}};
+  var map = {compoff:'CO',present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off',lop:'LOP',half_day:'½','':{t:'—',c:'myatt-b-nd'}};
+  var labels = {compoff:'Comp Off',present:'Present',absent:'Absent',sl:'Sick Leave',cl:'Casual Leave',el:'Earned Leave',pm:'Permission',off:'Off Day',lop:'Loss of Pay',half_day:'Half Day','':{t:'—'}};
+  var cls = {compoff:'myatt-b-compoff',present:'myatt-b-p',absent:'myatt-b-a',sl:'myatt-b-sl',cl:'myatt-b-cl',el:'myatt-b-el',pm:'myatt-b-pm',off:'myatt-b-off',lop:'myatt-b-lop',half_day:'myatt-b-half','':'myatt-b-nd'};
+  var short = {compoff:'CO',present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off',lop:'LOP',half_day:'½','':{t:'—'}};
   return { label: labels[st]||st, cls: cls[st]||'myatt-b-nd', short: short[st]||st };
 }
 
@@ -10709,7 +10714,7 @@ function _renderMyAtt() {
       cells2 += '<div class="myatt-day-cell other-m"><div class="myatt-day-num">' + (prevTotal-pi) + '</div></div>';
     }
     // Current month
-    var monthCounts = {present:0,absent:0,sl:0,cl:0,el:0,pm:0,off:0};
+    var monthCounts = {present:0,absent:0,sl:0,cl:0,el:0,pm:0,off:0,compoff:0};
     for (var d3 = 1; d3 <= totalDays; d3++) {
       var dStr3 = yr2+'-'+String(mo+1).padStart(2,'0')+'-'+String(d3).padStart(2,'0');
       var rec3 = _myAttData.find(function(r){ return r.date === dStr3; }) || {};
@@ -10717,9 +10722,9 @@ function _renderMyAtt() {
       if (monthCounts[st3] !== undefined) monthCounts[st3]++;
       var isT3 = dStr3 === todayStr;
       var isFuture = dStr3 > todayStr;
-      var colors = {present:'rgba(34,197,94,.18)',absent:'rgba(239,68,68,.18)',sl:'rgba(234,179,8,.18)',cl:'rgba(59,130,246,.18)',el:'rgba(168,85,247,.18)',pm:'rgba(249,115,22,.18)',off:'rgba(80,80,80,.2)','':(isFuture?'transparent':'rgba(40,40,40,.4)')};
-      var txtColors = {present:'#22c55e',absent:'#ef4444',sl:'#eab308',cl:'#3b82f6',el:'#a855f7',pm:'#f97316',off:'#555','':(isFuture?'#333':'#444')};
-      var shortLbl = {present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off','':isFuture?'':''};
+      var colors = {compoff:'rgba(6,182,212,.18)',present:'rgba(34,197,94,.18)',absent:'rgba(239,68,68,.18)',sl:'rgba(234,179,8,.18)',cl:'rgba(59,130,246,.18)',el:'rgba(168,85,247,.18)',pm:'rgba(249,115,22,.18)',off:'rgba(80,80,80,.2)','':(isFuture?'transparent':'rgba(40,40,40,.4)')};
+      var txtColors = {compoff:'#22d3ee',present:'#22c55e',absent:'#ef4444',sl:'#eab308',cl:'#3b82f6',el:'#a855f7',pm:'#f97316',off:'#555','':(isFuture?'#333':'#444')};
+      var shortLbl = {compoff:'CO',present:'P',absent:'A',sl:'SL',cl:'CL',el:'EL',pm:'PM',off:'Off','':isFuture?'':''};
       cells2 += '<div class="myatt-day-cell'+(isT3?' today':'')+'" style="background:'+colors[st3||'']+'">'
         + '<div class="myatt-day-num" style="color:'+(isT3?'#f97316':txtColors[st3||''])+'">' + d3 + '</div>'
         + (shortLbl[st3||''] ? '<div style="font-size:.55rem;font-weight:700;color:'+txtColors[st3||'']+';letter-spacing:.5px;">' + shortLbl[st3||''] + '</div>' : '')
@@ -10738,6 +10743,7 @@ function _renderMyAtt() {
       {n:monthCounts.cl,l:'Casual Leave',c:'#3b82f6'},
       {n:monthCounts.el,l:'Earned Leave',c:'#a855f7'},
       {n:monthCounts.pm,l:'Permission',c:'#f97316'},
+      {n:monthCounts.compoff,l:'Comp Off',c:'#22d3ee'},
       {n:monthCounts.off,l:'Off Days',c:'#555'}
     ].map(function(p){ return '<div class="myatt-pill"><div class="myatt-pill-num" style="color:'+p.c+'">'+p.n+'</div><div class="myatt-pill-lbl">'+p.l+'</div></div>'; }).join('');
 
@@ -10835,6 +10841,12 @@ async function _loadMyLeaveBalance() {
   var elPct = Math.round(elAccrued/6*100);
   var clPct = Math.round(clRem/6*100);
   var pmPct = Math.round(pmRem/2*100);
+  var co = b.compoff || {earned:0,used:0,remaining:0,earned_dates:[]};
+  var coPct = co.earned > 0 ? Math.round(co.remaining/co.earned*100) : 0;
+  var coDates = (co.earned_dates||[]).slice(-3).map(function(x){return x.slice(8,10)+'/'+x.slice(5,7);}).join(', ');
+  var coCard = card('compoff','🔄','Comp Off','Earned by working 8+ hrs on a Sunday. Use it on any day after that Sunday.','Sunday work credit',coPct,
+          row('EARNED',co.earned)+row('USED',co.used),
+          co.remaining, coDates ? ('📅 Sundays worked: '+coDates) : '📅 Work 8+ hrs on a Sunday to earn');
 
   // Probationary/Intern — MIIM Leave Policy V24: ONE paid leave day/month,
   // shared across all leave types (not separate CL/SL/EL/PM quotas). Pulled
@@ -10859,6 +10871,7 @@ async function _loadMyLeaveBalance() {
       + card('pm','🕐','Permission','Max 2/month. Each up to 2 hours.',MONTHS_F[nowM-1]+' '+yr,pmPct,
           row('THIS MONTH',pmUsed+'/2') + row('THIS YEAR',pmUsedYear+'/24'),
           pmRem, '🔁 Resets each month')
+      + coCard
       + '</div>'
     : '<div style="background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.3);border-radius:10px;padding:14px 16px;font-size:.82rem;color:#eab308;margin-bottom:18px;">⚠️ '+empType+' — 1 <b>paid</b> leave day/month, shared across Monthly Leave &amp; Permission below (CL/SL/EL quotas don\'t apply). Anything more this month is unpaid (LOP).</div>'
       + '<div class="myleave-grid">'
@@ -10868,6 +10881,7 @@ async function _loadMyLeaveBalance() {
       + card('pm','🕐','Permission','Part-day (up to 2 hrs). Shares the same 1 day/month quota.',MONTHS_F[nowM-1]+' '+yr,probPct,
           row('THIS MONTH',probUsedM+'/'+probQuota),
           probRemM, '🔁 Shared with Monthly Leave')
+      + coCard
       + '</div>';
 
   // Monthly history table — built entirely from the server's monthly
@@ -11157,6 +11171,10 @@ async function _renderDashLeaveBalance() {
     cards.push(mc({icon:'\u2B50',title:'Earned Leave',tc:'#a855f7',desc:'\u00bd day/month. Encashed with April salary. No carry-over.',tag:elAccrued+' months accrued',tbg:'rgba(168,85,247,.15)',tbd:'rgba(168,85,247,.3)',br:'rgba(168,85,247,.35)',bc:'#a855f7',left:remEarned,pct:elPct,always:true,rows:[{k:'THIS MONTH',v:approvedElMonth+'/0.5'},{k:'THIS YEAR',v:approvedEl+'/'+EL_TOTAL}],note:'\uD83C\uDF1F Encashed with April salary'}));
   }
   cards.push(clCard, pmCard);
+  var _co = b.compoff || {earned:0,used:0,remaining:0,earned_dates:[]};
+  var _coPct = _co.earned > 0 ? Math.min(100, Math.round(_co.used / _co.earned * 100)) : 0;
+  var _coD = (_co.earned_dates||[]).slice(-3).map(function(x){return x.slice(8,10)+'/'+x.slice(5,7);}).join(', ');
+  cards.push(mc({icon:'\uD83D\uDD04',title:'Comp Off',tc:'#22d3ee',desc:'Earned by working 8+ hrs on a Sunday. Use it on any day after that Sunday.',tag:'Sunday work credit',tbg:'rgba(6,182,212,.15)',tbd:'rgba(6,182,212,.3)',br:'rgba(6,182,212,.4)',bc:'#06b6d4',left:_co.remaining,pct:_coPct,always:true,rows:[{k:'EARNED',v:_co.earned},{k:'USED',v:_co.used}],note:_coD?('\uD83D\uDCC5 Sundays worked: '+_coD):'\uD83D\uDCC5 Work 8+ hrs on a Sunday to earn'}));
   container.innerHTML = cards.join('');
 }
 
