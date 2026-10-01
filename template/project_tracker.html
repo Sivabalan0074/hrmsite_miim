@@ -3051,8 +3051,12 @@ var defaultUnits = [
   'Dump Unit','Shift Unit','Earthing Unit','Sensor Unit'
 ];
 
+var hiddenUnits = [];
+try { hiddenUnits = JSON.parse(localStorage.getItem('hiddenUnits') || '[]'); } catch(e) { hiddenUnits = []; }
+function saveHiddenUnits() { try { localStorage.setItem('hiddenUnits', JSON.stringify(hiddenUnits)); } catch(e) {} }
+
 function getAllUnits() {
-  var all = defaultUnits.concat(customUnits);
+  var all = defaultUnits.concat(customUnits).filter(function(u){ return hiddenUnits.indexOf(u) === -1; });
   // deduplicate
   return all.filter(function(v,i,a){ return a.indexOf(v)===i; });
 }
@@ -3073,7 +3077,7 @@ function getNameOpts(currentVal) {
   var opts = [{v:'',l:'— Select —'}];
   var seen = {};
   // tools entered in the WHD modal come first
-  getWhdToolNames().forEach(function(u){ if (!seen[u]) { seen[u]=1; opts.push({v:u,l:u}); } });
+  getWhdToolNames().forEach(function(u){ if (!seen[u] && hiddenUnits.indexOf(u) === -1) { seen[u]=1; opts.push({v:u,l:u}); } });
   getAllUnits().forEach(function(u){ if (!seen[u]) { seen[u]=1; opts.push({v:u,l:u}); } });
   if (currentVal && !seen[currentVal]) opts.push({v:currentVal,l:currentVal});
   return opts;
@@ -3102,7 +3106,9 @@ function saveNewUnit() {
   var val = document.getElementById('newUnitInput').value.trim();
   if (!val) { showToast('⚠️ Unit name cannot be empty.'); return; }
   if (getAllUnits().indexOf(val) !== -1) { showToast('⚠️ "'+val+'" already exists.'); return; }
-  customUnits.push(val);
+  var _hi = hiddenUnits.indexOf(val);
+  if (_hi !== -1) { hiddenUnits.splice(_hi, 1); saveHiddenUnits(); }
+  if (customUnits.indexOf(val) === -1) customUnits.push(val);
   localStorage.setItem('customUnits', JSON.stringify(customUnits));
   showToast('✅ "'+val+'" unit added!');
   refreshUnitListPreview();
@@ -4950,8 +4956,7 @@ var _ctxTargetSelect = null;
 document.addEventListener('contextmenu', function(e) {
   var sel = e.target.closest('select.ph-cell-input');
   if (!sel) { hideUnitCtxMenu(); return; }
-  var hasUnitOpts = sel.querySelector('option[value="Base Unit"], option[value="Pin Unit"]');
-  if (!hasUnitOpts) return;
+  if (!sel.dataset || sel.dataset.rowId === undefined) return; // only the Unit Name dropdown
   e.preventDefault();
   _ctxTargetSelect = sel;
   showUnitCtxMenu(e.clientX, e.clientY, sel.value);
@@ -4966,35 +4971,15 @@ document.addEventListener('keydown', function(e) {
 
 function showUnitCtxMenu(x, y, selectedVal) {
   var menu = document.getElementById('unitContextMenu');
-  var isDefault = defaultUnits.indexOf(selectedVal) !== -1;
-  var isCustom  = customUnits.indexOf(selectedVal) !== -1;
   var itemHtml;
-  if (selectedVal && !isDefault && !isCustom) { itemHtml = ''; isDefault = false; }
-
-  if (itemHtml === '') {
-    /* WHD tool name used as unit name: only the row can be deleted (shown above) */
-  } else if (!selectedVal) {
-    itemHtml = '<div class="ctx-item disabled">'
-      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>'
-      + 'No unit selected</div>';
-  } else if (isDefault) {
-    itemHtml = '<div class="ctx-item disabled">'
-      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>'
-      + '"' + escHtml(selectedVal) + '" \u2014 default unit</div>';
+  if (!selectedVal) {
+    itemHtml = '<div class="ctx-item disabled">Select a unit first, then right-click</div>';
   } else {
     itemHtml = '<div class="ctx-item danger" onclick="deleteUnitFromCtxMenu()">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
-      + 'Delete &ldquo;' + escHtml(selectedVal) + '&rdquo;</div>';
+      + 'Delete &ldquo;' + escHtml(selectedVal) + '&rdquo; from list</div>';
   }
-
-  var rowItem = '';
-  var _t = _ctxTargetSelect;
-  if (_t && _t.dataset && _t.dataset.idx !== undefined && !(_isGuest && !_isEmployee)) {
-    rowItem = '<div class="ctx-item danger" onclick="deleteUnitRowFromCtxMenu()">'
-      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
-      + 'Delete this unit' + (selectedVal ? ' (' + escHtml(selectedVal) + ')' : '') + '</div>';
-  }
-  menu.innerHTML = '<div class="ctx-header">Unit Option</div>' + rowItem + itemHtml;
+  menu.innerHTML = '<div class="ctx-header">Unit Option</div>' + itemHtml;
   menu.style.display = 'block';
 
   var menuW = 230, menuH = 120;
@@ -5019,16 +5004,22 @@ function hideUnitCtxMenu() {
 }
 
 function deleteUnitFromCtxMenu() {
-  if (!_ctxTargetSelect) { hideUnitCtxMenu(); return; }
-  var val = _ctxTargetSelect.value;
-  var idx = customUnits.indexOf(val);
-  if (idx === -1) { showToast('\u26A0\uFE0F Cannot delete a default unit.'); hideUnitCtxMenu(); return; }
-  if (!confirm('Delete unit "' + val + '" from the list?')) { hideUnitCtxMenu(); return; }
-  customUnits.splice(idx, 1);
-  localStorage.setItem('customUnits', JSON.stringify(customUnits));
-  showToast('\uD83D\uDDD1\uFE0F "' + val + '" deleted.');
+  var t = _ctxTargetSelect;
+  if (!t) { hideUnitCtxMenu(); return; }
+  var val = t.value;
+  var d = t.dataset || {};
+  if (!val) { hideUnitCtxMenu(); return; }
+  if (!confirm('Delete unit "' + val + '" from the dropdown list?')) { hideUnitCtxMenu(); return; }
+  // only the dropdown OPTION is removed - the table row is NOT deleted
+  var ci = customUnits.indexOf(val);
+  if (ci !== -1) { customUnits.splice(ci, 1); localStorage.setItem('customUnits', JSON.stringify(customUnits)); }
+  if (hiddenUnits.indexOf(val) === -1) { hiddenUnits.push(val); saveHiddenUnits(); }
+  // this row's selected unit is gone, so reset just its Unit Name cell
+  var idx = parseInt(d.idx, 10);
+  if (d.tool && !isNaN(idx)) syncToolField(d.tool, idx, 'name', '');
+  showToast('\uD83D\uDDD1\uFE0F "' + val + '" removed from the list.');
   hideUnitCtxMenu();
-  reRenderOpenAccordion();
+  if (d.rowId && d.tool) renderAccTable(d.rowId, d.tool); else reRenderOpenAccordion();
 }
 
 /* ── TOOL SUMMARY CONTEXT MENU ── */
