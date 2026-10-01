@@ -2510,7 +2510,123 @@ function accAddRow(rowId, toolName) {
   var allPhases = ['concept', 'finish', 'draft2d'];
   var _sdA = window._summaryToolData && window._summaryToolData[rowId];
   var _wdA = getWhdToolDates(_sdA ? _sdA.product : '', toolName);
-  var emptyRow = { station: '', name: '', complexity: '', hours: 0, overall: 0, totalPhaseHrs: 0, start: _wdA.startDate || '', end: _wdA.endDate || '', completion: '', internal: '', changes: '', customer: '', approved: '', pct: 0, nextHrs: 0 };
+  var emptyRow = { station: '', name: '', complexity: '', hours: 0, overall: 0, totalPhaseHrs: 0, start: '', end: '', completion: '', internal: '', changes: '', customer: '', approved: '', pct: 0, nextHrs: 0 };
+  allPhases.forEach(function(ph) {
+    td[ph].push(Object.assign({}, emptyRow, { sno: td[ph].length + 1 }));
+  });
+  savePhaseDataStorage();
+  renderAccTable(rowId, toolName);
+}
+
+function accDeleteRow(rowId, toolName, phase, idx) {
+  if (!confirm('Delete this row?')) return;
+  var td = getToolPhaseData(toolName);
+  var allPhases = ['concept', 'finish', 'draft2d'];
+  allPhases.forEach(function(ph) {
+    if (td[ph] && td[ph][idx] !== undefined) {
+      td[ph].splice(idx, 1);
+      td[ph].forEach(function(r,i){ r.sno=i+1; });
+    }
+  });
+  savePhaseDataStorage();
+  renderAccTable(rowId, toolName);
+  showToast('🗑️ Row deleted.');
+}
+
+function renderAccTable(rowId, toolName) {
+  var wrap = document.getElementById('acc-table-'+rowId);
+  if (!wrap) return;
+  var phase = _accPhase;
+  var phaseColors = { concept:'#3b82f6', finish:'#f97316', draft2d:'#a855f7' };
+  var phaseLabels = { concept:'3D Concept', finish:'3D Finish', draft2d:'2D Draft' };
+  var nextColLabels = { concept:'Total 3D Finish Hours', finish:'Total 2D Draft Hours', draft2d:'Total Approved Hours' };
+  var totalHoursLabel = { concept:'Total Concept Hours', finish:'Total Finish Hours', draft2d:'Total Draft Hours' };
+  var col = phaseColors[phase];
+  var rgb = hexToRgb(col);
+  var rows = getToolPhaseData(toolName)[phase] || [];
+  var tools = toolColumns[phase] || [];
+
+  var safeName = toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  // Phase filter tabs + action buttons
+  var phaseTabsList = [];
+  if (t.concept) phaseTabsList.push({ key:'concept', label:'3D Concept', color:'#3b82f6' });
+  if (t.finish)  phaseTabsList.push({ key:'finish',  label:'3D Finish',  color:'#f97316' });
+  if (t.draft)   phaseTabsList.push({ key:'draft2d', label:'2D Draft',   color:'#a855f7' });
+
+  var phaseBtnsHtml = phaseTabsList.map(function(p){
+    var isActive = (p.key === _accPhase);
+    var td = getToolPhaseData(toolName);
+    var phTotalHrs = (td[p.key]||[]).reduce(function(sum,r){ return sum+(r.totalPhaseHrs||0); }, 0);
+    var hrsTag = phTotalHrs > 0
+      ? '<span style="font-size:0.68rem;padding:1px 7px;border-radius:10px;background:rgba('+hexToRgb(p.color)+',0.2);color:'+p.color+';font-weight:700;margin-left:2px;">'+phTotalHrs+'h</span>'
+      : '';
+    return '<button id="acc-tab-'+rowId+'-'+p.key+'" '
+      + 'onclick="accSwitchPhase(\''+rowId+'\',\''+safeName+'\',\''+p.key+'\') " '
+      + 'style="display:inline-flex;align-items:center;gap:6px;font-family:\'Rajdhani\',sans-serif;font-size:0.8rem;font-weight:700;letter-spacing:0.8px;padding:6px 16px;border-radius:7px;cursor:pointer;transition:all 0.18s;'
+      + (isActive
+          ? 'background:rgba('+hexToRgb(p.color)+',0.18);border:1.5px solid '+p.color+';color:'+p.color+';'
+          : 'background:transparent;border:1.5px solid var(--border);color:var(--muted);')
+      + '">'
+      + '<span style="width:7px;height:7px;border-radius:50%;background:'+p.color+';display:inline-block;flex-shrink:0;"></span>'
+      + p.label
+      + hrsTag
+      + '</button>';
+  }).join('');
+
+  var tabsHtml = '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);flex-wrap:wrap;">'
+    + phaseBtnsHtml
+    + '<div style="flex:1;"></div>'
+    + ((_isGuest && !_isEmployee) ? '' : '<button onclick="openAddUnitModal()" style="font-family:\'Rajdhani\',sans-serif;font-size:0.74rem;font-weight:700;padding:5px 12px;background:transparent;border:1.5px solid var(--orange);color:var(--orange);border-radius:6px;cursor:pointer;">+ Add Unit</button>')
+    + ((_isGuest && !_isEmployee) ? '' : '<button onclick="accAddRow(\''+rowId+'\',\''+safeName+'\')" style="font-family:\'Rajdhani\',sans-serif;font-size:0.74rem;font-weight:700;padding:5px 12px;background:var(--orange);border:none;color:#fff;border-radius:6px;cursor:pointer;margin-left:6px;">+ Add Row</button>')
+    + '</div>';
+
+  body.innerHTML = tabsHtml + '<div id="acc-table-'+rowId+'" style="overflow-x:auto;"></div>';
+  renderAccTable(rowId, toolName);
+}
+
+function accSwitchPhase(rowId, toolName, phase) {
+  _accPhase = phase;
+  _accPhaseFilter[rowId] = phase; // keep outer filter buttons in sync
+  var phaseList = [{key:'concept',color:'#3b82f6'},{key:'finish',color:'#f97316'},{key:'draft2d',color:'#a855f7'}];
+  // update inner accordion tab buttons (filter-button style)
+  phaseList.forEach(function(p){
+    var btn = document.getElementById('acc-tab-'+rowId+'-'+p.key);
+    if (!btn) return;
+    if (p.key === phase) {
+      btn.style.background = 'rgba('+hexToRgb(p.color)+',0.18)';
+      btn.style.border = '1.5px solid '+p.color;
+      btn.style.color = p.color;
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.border = '1.5px solid var(--border)';
+      btn.style.color = 'var(--muted)';
+    }
+  });
+  // also update outer phase filter buttons
+  phaseList.forEach(function(p){
+    var obtn = document.getElementById('pfbtn-'+rowId+'-'+p.key);
+    if (!obtn) return;
+    if (p.key === phase) {
+      obtn.style.background = 'rgba('+hexToRgb(p.color)+',0.18)';
+      obtn.style.border = '1.5px solid '+p.color;
+      obtn.style.color = p.color;
+    } else {
+      obtn.style.background = 'transparent';
+      obtn.style.border = '1.5px solid var(--border)';
+      obtn.style.color = 'var(--muted)';
+    }
+  });
+  renderAccTable(rowId, toolName);
+}
+
+function accAddRow(rowId, toolName) {
+  var td = getToolPhaseData(toolName);
+  equalizeToolPhase(td);
+  var allPhases = ['concept', 'finish', 'draft2d'];
+  var _sdA = window._summaryToolData && window._summaryToolData[rowId];
+  var _wdA = getWhdToolDates(_sdA ? _sdA.product : '', toolName);
+  var emptyRow = { station: '', name: '', complexity: '', hours: 0, overall: 0, totalPhaseHrs: 0, start: '', end: '', completion: '', internal: '', changes: '', customer: '', approved: '', pct: 0, nextHrs: 0 };
   allPhases.forEach(function(ph) {
     td[ph].push(Object.assign({}, emptyRow, { sno: td[ph].length + 1 }));
   });
@@ -2563,7 +2679,7 @@ function renderAccTable(rowId, toolName) {
 
   var toolHeaderCells1 = '';
   var toolHeaderCells2 = '';
-  var totalCols = 15;
+  var totalCols = 13;
 
   var thead = '<thead>'
     + '<tr>'
@@ -2573,13 +2689,13 @@ function renderAccTable(rowId, toolName) {
     + '<th colspan="2" class="ph-group-hdr" style="background:rgba('+rgb+',0.18);color:'+col+';">Total Hours</th>'
     + '<th rowspan="2" class="ph-fixed" style="min-width:110px;">Unit Wise Completion</th>'
     + '<th rowspan="2" class="ph-fixed" style="min-width:90px;">'+totalHoursLabel[phase]+'</th>'
-    + '<th colspan="'+(phase==='draft2d'?'6':'7')+'" class="ph-group-hdr" style="background:rgba('+rgb+',0.18);color:'+col+';">'+phaseLabels[phase]+'</th>'
+    + '<th colspan="'+(phase==='draft2d'?'4':'5')+'" class="ph-group-hdr" style="background:rgba('+rgb+',0.18);color:'+col+';">'+phaseLabels[phase]+'</th>'
     + toolHeaderCells1
     + '<th rowspan="2" class="ph-fixed" style="min-width:60px;">Action</th>'
     + '</tr>'
     + '<tr>'
     + '<th class="ph-sub">Complexity</th><th class="ph-sub">Hours</th>'
-    + '<th class="ph-sub">Start</th><th class="ph-sub">End</th><th class="ph-sub">Completion</th>'
+    + '<th class="ph-sub">Completion</th>'
     + '<th class="ph-sub">Internal Review</th><th class="ph-sub">'+(phase==='draft2d'?'Checker Changes':'Review Changes')+'</th>'
     + (phase!=='draft2d' ? '<th class="ph-sub">Customer Review</th>' : '')
     + '<th class="ph-sub">Approved Date</th>'
@@ -2619,8 +2735,6 @@ function renderAccTable(rowId, toolName) {
         + '</div>'
         + '</td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleNum+' id="tph-'+phase+'-'+idx+'" type="number" value="'+(r.totalPhaseHrs||'')+'" oninput="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].totalPhaseHrs=+this.value;savePhaseDataStorage();"></td>'
-        + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.start||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].start=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
-        + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.end||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].end=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.completion||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].completion=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.internal||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].internal=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.changes||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].changes=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
@@ -2748,6 +2862,7 @@ function refreshToolHeader(rowId, toolName) {
   if (bar) { bar.style.width = stats.avgPct + '%'; bar.style.background = stats.avgPct >= 100 ? '#22c55e' : stats.avgPct >= 60 ? '#eab308' : '#f97316'; }
   if (hrs) hrs.textContent = stats.totalHrs + ' hrs';
   if (pct) pct.textContent = stats.avgPct + '%';
+  renderToolDeadline(rowId, stats.avgPct);
 }
 
 function refreshAllProductHeaders() {
@@ -4062,6 +4177,98 @@ function _fmtWhdDate(d) {
   return x.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
 }
 
+
+/* ══ TOOL DELIVERY DATE (from WHD Start/End) — status chip, overdue warning, extend ══ */
+function _todayKey() { var d = new Date(); d.setHours(0,0,0,0); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _daysBetween(a, b) { return Math.round((new Date(b+'T00:00:00') - new Date(a+'T00:00:00')) / 86400000); }
+function _toolWhdRows(product, toolName) {
+  var res = [];
+  var rowsAll = window._whdRows || {};
+  Object.keys(rowsAll).forEach(function(key){
+    var m = key.match(/^(\d+)_(.+)$/); if (!m) return;
+    if (product && m[2] !== product) return;
+    (rowsAll[key] || []).forEach(function(r){ if ((r.toolName || '').trim() === toolName) res.push(r); });
+  });
+  return res;
+}
+function renderToolDeadline(rowId, pct) {
+  var hdr = document.getElementById(rowId + '-hdr'); if (!hdr) return;
+  var wrap = hdr.querySelector('.tool-deadline-wrap'); if (!wrap) return;
+  var sd = window._summaryToolData && window._summaryToolData[rowId]; if (!sd) return;
+  var dates = getWhdToolDates(sd.product, sd.toolName);
+  if (!dates.startDate && !dates.endDate) { wrap.innerHTML = ''; return; }
+  var rows = _toolWhdRows(sd.product, sd.toolName);
+  var orig = ''; rows.forEach(function(r){ if (r.origEndDate && (!orig || r.origEndDate < orig)) orig = r.origEndDate; });
+  var chip = 'display:inline-flex;align-items:center;gap:5px;font-size:0.68rem;font-family:\'Exo 2\',sans-serif;border-radius:20px;padding:2px 10px;white-space:nowrap;';
+  var h = '<span class="tool-date-badge" style="'+chip+'color:#cbd5e1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);">&#128197; '
+        + _fmtWhdDate(dates.startDate) + ' &rarr; ' + _fmtWhdDate(dates.endDate) + '</span>';
+  if (orig && dates.endDate && orig < dates.endDate) {
+    h += '<span title="Original end date: ' + _fmtWhdDate(orig) + '" style="'+chip+'color:#4ade80;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);font-weight:700;">+' + _daysBetween(orig, dates.endDate) + 'd extended</span>';
+  }
+  var done = (pct || 0) >= 100;
+  if (done) {
+    h += '<span style="'+chip+'color:#4ade80;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);font-weight:700;">&#10003; Completed</span>';
+  } else if (dates.endDate) {
+    var diff = _daysBetween(_todayKey(), dates.endDate);   // >0 days left, 0 today, <0 overdue
+    if (diff < 0) {
+      h += '<span style="'+chip+'color:#fca5a5;background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.45);font-weight:700;">&#9888; Delivery date over &middot; ' + Math.abs(diff) + 'd overdue</span>';
+    } else if (diff === 0) {
+      h += '<span style="'+chip+'color:#fca5a5;background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.45);font-weight:700;">&#9888; Delivery date is today &middot; not completed</span>';
+    } else if (diff <= 2) {
+      h += '<span style="'+chip+'color:#fde68a;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.4);font-weight:700;">&#9201; ' + diff + 'd left</span>';
+    }
+    if (diff <= 0 && !(_isGuest && !_isEmployee)) {
+      h += '<button onclick="event.stopPropagation();openToolExtend(\'' + rowId + '\')" style="background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.5);color:#fdba74;border-radius:20px;padding:2px 10px;font-size:0.68rem;font-weight:700;cursor:pointer;font-family:\'Exo 2\',sans-serif;">&#128197; Extend Date</button>';
+    }
+  }
+  wrap.innerHTML = h;
+}
+var _toolWarnToastShown = {};
+function openToolExtend(rowId) {
+  var sd = window._summaryToolData && window._summaryToolData[rowId]; if (!sd) return;
+  var dates = getWhdToolDates(sd.product, sd.toolName);
+  var old = document.getElementById('toolExtendOverlay'); if (old) old.remove();
+  var minD = dates.endDate || _todayKey();
+  var ov = document.createElement('div');
+  ov.id = 'toolExtendOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  ov.onclick = function(e){ if (e.target === ov) ov.remove(); };
+  ov.innerHTML = '<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:22px 24px;width:380px;max-width:92vw;">'
+    + '<div style="font-family:Rajdhani,sans-serif;font-size:1.05rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--orange);margin-bottom:4px;">Extend Delivery Date</div>'
+    + '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:14px;">' + escHtml(sd.toolName) + ' &middot; current end date: <b style="color:var(--text);">' + _fmtWhdDate(dates.endDate) + '</b></div>'
+    + '<label style="font-size:0.68rem;font-family:Rajdhani,sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">New End Date</label>'
+    + '<input id="toolExtNewDate" type="date" min="' + minD + '" style="width:100%;margin:4px 0 12px;background:var(--input-bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-family:\'Exo 2\',sans-serif;">'
+    + '<label style="font-size:0.68rem;font-family:Rajdhani,sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);">Reason (optional)</label>'
+    + '<input id="toolExtReason" type="text" placeholder="e.g. Customer review pending" style="width:100%;margin:4px 0 16px;background:var(--input-bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-family:\'Exo 2\',sans-serif;">'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;">'
+    + '<button onclick="document.getElementById(\'toolExtendOverlay\').remove()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:7px 16px;cursor:pointer;font-weight:600;">Cancel</button>'
+    + '<button onclick="applyToolExtend(\'' + rowId + '\')" style="background:var(--orange);border:none;color:#fff;border-radius:6px;padding:7px 18px;cursor:pointer;font-weight:700;">Extend</button>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+}
+function applyToolExtend(rowId) {
+  var sd = window._summaryToolData && window._summaryToolData[rowId]; if (!sd) return;
+  var nd = (document.getElementById('toolExtNewDate') || {}).value || '';
+  var reason = ((document.getElementById('toolExtReason') || {}).value || '').trim();
+  var dates = getWhdToolDates(sd.product, sd.toolName);
+  if (!nd) { showToast('⚠️ Pick the new end date.'); return; }
+  if (dates.endDate && nd <= dates.endDate) { showToast('⚠️ New date must be after ' + _fmtWhdDate(dates.endDate) + '.'); return; }
+  var rows = _toolWhdRows(sd.product, sd.toolName);
+  rows.forEach(function(r){
+    if (!r.origEndDate) r.origEndDate = r.endDate || dates.endDate || nd;
+    r.extHistory = r.extHistory || [];
+    r.extHistory.push({ from: r.endDate || dates.endDate || '', to: nd, reason: reason, on: _todayKey() });
+    r.endDate = nd;
+  });
+  var id = _whdModalProjectId;
+  var val = JSON.stringify(window._whdRows || {});
+  try { localStorage.setItem('whdRows_' + id, val); } catch(e) {}
+  try { var pr = {}; pr['whdRows_' + id] = val; _dbSyncBulk(pr); } catch(e) {}
+  var ov = document.getElementById('toolExtendOverlay'); if (ov) ov.remove();
+  renderWhdSummary();
+  showToast('✅ ' + sd.toolName + ' extended to ' + _fmtWhdDate(nd));
+}
+
 function renderWhdSummary() {
   // Build productMap: { productName -> { toolName -> {concept,finish,draft,zones} } }
   var productMap = {};
@@ -4431,7 +4638,6 @@ function renderWhdSummaryBody() {
           + '<span id="' + rowId + '-arrow" style="font-size:0.72rem;color:var(--orange);transition:transform 0.2s;flex-shrink:0;">&#9658;</span>'
           + '<span style="font-family:Rajdhani,sans-serif;font-size:0.9rem;font-weight:700;color:var(--text);white-space:nowrap;">' + escHtml(tname) + '</span>'
           + (_whdProductType === 'general' ? '' : '<span style="font-size:0.65rem;color:var(--muted);white-space:nowrap;flex-shrink:0;">(' + zoneLabels + ')</span>')
-          + ((t.startDate || t.endDate) ? '<span class="tool-date-badge" style="display:inline-flex;align-items:center;gap:5px;font-size:0.68rem;font-family:\'Exo 2\',sans-serif;color:#cbd5e1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:2px 10px;white-space:nowrap;flex-shrink:0;">&#128197; ' + _fmtWhdDate(t.startDate) + ' &rarr; ' + _fmtWhdDate(t.endDate) + '</span>' : '')
           + '<div class="tool-stats-wrap" style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;margin-left:12px;">'
           + '<span style="font-size:0.6rem;color:#888;text-transform:uppercase;font-family:Rajdhani,sans-serif;font-weight:600;white-space:nowrap;">Total Hrs</span>'
           + '<span class="tool-total-hrs" style="font-size:0.8rem;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--orange);white-space:nowrap;">0 hrs</span>'
@@ -4441,6 +4647,7 @@ function renderWhdSummaryBody() {
           + '</div>'
           + '<span class="tool-pct-label" style="font-size:0.75rem;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--muted);white-space:nowrap;">0%</span>'
           + '</div>'
+          + '<span class="tool-deadline-wrap" style="display:inline-flex;align-items:center;gap:8px;margin-left:14px;flex-wrap:wrap;"></span>'
           + '</div>'
           + '<div id="' + rowId + '-body" style="display:none;" data-open="0"></div>'
           + '</div>'
@@ -4895,9 +5102,9 @@ function getPhaseWeights() {
 }
 
 var _dateFields = {
-  concept:  ['start','end','completion','internal','changes','customer','approved'],
-  finish:   ['start','end','completion','internal','changes','customer','approved'],
-  draft2d:  ['start','end','completion','internal','changes','approved']
+  concept:  ['completion','internal','changes','customer','approved'],
+  finish:   ['completion','internal','changes','customer','approved'],
+  draft2d:  ['completion','internal','changes','approved']
 };
 
 function calcPhaseUWC(phaseKey, rowData) {
