@@ -3655,7 +3655,50 @@ def _sl_balance_asof(conn, emp_id, joindate, asof_date):
     return balance
 
 
-def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exclude_from, exclude_to):
+PM_CREDIT_MINUTES_PER_PERMISSION = 120  # MIIM Leave Policy V24: up to 2 hrs per permission
+
+def _pm_row_count(pm_minutes, pm_leave_ids, status=''):
+    """How many permissions ONE attendance row represents.
+    Approved Permission is stored as status='present' + pm_minutes/pm_leave_ids
+    (NOT status='pm'), so quota/balance code must count from those columns."""
+    ids = [x for x in str(pm_leave_ids or '').split(',') if x.strip().isdigit()]
+    if ids:
+        return len(ids)
+    try:
+        mins = int(pm_minutes or 0)
+    except Exception:
+        mins = 0
+    if mins > 0:
+        return max(1, -(-mins // PM_CREDIT_MINUTES_PER_PERMISSION))
+    if str(status or '').lower() == 'pm':
+        return 1   # legacy row: whole-day status 'pm' = one permission
+    return 0
+
+def _pm_counts_by_date(rows, exclude_leave_id=None):
+    """{date: permissions used} -- multi-session days are collapsed so one day
+    is never counted twice (the credit lives on the first session row)."""
+    per_date = {}
+    for r in rows:
+        d = str(r['date'])[:10]
+        ids = [x for x in str(r['pm_leave_ids'] or '').split(',') if x.strip().isdigit()]
+        if exclude_leave_id is not None and str(exclude_leave_id) in ids:
+            n = len([x for x in ids if x != str(exclude_leave_id)])
+        else:
+            n = _pm_row_count(r['pm_minutes'], r['pm_leave_ids'], r['status'])
+        if n > per_date.get(d, 0):
+            per_date[d] = n
+    return per_date
+
+def _pm_used_count(conn, emp_id, start_iso, end_iso, exclude_leave_id=None):
+    rows = conn.execute(
+        "SELECT date, status, pm_minutes, pm_leave_ids FROM attendance "
+        "WHERE emp_id=? AND date>=? AND date<=? "
+        "AND (COALESCE(pm_minutes,0)>0 OR status='pm' OR COALESCE(pm_leave_ids,'')<>'')",
+        (emp_id, start_iso, end_iso)).fetchall()
+    return sum(_pm_counts_by_date(rows, exclude_leave_id).values())
+
+
+def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exclude_from, exclude_to, exclude_leave_id=None):
     """How many paid days of `leave_code` are still available for this
     employee, evaluated just before `exclude_from` — used to decide, day by
     day, whether a newly-approved leave should be paid (cl/sl/el/pm) or LOP.
@@ -3687,12 +3730,10 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
     if leave_code == 'pm':
         month_start = exclude_from.replace(day=1)
         month_end = _next_month_first(month_start) - datetime.timedelta(days=1)
-        row = conn.execute(
-            "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='pm' "
-            "AND date>=? AND date<=? AND (date<? OR date>?)",
-            (emp_id, month_start.isoformat(), month_end.isoformat(), exclude_from_s, exclude_to_s)
-        ).fetchone()
-        used = (row['c'] if row else 0) or 0
+        # Approved permissions live in pm_minutes/pm_leave_ids (status stays
+        # 'present'), so count those -- counting status='pm' never reduced the
+        # balance. The request being synced is excluded (idempotent re-sync).
+        used = _pm_used_count(conn, emp_id, month_start.isoformat(), month_end.isoformat(), exclude_leave_id)
         return max(0.0, 2.0 - used)
 
     if not is_permanent:
@@ -3837,11 +3878,7 @@ def leave_balance_report():
                     counts[r['status']] = r['c']
             pm_used = 0
             if month_in_fy > 0:
-                pm_row = conn.execute(
-                    "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status='pm' AND date>=? AND date<=?",
-                    (emp_id, fy_start, fy_end)
-                ).fetchone()
-                pm_used = (pm_row['c'] if pm_row else 0) or 0
+                pm_used = _pm_used_count(conn, emp_id, fy_start, fy_end)
 
             # Probationary/Intern (MIIM Leave Policy V24, updated): Permission
             # now has its own separate 2/month quota — same rule as permanent
@@ -3945,6 +3982,18 @@ def leave_report_monthly():
         by_month = {}
         for r in rows:
             by_month.setdefault(r['ym'], {"cl": 0, "sl": 0, "el": 0, "pm": 0})[r['status']] = r['c']
+        # PM is stored as present + pm_minutes, so recount it from those columns
+        _pm_rows = conn.execute(
+            "SELECT date, status, pm_minutes, pm_leave_ids FROM attendance WHERE emp_id=? AND date>=? AND date<=? "
+            "AND (COALESCE(pm_minutes,0)>0 OR status='pm' OR COALESCE(pm_leave_ids,'')<>'')",
+            (emp_id, fy_start, fy_end)).fetchall()
+        _pm_month = {}
+        for _d, _n in _pm_counts_by_date(_pm_rows).items():
+            _pm_month[_d[:7]] = _pm_month.get(_d[:7], 0) + _n
+        for _ym in list(by_month.keys()):
+            by_month[_ym]['pm'] = _pm_month.get(_ym, 0)
+        for _ym, _n in _pm_month.items():
+            by_month.setdefault(_ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0})['pm'] = _n
 
         _MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
         months = []
@@ -4892,7 +4941,7 @@ def get_leave_balance_by_id(emp_id):
         is_perm = emp_type in ('Regular', 'Regular(PIP)')
 
         rows = conn.execute(
-            "SELECT date, status FROM attendance WHERE emp_id=? AND date>=? AND date<=?",
+            "SELECT date, status, pm_minutes, pm_leave_ids FROM attendance WHERE emp_id=? AND date>=? AND date<=?",
             (emp_id, fy_start_date.isoformat(), fy_end_date.isoformat())
         ).fetchall()
 
@@ -4907,11 +4956,18 @@ def get_leave_balance_by_id(emp_id):
                 mrec['p'] += 1
             elif st == 'absent':
                 mrec['a'] += 1
-            elif st in counts_year:
+            elif st in counts_year and st != 'pm':
                 counts_year[st] += 1
                 mrec[st] += 1
                 if d.year == nowY and d.month == nowM:
                     counts_month[st] += 1
+        # PM: count approved permissions (pm_minutes / pm_leave_ids), one per permission
+        for _d, _n in _pm_counts_by_date(rows).items():
+            _dd = datetime.datetime.strptime(_d, '%Y-%m-%d').date()
+            counts_year['pm'] += _n
+            monthly.setdefault(_dd.month, {'month': _dd.month, 'p': 0, 'a': 0, 'sl': 0, 'cl': 0, 'el': 0, 'pm': 0})['pm'] += _n
+            if _dd.year == nowY and _dd.month == nowM:
+                counts_month['pm'] += _n
 
         sl_remaining = round(_sl_balance_asof(conn, emp_id, joindate, today), 1) if is_perm else 0
         cl_total = float(CL_YEAR_QUOTA)
@@ -5032,12 +5088,17 @@ def _sync_leave_to_attendance(conn, leave_id, now):
         is_notice_period = bool(lwd) and str(from_dt)[:7] <= str(lwd)[:10][:7]
 
         remaining = 0.0 if is_notice_period else _leave_remaining_quota(
-            conn, emp_id, is_permanent, leave_code, joindate, from_dt, to_dt
+            conn, emp_id, is_permanent, leave_code, joindate, from_dt, to_dt, exclude_leave_id=leave_id
         )
 
         cur = from_dt
         while cur <= to_dt:
             date_str = str(cur)
+            if leave_code == 'pm' and remaining <= 0:
+                # PM over its 2/month quota: give no credit, but never turn a
+                # worked day into LOP / wipe its check-in (it is only a 2hr slip).
+                cur += datetime.timedelta(days=1)
+                continue
             if remaining > 0:
                 att_status = leave_code
                 remaining -= 1
@@ -5091,6 +5152,38 @@ def _sync_leave_to_attendance(conn, leave_id, now):
     except Exception as att_ex:
         print(f"[LEAVE SYNC] attendance sync FAILED for leave_id={leave_id}: {att_ex}")
         return False, str(att_ex)
+
+
+def _repair_legacy_pm_attendance(conn):
+    """One-time, idempotent. Early Permission flow saved a worked day as
+    status='pm' (real check-in kept) with pm_minutes=0, so the day showed a bare
+    'P+PM' with no +2h credit, no PM time row and no balance deduction.
+    Convert those rows to the current model: status='present' + pm_minutes
+    (+ pm_leave_ids when an approved Permission request exists for that day).
+    Pure 'pm' days with no punches are left untouched."""
+    def _real(v):
+        return v not in (None, '', '--')
+    fixed = 0
+    days = conn.execute("SELECT DISTINCT emp_id, date FROM attendance WHERE status='pm'").fetchall()
+    for d in days:
+        emp_id, date = d['emp_id'], str(d['date'])[:10]
+        rows = conn.execute("SELECT id, checkin, checkout, pm_minutes, pm_leave_ids FROM attendance "
+                            "WHERE emp_id=? AND date=? ORDER BY id", (emp_id, date)).fetchall()
+        if not any(_real(r['checkin']) or _real(r['checkout']) for r in rows):
+            continue
+        ids = [str(x['id']) for x in conn.execute(
+            "SELECT id FROM leave_requests WHERE emp_id=? AND from_date<=? AND to_date>=? "
+            "AND LOWER(leave_type) IN ('permission','pm') "
+            "AND LOWER(COALESCE(status,'')) IN ('approved','approve') ORDER BY id",
+            (emp_id, date, date)).fetchall()]
+        have = max([_pm_row_count(r['pm_minutes'], r['pm_leave_ids'], '') for r in rows] + [0])
+        n = max(1, len(ids), have)
+        conn.execute("UPDATE attendance SET status='present', pm_minutes=0, pm_leave_ids='' WHERE emp_id=? AND date=?",
+                     (emp_id, date))
+        conn.execute("UPDATE attendance SET pm_minutes=?, pm_leave_ids=? WHERE id=?",
+                     (n * PM_CREDIT_MINUTES_PER_PERMISSION, ','.join(ids), rows[0]['id']))
+        fixed += 1
+    return fixed
 
 
 def _log_approval_history(conn, emp_id, leave_type, leave_date, action, actioned_by='', actioned_by_name='', reason=''):
@@ -6224,6 +6317,15 @@ def init_db():
         _backfill_approval_history_from_attendance(conn)
     except Exception as _bf_ex2:
         print(f"[DB INIT WARNING] attendance-based approval_history backfill skipped: {_bf_ex2}")
+
+    # -- Old status='pm' + check-in days -> proper P+PM (+2h credit, balance) --
+    try:
+        _n_pm = _repair_legacy_pm_attendance(conn)
+        conn.commit()
+        if _n_pm:
+            print(f"[DB] Repaired {_n_pm} legacy P+PM attendance day(s)")
+    except Exception as _pm_ex:
+        print(f"[DB INIT WARNING] legacy PM repair skipped: {_pm_ex}")
 
     conn.close()
     print("[DB] Initialized successfully")
