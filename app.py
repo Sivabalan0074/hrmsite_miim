@@ -999,7 +999,7 @@ _HOLIDAYS_2026 = [
     ("2026-10-19", "Ayudha Pooja",            "National",   "🛠️"),
     ("2026-10-20", "Vijayadasami",            "National",   "🏹"),
     ("2026-11-08", "Deepavali",               "National",   "🪔"),
-    ("2026-12-25", "Christmas",               "Religious",  "🎄"),
+    ("2026-12-25", "Christmas",               "Government", "🎄"),
 ]
 
 # Wrong rows that the old seed created (date, name) -> removed once by the fix below
@@ -1058,6 +1058,17 @@ def _fix_holidays_2026(conn):
     conn.commit()
     print(f"[DB] 2026 holidays corrected ({added} added).")
 
+def _fix_christmas_office_holiday(conn):
+    """One-time: Christmas was saved as 'Religious' (optional) so it never showed on the
+    Attendance page. Make every Christmas row a Government (office) holiday."""
+    conn.execute("CREATE TABLE IF NOT EXISTS app_flags (k VARCHAR(100) PRIMARY KEY)")
+    if conn.execute("SELECT 1 FROM app_flags WHERE k=?", ("christmas_office_holiday_v1",)).fetchone():
+        return
+    conn.execute("UPDATE holidays SET type='Government' WHERE LOWER(name) LIKE ? AND type<>'Government'", ("%christmas%",))
+    conn.execute("INSERT INTO app_flags (k) VALUES (?)", ("christmas_office_holiday_v1",))
+    conn.commit()
+    print("[DB] Christmas holiday rows set to Government (office holiday).")
+
 def _fetch_google_india_holidays(year):
     """Public Google Calendar 'Holidays in India' ICS -> [(date,name,type,emoji)]. Raises on failure."""
     import urllib.request, re as _r
@@ -1074,8 +1085,8 @@ def _fetch_google_india_holidays(year):
         name = m_s.group(1).strip().replace("\\,", ",")
         low = name.lower()
         is_public = "public holiday" in ev.lower()
-        if is_public and any(k in low for k in _GOV_KEYWORDS):
-            typ = "Government"
+        if "christmas" in low or (is_public and any(k in low for k in _GOV_KEYWORDS)):
+            typ = "Government"   # Christmas is always an office holiday
         elif any(k in low for k in _REL_KEYWORDS):
             typ = "Religious"
         elif is_public:
@@ -6554,6 +6565,7 @@ def init_db():
         print(f"[DB] {len(default_holidays)} default holidays seeded.")
 
     _fix_holidays_2026(conn)
+    _fix_christmas_office_holiday(conn)
 
     # â”€â”€ users table (for landing page login) â”€â”€
     conn.execute(f"""CREATE TABLE IF NOT EXISTS users (
