@@ -2547,135 +2547,17 @@ function renderAccTable(rowId, toolName) {
   var tools = toolColumns[phase] || [];
 
   var safeName = toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-
-  // Phase filter tabs + action buttons
-  var phaseTabsList = [];
-  if (t.concept) phaseTabsList.push({ key:'concept', label:'3D Concept', color:'#3b82f6' });
-  if (t.finish)  phaseTabsList.push({ key:'finish',  label:'3D Finish',  color:'#f97316' });
-  if (t.draft)   phaseTabsList.push({ key:'draft2d', label:'2D Draft',   color:'#a855f7' });
-
-  var phaseBtnsHtml = phaseTabsList.map(function(p){
-    var isActive = (p.key === _accPhase);
-    var td = getToolPhaseData(toolName);
-    var phTotalHrs = (td[p.key]||[]).reduce(function(sum,r){ return sum+(r.totalPhaseHrs||0); }, 0);
-    var hrsTag = phTotalHrs > 0
-      ? '<span style="font-size:0.68rem;padding:1px 7px;border-radius:10px;background:rgba('+hexToRgb(p.color)+',0.2);color:'+p.color+';font-weight:700;margin-left:2px;">'+phTotalHrs+'h</span>'
-      : '';
-    return '<button id="acc-tab-'+rowId+'-'+p.key+'" '
-      + 'onclick="accSwitchPhase(\''+rowId+'\',\''+safeName+'\',\''+p.key+'\') " '
-      + 'style="display:inline-flex;align-items:center;gap:6px;font-family:\'Rajdhani\',sans-serif;font-size:0.8rem;font-weight:700;letter-spacing:0.8px;padding:6px 16px;border-radius:7px;cursor:pointer;transition:all 0.18s;'
-      + (isActive
-          ? 'background:rgba('+hexToRgb(p.color)+',0.18);border:1.5px solid '+p.color+';color:'+p.color+';'
-          : 'background:transparent;border:1.5px solid var(--border);color:var(--muted);')
-      + '">'
-      + '<span style="width:7px;height:7px;border-radius:50%;background:'+p.color+';display:inline-block;flex-shrink:0;"></span>'
-      + p.label
-      + hrsTag
-      + '</button>';
-  }).join('');
-
-  var tabsHtml = '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);flex-wrap:wrap;">'
-    + phaseBtnsHtml
-    + '<div style="flex:1;"></div>'
-    + ((_isGuest && !_isEmployee) ? '' : '<button onclick="openAddUnitModal()" style="font-family:\'Rajdhani\',sans-serif;font-size:0.74rem;font-weight:700;padding:5px 12px;background:transparent;border:1.5px solid var(--orange);color:var(--orange);border-radius:6px;cursor:pointer;">+ Add Unit</button>')
-    + ((_isGuest && !_isEmployee) ? '' : '<button onclick="accAddRow(\''+rowId+'\',\''+safeName+'\')" style="font-family:\'Rajdhani\',sans-serif;font-size:0.74rem;font-weight:700;padding:5px 12px;background:var(--orange);border:none;color:#fff;border-radius:6px;cursor:pointer;margin-left:6px;">+ Add Row</button>')
-    + '</div>';
-
-  body.innerHTML = tabsHtml + '<div id="acc-table-'+rowId+'" style="overflow-x:auto;"></div>';
-  renderAccTable(rowId, toolName);
-}
-
-function accSwitchPhase(rowId, toolName, phase) {
-  _accPhase = phase;
-  _accPhaseFilter[rowId] = phase; // keep outer filter buttons in sync
-  var phaseList = [{key:'concept',color:'#3b82f6'},{key:'finish',color:'#f97316'},{key:'draft2d',color:'#a855f7'}];
-  // update inner accordion tab buttons (filter-button style)
-  phaseList.forEach(function(p){
-    var btn = document.getElementById('acc-tab-'+rowId+'-'+p.key);
-    if (!btn) return;
-    if (p.key === phase) {
-      btn.style.background = 'rgba('+hexToRgb(p.color)+',0.18)';
-      btn.style.border = '1.5px solid '+p.color;
-      btn.style.color = p.color;
-    } else {
-      btn.style.background = 'transparent';
-      btn.style.border = '1.5px solid var(--border)';
-      btn.style.color = 'var(--muted)';
-    }
-  });
-  // also update outer phase filter buttons
-  phaseList.forEach(function(p){
-    var obtn = document.getElementById('pfbtn-'+rowId+'-'+p.key);
-    if (!obtn) return;
-    if (p.key === phase) {
-      obtn.style.background = 'rgba('+hexToRgb(p.color)+',0.18)';
-      obtn.style.border = '1.5px solid '+p.color;
-      obtn.style.color = p.color;
-    } else {
-      obtn.style.background = 'transparent';
-      obtn.style.border = '1.5px solid var(--border)';
-      obtn.style.color = 'var(--muted)';
-    }
-  });
-  renderAccTable(rowId, toolName);
-}
-
-function accAddRow(rowId, toolName) {
-  var td = getToolPhaseData(toolName);
-  equalizeToolPhase(td);
-  var allPhases = ['concept', 'finish', 'draft2d'];
-  var _sdA = window._summaryToolData && window._summaryToolData[rowId];
-  var _wdA = getWhdToolDates(_sdA ? _sdA.product : '', toolName);
-  var emptyRow = { station: '', name: '', complexity: '', hours: 0, overall: 0, totalPhaseHrs: 0, start: '', end: '', completion: '', internal: '', changes: '', customer: '', approved: '', pct: 0, nextHrs: 0 };
-  allPhases.forEach(function(ph) {
-    td[ph].push(Object.assign({}, emptyRow, { sno: td[ph].length + 1 }));
-  });
-  savePhaseDataStorage();
-  renderAccTable(rowId, toolName);
-}
-
-function accDeleteRow(rowId, toolName, phase, idx) {
-  if (!confirm('Delete this row?')) return;
-  var td = getToolPhaseData(toolName);
-  var allPhases = ['concept', 'finish', 'draft2d'];
-  allPhases.forEach(function(ph) {
-    if (td[ph] && td[ph][idx] !== undefined) {
-      td[ph].splice(idx, 1);
-      td[ph].forEach(function(r,i){ r.sno=i+1; });
-    }
-  });
-  savePhaseDataStorage();
-  renderAccTable(rowId, toolName);
-  showToast('🗑️ Row deleted.');
-}
-
-function renderAccTable(rowId, toolName) {
-  var wrap = document.getElementById('acc-table-'+rowId);
-  if (!wrap) return;
-  var phase = _accPhase;
-  var phaseColors = { concept:'#3b82f6', finish:'#f97316', draft2d:'#a855f7' };
-  var phaseLabels = { concept:'3D Concept', finish:'3D Finish', draft2d:'2D Draft' };
-  var nextColLabels = { concept:'Total 3D Finish Hours', finish:'Total 2D Draft Hours', draft2d:'Total Approved Hours' };
-  var totalHoursLabel = { concept:'Total Concept Hours', finish:'Total Finish Hours', draft2d:'Total Draft Hours' };
-  var col = phaseColors[phase];
-  var rgb = hexToRgb(col);
-  var rows = getToolPhaseData(toolName)[phase] || [];
-  var tools = toolColumns[phase] || [];
-
-  // Pre-fill empty Start/End from the dates entered in the WHD modal for this tool
-  var _sdInfo = window._summaryToolData && window._summaryToolData[rowId];
-  var _wd = getWhdToolDates(_sdInfo ? _sdInfo.product : '', toolName);
-  if (_wd.startDate || _wd.endDate) {
-    var _filled = false;
-    rows.forEach(function(r){
-      if (!r || typeof r !== 'object') return;
-      if (!r.start && _wd.startDate) { r.start = _wd.startDate; _filled = true; }
-      if (!r.end   && _wd.endDate)   { r.end   = _wd.endDate;   _filled = true; }
-    });
-    if (_filled && !(_isGuest && !_isEmployee)) { try { savePhaseDataStorage(); } catch(e){} }
-  }
-  var safeName = toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   var safeRowId = rowId.replace(/'/g,"\\'");
+  var _guestOnlyHdr = (_isGuest && !_isEmployee);
+  var _sel = accGetSel(rowId, toolName, phase);
+  var _fillCols = phase==='draft2d' ? [['completion','Completion'],['internal','Internal Review'],['changes','Checker Changes'],['approved','Approved Date']]
+                                    : [['completion','Completion'],['internal','Internal Review'],['changes','Review Changes'],['customer','Customer Review'],['approved','Approved Date']];
+  function _colHdr(f, label){
+    if (_guestOnlyHdr) return '<th class="ph-sub">'+label+'</th>';
+    return '<th class="ph-sub"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Select this column to fill one date for all selected rows">'
+      + '<input type="checkbox" class="acc-colcb" '+(_sel.cols[f]?'checked':'')+' onchange="accToggleCol(\''+safeRowId+'\',\''+safeName+'\',\''+phase+'\',\''+f+'\',this.checked)">'
+      + label+'</label></th>';
+  }
 
   var toolHeaderCells1 = '';
   var toolHeaderCells2 = '';
@@ -2683,7 +2565,7 @@ function renderAccTable(rowId, toolName) {
 
   var thead = '<thead>'
     + '<tr>'
-    + '<th rowspan="2" class="ph-fixed" style="min-width:50px;">S.No</th>'
+    + '<th rowspan="2" class="ph-fixed" style="min-width:64px;">'+(_guestOnlyHdr?'':'<input type="checkbox" id="acc-allrows-'+rowId+'" title="Select all units" '+((rows.length&&Object.keys(_sel.rows).filter(function(k){return _sel.rows[k];}).length===rows.length)?'checked':'')+' onchange="accToggleAllRows(\''+safeRowId+'\',\''+safeName+'\',\''+phase+'\',this.checked)" style="margin-right:6px;vertical-align:middle;cursor:pointer;">')+'S.No</th>'
     + '<th rowspan="2" class="ph-fixed" style="min-width:110px;">Station No &amp; Unit No</th>'
     + '<th rowspan="2" class="ph-fixed" style="min-width:120px;">Unit Name</th>'
     + '<th colspan="2" class="ph-group-hdr" style="background:rgba('+rgb+',0.18);color:'+col+';">Total Hours</th>'
@@ -2695,10 +2577,7 @@ function renderAccTable(rowId, toolName) {
     + '</tr>'
     + '<tr>'
     + '<th class="ph-sub">Complexity</th><th class="ph-sub">Hours</th>'
-    + '<th class="ph-sub">Completion</th>'
-    + '<th class="ph-sub">Internal Review</th><th class="ph-sub">'+(phase==='draft2d'?'Checker Changes':'Review Changes')+'</th>'
-    + (phase!=='draft2d' ? '<th class="ph-sub">Customer Review</th>' : '')
-    + '<th class="ph-sub">Approved Date</th>'
+    + _fillCols.map(function(c){ return _colHdr(c[0], c[1]); }).join('')
     + toolHeaderCells2
     + '</tr></thead>';
 
@@ -2715,10 +2594,13 @@ function renderAccTable(rowId, toolName) {
       var inStyleNum  = _guestOnly ? ' disabled style="background:transparent;border:none;color:var(--text);font-family:\'Exo 2\',sans-serif;font-size:0.8rem;width:70px;outline:none;text-align:center;pointer-events:none;"' : 'style="background:transparent;border:none;color:var(--text);font-family:\'Exo 2\',sans-serif;font-size:0.8rem;width:70px;outline:none;text-align:center;"';
       var inStyleDate = _guestOnly ? ' disabled style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:\'Exo 2\',sans-serif;font-size:0.75rem;padding:3px 6px;outline:none;width:130px;pointer-events:none;"' : 'style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:\'Exo 2\',sans-serif;font-size:0.75rem;padding:3px 6px;outline:none;cursor:pointer;width:130px;"';
       var selStyle    = _guestOnly ? ' disabled style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:\'Exo 2\',sans-serif;font-size:0.8rem;padding:3px 6px;outline:none;pointer-events:none;"' : 'style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:\'Exo 2\',sans-serif;font-size:0.8rem;padding:3px 6px;outline:none;cursor:pointer;"';
-      return '<tr style="border-bottom:1px solid var(--border);">'
-        + '<td class="ph-cell" style="color:var(--muted);text-align:center;">'+r.sno+'</td>'
+      var _rowOn = !!_sel.rows[idx];
+      return '<tr class="acc-row" id="accr-'+rowId+'-'+idx+'" style="border-bottom:1px solid var(--border);'+(_rowOn?'background:rgba(249,115,22,0.07);':'')+'">'
+        + '<td class="ph-cell" style="color:var(--muted);text-align:center;white-space:nowrap;">'
+          + (_guestOnly?'':'<input type="checkbox" class="acc-rowcb" '+(_rowOn?'checked':'')+' onchange="accToggleRow(\''+safeRowId+'\',\''+safeName+'\',\''+phase+'\','+idx+',this.checked)" style="margin-right:6px;vertical-align:middle;cursor:pointer;">')
+          + r.sno+'</td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyle+' value="'+escHtml(r.station||'')+'" oninput="syncToolField(_accTool,'+idx+',\'station\',this.value);"></td>'
-        + '<td class="ph-cell"><select class="ph-cell-input" '+selStyle+' onchange="syncToolField(_accTool,'+idx+',\'name\',this.value);">'
+        + '<td class="ph-cell"><select class="ph-cell-input" data-row-id="'+escHtml(rowId)+'" data-tool="'+escHtml(toolName)+'" data-phase="'+phase+'" data-idx="'+idx+'" title="Right-click to delete this unit" '+selStyle+' onchange="syncToolField(_accTool,'+idx+',\'name\',this.value);">'
           + getNameOpts(r.name).map(function(o){ return '<option value="'+escHtml(o.v)+'"'+(r.name===o.v?' selected':'')+'>'+escHtml(o.l)+'</option>'; }).join('')
           + '</select></td>'
         + '<td class="ph-cell"><select class="ph-cell-input" '+selStyle+' id="cx-'+phase+'-'+idx+'" onchange="syncToolHours(_accTool,'+idx+',this.value);">'
@@ -2748,7 +2630,82 @@ function renderAccTable(rowId, toolName) {
     }).join('') + '</tbody>';
   }
 
-  wrap.innerHTML = '<table class="phase-table">'+thead+tbody+'</table>';
+  wrap.innerHTML = (_guestOnlyHdr ? '' : accFillBarHtml(rowId, toolName, phase)) + '<table class="phase-table">'+thead+tbody+'</table>';
+  if (!_guestOnlyHdr) accUpdateFillBar(rowId, toolName, phase);
+}
+
+
+/* ══ ROW / COLUMN CHECKBOXES + BULK DATE FILL ══ */
+var _accSel = {};
+function accGetSel(rowId, toolName, phase) {
+  var k = rowId + '|' + toolName + '|' + phase;
+  if (!_accSel[k]) _accSel[k] = { rows:{}, cols:{} };
+  return _accSel[k];
+}
+function accFillBarHtml(rowId, toolName, phase) {
+  return '<div id="accfill-'+rowId+'" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;background:rgba(249,115,22,0.07);border-bottom:1px solid rgba(249,115,22,0.25);position:sticky;left:0;">'
+    + '<span id="accfill-info-'+rowId+'" style="font-size:0.74rem;font-family:Rajdhani,sans-serif;font-weight:700;letter-spacing:.5px;color:#fdba74;"></span>'
+    + '<input id="accfill-date-'+rowId+'" type="date" style="background:var(--input-bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-family:\'Exo 2\',sans-serif;font-size:0.78rem;">'
+    + '<button onclick="accApplyFill(\''+rowId.replace(/'/g,"\\'")+'\',\''+toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',\''+phase+'\')" style="background:var(--orange);border:none;color:#fff;border-radius:6px;padding:5px 14px;font-size:0.76rem;font-weight:700;cursor:pointer;">Fill Date</button>'
+    + '<button onclick="accClearSel(\''+rowId.replace(/'/g,"\\'")+'\',\''+toolName.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',\''+phase+'\')" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 12px;font-size:0.76rem;cursor:pointer;">Clear</button>'
+    + '</div>';
+}
+function accUpdateFillBar(rowId, toolName, phase) {
+  var sel = accGetSel(rowId, toolName, phase);
+  var bar = document.getElementById('accfill-'+rowId); if (!bar) return;
+  var cols = Object.keys(sel.cols).filter(function(k){ return sel.cols[k]; });
+  var nRows = (getToolPhaseData(toolName)[phase] || []).length;
+  var rowsSel = Object.keys(sel.rows).filter(function(k){ return sel.rows[k]; });
+  bar.style.display = cols.length ? 'flex' : 'none';
+  var info = document.getElementById('accfill-info-'+rowId);
+  if (info) info.textContent = 'FILL ' + cols.length + ' COLUMN' + (cols.length>1?'S':'') + ' \u2192 ' + (rowsSel.length ? rowsSel.length + ' SELECTED UNIT' + (rowsSel.length>1?'S':'') : 'ALL ' + nRows + ' UNITS');
+  var all = document.getElementById('acc-allrows-'+rowId);
+  if (all) all.checked = nRows > 0 && rowsSel.length === nRows;
+}
+function accToggleRow(rowId, toolName, phase, idx, on) {
+  accGetSel(rowId, toolName, phase).rows[idx] = !!on;
+  var tr = document.getElementById('accr-'+rowId+'-'+idx);
+  if (tr) tr.style.background = on ? 'rgba(249,115,22,0.07)' : '';
+  accUpdateFillBar(rowId, toolName, phase);
+}
+function accToggleAllRows(rowId, toolName, phase, on) {
+  var sel = accGetSel(rowId, toolName, phase);
+  var n = (getToolPhaseData(toolName)[phase] || []).length;
+  for (var i = 0; i < n; i++) {
+    sel.rows[i] = !!on;
+    var tr = document.getElementById('accr-'+rowId+'-'+i); if (tr) tr.style.background = on ? 'rgba(249,115,22,0.07)' : '';
+  }
+  var wrap = document.getElementById('acc-table-'+rowId);
+  if (wrap) wrap.querySelectorAll('.acc-rowcb').forEach(function(cb){ cb.checked = !!on; });
+  accUpdateFillBar(rowId, toolName, phase);
+}
+function accToggleCol(rowId, toolName, phase, field, on) {
+  accGetSel(rowId, toolName, phase).cols[field] = !!on;
+  accUpdateFillBar(rowId, toolName, phase);
+}
+function accClearSel(rowId, toolName, phase) {
+  _accSel[rowId + '|' + toolName + '|' + phase] = { rows:{}, cols:{} };
+  renderAccTable(rowId, toolName);
+}
+function accApplyFill(rowId, toolName, phase) {
+  var dEl = document.getElementById('accfill-date-'+rowId);
+  var date = dEl ? dEl.value : '';
+  if (!date) { showToast('⚠️ Pick a date first.'); return; }
+  var sel = accGetSel(rowId, toolName, phase);
+  var cols = Object.keys(sel.cols).filter(function(k){ return sel.cols[k]; });
+  if (!cols.length) { showToast('⚠️ Tick a date column first.'); return; }
+  var rows = getToolPhaseData(toolName)[phase] || [];
+  var targets = [];
+  rows.forEach(function(r, i){ if (r && typeof r === 'object' && (sel.rows[i] || !Object.keys(sel.rows).some(function(k){ return sel.rows[k]; }))) targets.push(i); });
+  if (!targets.length) { showToast('⚠️ No units to fill.'); return; }
+  targets.forEach(function(i){
+    cols.forEach(function(f){ rows[i][f] = date; });
+    autoCalcUWC(toolName, phase, i);
+  });
+  savePhaseDataStorage();
+  renderAccTable(rowId, toolName);
+  try { refreshToolHeader(rowId, toolName); } catch(e) {}
+  showToast('✅ ' + cols.length + ' column(s) filled for ' + targets.length + ' unit(s).');
 }
 
 function accDeleteToolCol(rowId, toolName, phase, idx) {
@@ -4997,8 +4954,11 @@ function showUnitCtxMenu(x, y, selectedVal) {
   var isDefault = defaultUnits.indexOf(selectedVal) !== -1;
   var isCustom  = customUnits.indexOf(selectedVal) !== -1;
   var itemHtml;
+  if (selectedVal && !isDefault && !isCustom) { itemHtml = ''; isDefault = false; }
 
-  if (!selectedVal) {
+  if (itemHtml === '') {
+    /* WHD tool name used as unit name: only the row can be deleted (shown above) */
+  } else if (!selectedVal) {
     itemHtml = '<div class="ctx-item disabled">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>'
       + 'No unit selected</div>';
@@ -5012,16 +4972,32 @@ function showUnitCtxMenu(x, y, selectedVal) {
       + 'Delete &ldquo;' + escHtml(selectedVal) + '&rdquo;</div>';
   }
 
-  menu.innerHTML = '<div class="ctx-header">Unit Option</div>' + itemHtml;
+  var rowItem = '';
+  var _t = _ctxTargetSelect;
+  if (_t && _t.dataset && _t.dataset.idx !== undefined && !(_isGuest && !_isEmployee)) {
+    rowItem = '<div class="ctx-item danger" onclick="deleteUnitRowFromCtxMenu()">'
+      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+      + 'Delete this unit' + (selectedVal ? ' (' + escHtml(selectedVal) + ')' : '') + '</div>';
+  }
+  menu.innerHTML = '<div class="ctx-header">Unit Option</div>' + rowItem + itemHtml;
   menu.style.display = 'block';
 
-  var menuW = 210, menuH = 80;
+  var menuW = 230, menuH = 120;
   var left = (x + menuW > window.innerWidth)  ? x - menuW : x;
   var top  = (y + menuH > window.innerHeight) ? y - menuH : y;
   menu.style.left = left + 'px';
   menu.style.top  = top  + 'px';
 }
 
+function deleteUnitRowFromCtxMenu() {
+  var t = _ctxTargetSelect; if (!t) { hideUnitCtxMenu(); return; }
+  var d = t.dataset; var rowId = d.rowId, tool = d.tool, phase = d.phase, idx = parseInt(d.idx, 10);
+  hideUnitCtxMenu();
+  if (!rowId || isNaN(idx)) return;
+  accDeleteRow(rowId, tool, phase, idx);
+  _accSel[rowId + '|' + tool + '|' + phase] = { rows:{}, cols:{} };
+  renderAccTable(rowId, tool);
+}
 function hideUnitCtxMenu() {
   document.getElementById('unitContextMenu').style.display = 'none';
   _ctxTargetSelect = null;
