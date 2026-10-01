@@ -4079,7 +4079,8 @@ def attendance_monthly_summary():
         conn = _db()
 
         # Employee type + notice-period marker (lwd = Last Working Day)
-        emp_row = conn.execute("SELECT type, lwd FROM employees WHERE id=?", (emp_id,)).fetchone()
+        emp_row = conn.execute("SELECT type, lwd, joindate FROM employees WHERE id=?", (emp_id,)).fetchone()
+        emp_joindate = (emp_row['joindate'] if emp_row and 'joindate' in emp_row.keys() else '') or ''
         emp_type = (emp_row['type'] if emp_row and 'type' in emp_row.keys() else '') or 'Regular'
         lwd = (emp_row['lwd'] if emp_row and 'lwd' in emp_row.keys() else '') or ''
         is_permanent = emp_type in ('Regular', 'Regular(PIP)')
@@ -4184,8 +4185,13 @@ def attendance_monthly_summary():
                 lop_breakdown[t] = take
                 excess -= take
         else:
-            # Permanent employee: quota-based, accrued-to-date.
-            used_before = {"cl": 0, "sl": 0, "el": 0}
+            # Permanent employee: quota-based.
+            # IMPORTANT: this MUST use the same rules as the leave-approval sync
+            # (_leave_remaining_quota) -- otherwise a leave that was approved as
+            # PAID (balance available) gets wrongly shown as "over-quota LOP" here.
+            #   CL -> 6/year flat | SL -> V26: 12 granted at FY start + carry-over
+            #   (_sl_balance_asof) | EL -> 0.5/month, cap 6/year
+            used_before = {"cl": 0, "el": 0}
             for t in used_before:
                 row = conn.execute(
                     "SELECT COUNT(*) AS c FROM attendance WHERE emp_id=? AND status=? AND date>=? AND date<?",
@@ -4195,14 +4201,25 @@ def attendance_monthly_summary():
 
             accrued = {
                 "cl": float(CL_YEAR_QUOTA),                       # flat annual quota, no monthly accrual
-                "sl": min(month_in_fy, 12) * 1.0,                   # 1/month, capped 12/year (Apr-Mar)
                 "el": min(month_in_fy * 0.5, 6.0),                  # 0.5/month, capped 6/year (Apr-Mar)
             }
-            for t in ('cl', 'sl', 'el'):
+            for t in ('cl', 'el'):
                 remaining_before_month = max(0.0, accrued[t] - used_before[t])
                 used_this_month = counts[t]
                 paid_this_month = min(used_this_month, remaining_before_month)
                 lop_breakdown[t] = max(0, used_this_month - int(paid_this_month))
+
+            # SL: balance available just before this month's first SL day
+            # (same running balance the leave sync/report use), not month-count accrual.
+            if counts['sl'] > 0:
+                _sl_dates = sorted(str(r['date'])[:10] for r in rows if (r['status'] or '').lower().strip() == 'sl')
+                _first_sl = datetime.date.fromisoformat(_sl_dates[0])
+                _asof = _first_sl - datetime.timedelta(days=1)
+                _sl_avail = _sl_balance_asof(conn, emp_id, emp_joindate, _asof)
+                if _sl_fy_start_year(_asof) < _sl_fy_start_year(_first_sl):
+                    _sl_avail = min(32.0, _sl_avail + 12.0)   # new FY (Apr 1): fresh 12-day grant
+                _sl_paid = min(counts['sl'], _sl_avail)
+                lop_breakdown['sl'] = max(0, counts['sl'] - int(_sl_paid))
 
             # PM: 2/month, resets monthly (not cumulative).
             lop_breakdown['pm'] = max(0, counts['pm'] - 2)
