@@ -4144,6 +4144,22 @@ def attendance_monthly_summary():
             _day_rows.append({'date': _d, 'status': _st})
         rows = _day_rows
 
+        # Mid-month joiner: days BEFORE the date of joining are not payable
+        # (employee wasn't employed yet) -- never count them as paid days,
+        # and ignore any stray attendance rows dated before joining.
+        pre_join_days = 0
+        try:
+            _jd = datetime.date.fromisoformat(str(emp_joindate)[:10]) if emp_joindate else None
+        except Exception:
+            _jd = None
+        if _jd:
+            if (_jd.year, _jd.month) == (year, month):
+                pre_join_days = _jd.day - 1
+            elif (_jd.year, _jd.month) > (year, month):
+                pre_join_days = total_days          # joins in a later month -> nothing payable
+            if pre_join_days:
+                rows = [r for r in rows if r['date'] >= _jd.isoformat()]
+
         counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0, "half_day": 0, "holiday": 0, "other": 0}
         marked_dates = set()
         for r in rows:
@@ -4166,7 +4182,7 @@ def attendance_monthly_summary():
                 counts['holiday'] += 1
             else:
                 counts['other'] += 1
-        not_marked = max(0, total_days - len(marked_dates))
+        not_marked = max(0, total_days - pre_join_days - len(marked_dates))
 
         lop_breakdown = {"cl": 0, "sl": 0, "el": 0, "pm": 0}
 
@@ -4228,9 +4244,10 @@ def attendance_monthly_summary():
         half_day_count = counts['half_day']
         # Payable / worked days = every day in the month EXCEPT Absent and LOP leave,
         # with a Half Day (insufficient checkout hours) counting as 0.5 payable day.
-        days_worked = total_days - counts['absent'] - lop_leave_days - (half_day_count * 0.5)
+        days_worked = total_days - pre_join_days - counts['absent'] - lop_leave_days - (half_day_count * 0.5)
         # Sunday special-class days are paid ON TOP of the normal month.
         days_worked += sunday_worked
+        days_worked = max(0, days_worked)
         conn.close()
 
         # "Unpaid days" = every day that actually reduced Days Worked above —
@@ -4240,7 +4257,7 @@ def attendance_monthly_summary():
         # otherwise a shortfall made up mostly of plain Absent days shows
         # "LOP = ₹0", which reads as "nothing was detected" even though pay
         # was in fact reduced (via the pro-rated Days Worked).
-        unpaid_days = counts['absent'] + lop_leave_days + (half_day_count * 0.5)
+        unpaid_days = pre_join_days + counts['absent'] + lop_leave_days + (half_day_count * 0.5)
 
         return jsonify({
             "success": True,
@@ -4266,6 +4283,7 @@ def attendance_monthly_summary():
             "lop_breakdown": lop_breakdown,
             "unpaid_days": unpaid_days,
             "sunday_worked": sunday_worked,
+            "pre_join_days": pre_join_days,
             "days_worked": days_worked
         })
     except Exception as ex:
