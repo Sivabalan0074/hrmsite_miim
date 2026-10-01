@@ -4247,7 +4247,10 @@ def attendance_monthly_summary():
         days_worked = total_days - pre_join_days - counts['absent'] - lop_leave_days - (half_day_count * 0.5)
         # Sunday special-class days are paid ON TOP of the normal month.
         days_worked += sunday_worked
-        days_worked = max(0, days_worked)
+        # Never more than the days in the month (e.g. 30 for September) -- a
+        # Sunday worked can make up for a missed day, but cannot push the
+        # payable days above the month's total.
+        days_worked = max(0, min(days_worked, total_days - pre_join_days))
         conn.close()
 
         # "Unpaid days" = every day that actually reduced Days Worked above —
