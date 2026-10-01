@@ -229,6 +229,15 @@ tr.expand-row td{padding:0;border-bottom:2px solid var(--border2);}
 .gv-lop{background:var(--red-dim);color:var(--red);}
 .gv-half{background:rgba(234,88,12,0.18);color:#ea580c;}
 .gv-holiday{background:rgba(20,184,166,0.18);color:#14b8a6;}
+.gv-rh{background:rgba(168,85,247,0.18);color:#c084fc;}
+.gv-badge.gv-emo{cursor:help;}
+.hol-mark{font-size:12px;line-height:1.1;margin-top:1px;cursor:help;}
+.hol-mark.rel{opacity:.55;}
+.hol-banner{display:flex;align-items:center;gap:12px;padding:10px 14px;margin:0 0 10px;border-radius:8px;font-size:12.5px;}
+.hol-banner .hb-emo{font-size:24px;line-height:1;}
+.hol-banner.off{background:rgba(20,184,166,0.10);border:1px solid rgba(20,184,166,0.35);color:#5eead4;}
+.hol-banner.rel{background:rgba(168,85,247,0.10);border:1px solid rgba(168,85,247,0.35);color:#d8b4fe;}
+.apply-leave-btn.rh-btn{border-color:rgba(168,85,247,0.45);background:rgba(168,85,247,0.10);color:#c084fc;}
 .gv-pending{background:rgba(239,68,68,0.15);color:var(--red);}
 .gv-badge.gv-pmpresent{background:var(--orange-dim);color:var(--orange);width:auto;min-width:26px;padding:0 3px;font-size:7.5px;letter-spacing:0.2px;}
 .gv-badge.gv-offp{background:rgba(234,88,12,0.18);color:#ea580c;width:auto;min-width:26px;padding:0 2px;font-size:7.5px;letter-spacing:0.2px;}
@@ -1306,6 +1315,7 @@ tr.emp-row td {
     <button class="corr-badge" id="holidayBadgeBtn" onclick="openHolidayApprovalModal()" style="display:none;background:rgba(249,115,22,0.12);border-color:rgba(249,115,22,0.4);color:#f97316;">
       🎉 Holiday Requests <span class="corr-num" id="holidayPendingCount">0</span>
     </button>
+    <button class="policy-btn" id="rhTopBtn" onclick="openReligiousModal()" style="display:none;border-color:rgba(168,85,247,.5);color:#c084fc;">🛐 Religious Holiday</button>
     <button class="policy-btn" id="historyBtn" onclick="openHistoryModal()" style="display:none;">📜 Approval History</button>
     <button class="policy-btn" id="corrHistoryBtn" onclick="openCorrHistoryModal()" style="display:none;">🕐 Check-In/Out History</button>
     <button class="policy-btn" onclick="openPolicy()">📋 Leave Policy V24</button>
@@ -1368,6 +1378,10 @@ tr.emp-row td {
   <div class="sum-pill pill-pm" onclick="filterStatus('pm')" id="spill-pm">
     <span class="sum-icon">🕐</span>
     <div><div class="sum-label">PM</div><div class="sum-count" id="sc-pm">0</div></div>
+  </div>
+  <div class="sum-pill pill-hol" id="spill-hol" title="Holidays (office + religious) on the selected day/range" style="cursor:default;">
+    <span class="sum-icon">🎉</span>
+    <div><div class="sum-label">Holiday</div><div class="sum-count" id="sc-hol">0</div></div>
   </div>
   <button class="save-btn" id="mainSaveBtn" onclick="saveAttendance()">
     <div class="unsaved-dot" id="unsavedDot"></div>💾 Save
@@ -1657,6 +1671,43 @@ tr.emp-row td {
   </div>
 </div>
 
+<!-- RELIGIOUS HOLIDAY MODAL (HR/Admin gives a religious holiday per employee) -->
+<div class="modal-overlay" id="rhModal" onclick="if(event.target===this)closeReligiousModal()">
+  <div class="approval-modal-box" style="max-width:560px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">🛐 Religious Holiday</div>
+        <div class="modal-sub">Not an office leave — gives the selected employees this religious day off (paid)</div>
+      </div>
+      <div class="modal-close" onclick="closeReligiousModal()">✕</div>
+    </div>
+    <div class="modal-body">
+      <div class="corr-field" style="margin-bottom:12px;">
+        <label>Date</label>
+        <input type="date" id="rhDate" style="color-scheme:dark;" onchange="rhOnDateChange()"/>
+      </div>
+      <div class="corr-field" style="margin-bottom:12px;">
+        <label>Holiday <span style="color:var(--red)">*</span> <span style="color:var(--t3);font-weight:400;">(select from list or choose “Other” to type)</span></label>
+        <select id="rhName" class="sel" style="width:100%;" onchange="rhOnNameChange()"></select>
+        <div id="rhCustomWrap" style="display:none;margin-top:8px;">
+          <input type="text" id="rhCustom" class="note-input" style="width:100%;" placeholder="Type holiday name e.g. Maha Shivaratri, Eid…" oninput="rhUpdatePreview()"/>
+        </div>
+      </div>
+      <div class="corr-field" style="margin-bottom:12px;">
+        <label>Employees <span style="color:var(--t3);font-weight:400;">(<span id="rhSelCount">0</span> selected)</span>
+          <span style="float:right;"><a href="#" onclick="rhSelectAll(true);return false;" style="color:var(--orange);font-size:11px;">All</a> · <a href="#" onclick="rhSelectAll(false);return false;" style="color:var(--orange);font-size:11px;">None</a></span></label>
+        <div id="rhEmpList" style="max-height:170px;overflow-y:auto;border:1px solid var(--border2);border-radius:8px;padding:4px;background:var(--bg2);"></div>
+      </div>
+      <div id="rhPreview" style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#d8b4fe;line-height:1.5;"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeReligiousModal()">Cancel</button>
+        <button class="btn-cancel" style="border-color:rgba(239,68,68,.5);color:var(--red);" onclick="submitReligiousHoliday('remove')" title="Remove an already-given religious holiday on this date for the selected employees">Remove</button>
+        <button class="btn-apply" onclick="submitReligiousHoliday('apply')">Apply Religious Holiday</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- HOLIDAY REQUESTS MODAL (Admin/Superadmin approves, HR can view) -->
 <div class="modal-overlay" id="holidayApprovalModal" onclick="if(event.target===this)closeHolidayApprovalModal()">
   <div class="approval-modal-box" style="max-width:780px;">
@@ -1758,12 +1809,12 @@ function inFY(y, m, fyStartYear){
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
-const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6',pm_present:'var(--orange)'};
-const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-offp',pending:'gv-pending',holiday:'gv-holiday',pm_present:'gv-pmpresent'};
+const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6',rh:'#c084fc',pm_present:'var(--orange)'};
+const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-offp',pending:'gv-pending',holiday:'gv-holiday',rh:'gv-rh',pm_present:'gv-pmpresent'};
 // Labels: half_day (4-7h worked) shows as "OFF+P", lop (<4h / no checkin) shows
 // as "A" (same visual meaning as a full absent day), pm_present is the
 // combined "Permission + real check-in that day" badge ("P+PM").
-const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'A',half_day:'OFF+P',pending:'?',holiday:'H',pm_present:'P+PM'};
+const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'A',half_day:'OFF+P',pending:'?',holiday:'H',rh:'RH',pm_present:'P+PM'};
 
 // ── Admin-role detection (superadmin / admin designation or dept) ──────────
 // Per business rule: admin-role employees should never show a plain "Absent"
@@ -1812,8 +1863,90 @@ function autoHoursStatus(emp, st, rec, dKey){
   if(mins>=480) return st;
   return mins>=240?'half_day':'lop';
 }
+// ════════════════════════════════════════════════════
+// HOLIDAYS (Google-Calendar-synced list on the Holiday page)
+//   National / Government / Company  -> OFFICE LEAVE for everyone (auto-shown here)
+//   Religious                        -> optional; given per employee with 🛐 Religious Holiday
+// ════════════════════════════════════════════════════
+let holidayMap={};   // 'YYYY-MM-DD' -> [{id,name,type,emoji,office_leave}]
+function _hEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+const _HOL_EMOJI_KEYS=[['tamil new year','🎊'],['puthandu','🎊'],['new year','🎉'],['diwali','🪔'],['deepavali','🪔'],['holi','🎨'],['pongal','🌾'],['thiruvalluvar','📜'],['uzhavar','🌻'],['republic day','🇮🇳'],['independence day','🇮🇳'],['gandhi','🕊️'],['ambedkar','🙏'],['labour','⚒️'],['may day','⚒️'],['christmas','🎄'],['good friday','✝️'],['easter','🐣'],['bakrid','🐐'],['bakri','🐐'],['eid','🌙'],['ramzan','🌙'],['ramadan','🌙'],['muharram','🌙'],['milad','🌙'],['mawlid','🌙'],['ganesh','🐘'],['vinayaka','🐘'],['vinayagar','🐘'],['janmashtami','🪈'],['krishna','🪈'],['dussehra','🏹'],['dasara','🏹'],['vijaya','⚔️'],['ayudha','🛠️'],['navratri','💃'],['durga','🔱'],['shivaratri','🔱'],['ram navami','🏹'],['rama navami','🏹'],['hanuman','🐒'],['raksha','🧵'],['onam','🌺'],['ugadi','🌿'],['guru nanak','🙏'],['gurpurab','🙏'],['buddha','☸️'],['mahavir','🕉️'],['vaisakhi','🌾'],['baisakhi','🌾'],['lohri','🔥'],['sankranti','🪁'],['vasant panchami','🌼'],['karva','🌕'],['bhai dooj','🎁'],['chhath','🌅'],['navroz','🔥'],['children','🧒'],['foundation','🏢'],['rajyotsava','🌟']];
+const _HOL_TYPE_EMOJI={government:'🏛️',national:'🎉',company:'🏢',religious:'🛐'};
+function holidayEmojiFor(name,type){
+  const n=String(name||'').toLowerCase();
+  for(const [k,e] of _HOL_EMOJI_KEYS){ if(new RegExp('\\b'+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b').test(n)) return e; }
+  return _HOL_TYPE_EMOJI[String(type||'').toLowerCase()]||'🎉';
+}
+function _fixHolEmoji(e,name,type){
+  e=String(e||'').trim();
+  return (!e||/[ðÃâ\uFFFD]/.test(e)) ? holidayEmojiFor(name,type) : e;
+}
+function holidayTypeLabel(t){
+  const x=String(t||'').toLowerCase();
+  return x==='national'?'National Festival':x==='government'?'Government Holiday':x==='religious'?'Religious Holiday':x==='company'?'Company Holiday':(t||'Holiday');
+}
+async function loadHolidays(){
+  try{
+    const res=await fetchWithTimeout('/api/holidays',{headers:getHeaders()},6000);
+    const d=await res.json();
+    const map={};
+    (d.holidays||[]).forEach(h=>{
+      const k=String(h.date||'').slice(0,10); if(!k) return;
+      const t=String(h.type||'').trim();
+      const ol=(h.office_leave!==undefined)?!!h.office_leave:['national','government','company'].includes(t.toLowerCase());
+      (map[k]=map[k]||[]).push({id:h.id,name:h.name||'Holiday',type:t,emoji:_fixHolEmoji(h.emoji,h.name,t),office_leave:ol});
+    });
+    holidayMap=map;
+  }catch(e){ console.warn('holidays load failed',e); }
+}
+function officeHolidayOn(dKey){ const l=holidayMap[dKey]; return l?(l.find(h=>h.office_leave)||null):null; }
+function holidaysOn(dKey){ return holidayMap[dKey]||[]; }
+function hdrHolMark(d){
+  const l=holidaysOn(dk(d)); if(!l.length) return '';
+  const off=l.find(h=>h.office_leave); const h=off||l[0];
+  const tip=l.map(x=>`${x.emoji} ${x.name} (${holidayTypeLabel(x.type)})`).join('  •  ');
+  return `<div class="hol-mark${off?'':' rel'}" title="${_hEsc(tip)}">${h.emoji}</div>`;
+}
+// Religious-holiday note is stored as "<emoji> <name>" in attendance.note
+function parseRhNote(note){
+  const s=String(note||'').trim();
+  const m=s.match(/^((?:\p{Regional_Indicator}{2})|(?:\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*))\s*(.*)$/u);
+  return m?{emoji:m[1],name:m[2]||'Religious Holiday'}:{emoji:'🛐',name:s||'Religious Holiday'};
+}
+function holidayCellInfo(st,dKey,rec){
+  if(st==='rh'){ const p=parseRhNote(rec&&rec.note); return {emoji:p.emoji,name:p.name,title:`${p.emoji} ${p.name} — Religious Holiday (given by HR)`}; }
+  const oh=officeHolidayOn(dKey);
+  if(oh) return {emoji:oh.emoji,name:oh.name,title:`${oh.emoji} ${oh.name} — ${holidayTypeLabel(oh.type)} (office holiday)`};
+  const nm=(rec&&rec.note)||'Company Holiday';
+  return {emoji:'🎉',name:nm,title:`🎉 ${nm} — Company Holiday`};
+}
+function gvBadge(st,dKey,rec,style){
+  if(st==='holiday'||st==='rh'){
+    const i=holidayCellInfo(st,dKey,rec);
+    return `<span class="gv-badge ${GV_CLS[st]||''} gv-emo" title="${_hEsc(i.title)}" style="${style||''};font-size:13px;">${i.emoji}</span>`;
+  }
+  return `<span class="gv-badge ${GV_CLS[st]||''}" style="${style||''}">${GV_LBL[st]||'?'}</span>`;
+}
+function holidayRowBadge(st,rec,dKey){
+  const i=holidayCellInfo(st,dKey,rec);
+  const rel=st==='rh';
+  const col=rel?'#c084fc':'#14b8a6', bg=rel?'rgba(168,85,247,0.12)':'rgba(20,184,166,0.12)', bd=rel?'rgba(168,85,247,0.4)':'rgba(20,184,166,0.35)';
+  return `<span title="${_hEsc(i.title)}" style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:${bg};color:${col};border:1px solid ${bd};white-space:nowrap;">${i.emoji} ${_hEsc(i.name)}${rel?' · RH':''}</span>`;
+}
+function holidayBannerHtml(dKey){
+  const l=holidaysOn(dKey); if(!l.length) return '';
+  return l.map(h=>h.office_leave
+    ? `<div class="hol-banner off"><span class="hb-emo">${h.emoji}</span><div><b>${_hEsc(h.name)}</b> — ${holidayTypeLabel(h.type)}<div style="font-size:11px;opacity:.8;">Office holiday for all employees · fully paid</div></div></div>`
+    : `<div class="hol-banner rel"><span class="hb-emo">${h.emoji}</span><div><b>${_hEsc(h.name)}</b> — Religious Holiday<div style="font-size:11px;opacity:.8;">Not an office leave · HR can give it to employees with “🛐 Religious” (shows as ${h.emoji} for them)</div></div></div>`
+  ).join('');
+}
+
 function effectiveDisplaySt(emp, rawSt, rec, dKey){
   const hasCheckin = !!(rec && (rec.checkin || (rec.entries && rec.entries.some(e=>e && e.in))));
+  // Holidays: religious (given per employee) and office holidays (National/Government/Company) for everyone
+  if(rawSt==='rh') return 'rh';
+  if(rawSt==='holiday') return 'holiday';
+  if(!hasCheckin && ['','absent','lop','half_day','off'].includes(rawSt||'') && officeHolidayOn(dKey)) return 'holiday';
   if(rawSt==='pm' && hasCheckin) return 'pm_present';
   // Approved Permission is stored as status 'present' + pm_minutes (see backend
   // _sync_leave_to_attendance) -> must still render as the combined P+PM badge.
@@ -1966,6 +2099,7 @@ let pendingLeaves=[];
 // ════════════════════════════════════════════════════
 function applyRoleUI(){
   const cfg=getRoleCfg();
+  { const _rb=document.getElementById('rhTopBtn'); if(_rb) _rb.style.display=(typeof HOLIDAY_DECLARE_ROLES!=='undefined'&&HOLIDAY_DECLARE_ROLES.includes(currentRole))?'':'none'; }
   const badge=document.getElementById('userRoleBadge');
   badge.className='role-badge '+cfg.badgeCls;
   badge.textContent=cfg.label+(currentUserDept?' · '+currentUserDept:'');
@@ -2459,10 +2593,12 @@ function _parseAttRec(r){
     else if(note.includes('permission')||note.includes('pm')) feSt='pm';
     else feSt='cl';
   } else if(['sl','cl','el','pm'].includes(st)) feSt=st;
+  else if(st==='holiday'||st==='rh') feSt=st;
   const ci=(r.checkin&&r.checkin!=='--')?r.checkin:'';
   const co=(r.checkout&&r.checkout!=='--')?r.checkout:'';
   return {
     status:   feSt,
+    note:     r.note||'',
     checkin:  ci,
     checkout: co,
     entries:  [{in:ci,out:co}],
@@ -2988,7 +3124,7 @@ function renderDayTable(){
     return;
   }
   if(!filtered.length){mc.innerHTML=`<div class="empty-state">🔍 No employees found</div>`;return;}
-  mc.innerHTML=`<div class="table-wrap"><table>
+  mc.innerHTML=holidayBannerHtml(dKey)+`<div class="table-wrap"><table>
     <thead><tr>
       <th style="width:38px;text-align:center;">${cfg.canMarkAll?`<input type="checkbox" class="cb" id="hdrCb" onchange="toggleSelectAll(this.checked)">`:''}</th>
       <th style="width:36px;">#</th>
@@ -2998,7 +3134,7 @@ function renderDayTable(){
       <th style="min-width:150px;">Status</th>
       <th style="min-width:130px;">Check-In / Out</th>
       <th style="width:90px;">Total Hrs</th>
-      <th style="width:160px;">Actions</th>
+      <th style="width:270px;">Actions</th>
     </tr></thead>
     <tbody>${filtered.map((emp,i)=>buildDayRow(emp,i,att,cfg)).join('')}</tbody>
   </table></div>`;
@@ -3012,13 +3148,15 @@ function buildDayRow(emp,idx,att,cfg){
   // Admin-role employees never show a plain "Absent" badge: show Present
   // instead if they actually checked in that day, otherwise treat the day
   // as simply not-marked (blank) rather than forcing Absent onto them.
-  const status=autoHoursStatus(emp, (rawStatus==='absent' && isAdminRow) ? (_hasCk?'present':'') : rawStatus, d, dk(viewDate));
+  let status=autoHoursStatus(emp, (rawStatus==='absent' && isAdminRow) ? (_hasCk?'present':'') : rawStatus, d, dk(viewDate));
+  // Office holiday (National/Government/Company): everyone shows the holiday unless they actually worked
+  if(status!=='rh' && status!=='holiday' && !_hasCk && ['','absent','lop','half_day','off'].includes(status) && officeHolidayOn(dk(viewDate))) status='holiday';
   const isSel=selected.has(emp.id);
   // ★ CHANGE 1: detect if this row belongs to the logged-in user
   const isOwnRow=(emp.id===currentUserId);
   const dotColor=STATUS_DOT[status]||'var(--border)';
   const editable=canEdit(emp);
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el'].includes(status);
 
   // ── Check-in / Check-out state for row highlighting ──
   const entries=getEntries(emp.id, dk(viewDate));
@@ -3048,7 +3186,7 @@ function buildDayRow(emp,idx,att,cfg){
   const leaveBadgeMap={cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 '+pmLabel : '🕐 PM'};
   const leaveBadgeColor={cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
   const leaveActive=['cl','sl','el','pm'].includes(status);
-  const holidayActive=status==='holiday';
+  const holidayActive=(status==='holiday'||status==='rh');
   if(!editable){
     // Read-only: show only the current status as a single badge
     if(!status){
@@ -3056,7 +3194,7 @@ function buildDayRow(emp,idx,att,cfg){
     } else if(leaveActive){
       statusBtns=`<div><span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:${leaveBadgeColor[status]};border:1px solid ${leaveBadgeColor[status]}33;">${leaveBadgeMap[status]}</span>${pmTimeHtml}</div>`;
     } else if(holidayActive){
-      statusBtns=`<span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>`;
+      statusBtns=holidayRowBadge(status,d,dk(viewDate));
     } else {
       const stLabel=pmPresent?pmLabel:({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
@@ -3077,13 +3215,11 @@ function buildDayRow(emp,idx,att,cfg){
         <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
       </div>`;
     } else if(holidayActive){
-      // Holiday came from an approved company-wide request — editable roles can
-      // still clear a single row's status if genuinely needed, but there's no
-      // quick-toggle back into it (it must go through the approval flow again).
-      statusBtns=`<div class="status-btns">
-        <span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.12);color:#14b8a6;border:1px solid rgba(20,184,166,0.35);">🎉 Holiday</span>
-        <button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>
-      </div>`;
+      // Office holidays can't be cleared per-row; a religious holiday can be removed (calls the API)
+      const _clr = status==='rh'
+        ? `<button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="removeReligiousHoliday(${emp.id})" title="Remove this religious holiday">✕</button>`
+        : (officeHolidayOn(dk(viewDate)) ? '' : `<button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>`);
+      statusBtns=`<div class="status-btns">${holidayRowBadge(status,d,dk(viewDate))}${_clr}</div>`;
     } else {
       const stLabel=pmPresent?pmLabel:({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
@@ -3127,7 +3263,7 @@ function buildDayRow(emp,idx,att,cfg){
     <td onclick="event.stopPropagation()">${statusBtns}</td>
     <td onclick="event.stopPropagation()">${buildMultiInOutCell(emp.id, d, editable, disTime, dk(viewDate))}</td>
     <td onclick="event.stopPropagation()">${buildTotalHrsCell(emp.id, d, disTime)}</td>
-    <td onclick="event.stopPropagation()" style="white-space:nowrap;"><div style="display:flex;align-items:center;gap:5px;flex-wrap:nowrap;">${leaveBtnHtml}${corrBtnHtml}</div></td>
+    <td onclick="event.stopPropagation()" style="white-space:nowrap;"><div style="display:flex;align-items:center;gap:5px;flex-wrap:nowrap;">${leaveBtnHtml}${corrBtnHtml}${HOLIDAY_DECLARE_ROLES.includes(currentRole)?`<button class="apply-leave-btn rh-btn" onclick="event.stopPropagation();openReligiousModal(${emp.id})" title="Give a Religious holiday to this employee">🛐 Religious</button>`:''}</div></td>
   </tr>`;
 }
 
@@ -4072,7 +4208,7 @@ async function handleApproval(reqId,action){
 function renderWeekView(days){
   const mc=document.getElementById('mainContent');
   const cfg=getRoleCfg();const vis=getVisibleEmployees();
-  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:44px;text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span></th>`;}).join('');
+  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:44px;text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span>${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
@@ -4083,7 +4219,7 @@ function renderWeekView(days){
       const effSt=effectiveDisplaySt(emp,st,rec,dKey);
       const displaySt=isPend&&!st?'pending':effSt;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
-      const badge=displaySt?`<span class="gv-badge ${GV_CLS[displaySt]||''}">${GV_LBL[displaySt]||'?'}</span>`:`<span style="color:var(--t3);font-size:10px;">·</span>`;
+      const badge=displaySt?gvBadge(displaySt,dKey,rec,``):`<span style="color:var(--t3);font-size:10px;">·</span>`;
       return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badge}</td>`;
     }).join('');
     return `<tr><td class="gv-emp-cell" onclick="openEmployeeDetail(${emp.id},event)" style="cursor:pointer;"><div class="gv-emp-name">${emp.username}${emp.id===currentUserId?' <span class="self-you-tag">YOU</span>':''}</div><div class="gv-emp-dept">${emp.dept}</div></td>${cells}</tr>`;
@@ -4094,7 +4230,7 @@ function renderWeekView(days){
 function renderMonthView(days){
   const mc=document.getElementById('mainContent');
   const vis=getVisibleEmployees();
-  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:30px;padding:5px 2px;text-align:center;">${d.getDate()}</th>`;}).join('');
+  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:30px;padding:5px 2px;text-align:center;">${d.getDate()}${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
@@ -4106,7 +4242,7 @@ function renderMonthView(days){
       const effSt=effectiveDisplaySt(emp,st,rec,dKey);
       const displaySt=isPend?'pending':effSt;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
-      const badge=displaySt?`<span class="gv-badge ${GV_CLS[displaySt]||''}" style="width:22px;height:18px;font-size:8px;line-height:18px;">${GV_LBL[displaySt]||'?'}</span>`:`<span style="color:var(--t3);font-size:9px;">·</span>`;
+      const badge=displaySt?gvBadge(displaySt,dKey,rec,`width:22px;height:18px;font-size:8px;line-height:18px;`):`<span style="color:var(--t3);font-size:9px;">·</span>`;
       return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badge}</td>`;
     }).join('');
     return `<tr><td class="gv-emp-cell" onclick="openEmployeeDetail(${emp.id},event)" style="cursor:pointer;min-width:140px;"><div class="gv-emp-name">${emp.username}${emp.id===currentUserId?' <span class="self-you-tag">YOU</span>':''}</div><div class="gv-emp-dept">${emp.dept}</div></td>${cells}</tr>`;
@@ -4126,7 +4262,7 @@ function renderWeekViewFiltered(days){
     }));
   }
   if(!vis.length){mc.innerHTML=`<div class="empty-state">🔍 No employees with status "${statusFilter}"</div>`;return;}
-  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:44px;text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span></th>`;}).join('');
+  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:44px;text-align:center;">${DAYS_S[d.getDay()]}<br><span style="font-size:11px;font-weight:700;">${d.getDate()}</span>${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
@@ -4140,7 +4276,7 @@ function renderWeekViewFiltered(days){
       const dimmed=statusFilter&&st!==statusFilter;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
       const badgeFull=displaySt
-        ?`<span class="gv-badge ${GV_CLS[displaySt]||''}" style="${dimmed?'opacity:.2':''}">${GV_LBL[displaySt]||'?'}</span>`
+        ?gvBadge(displaySt,dKey,rec,`${dimmed?'opacity:.2':''}`)
         :`<span style="color:var(--t3);font-size:10px;">·</span>`;
       return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badgeFull}</td>`;
     }).join('');
@@ -4160,7 +4296,7 @@ function renderMonthViewFiltered(days){
     }));
   }
   if(!vis.length){mc.innerHTML=`<div class="empty-state">🔍 No employees with status "${statusFilter}"</div>`;return;}
-  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:30px;padding:5px 2px;text-align:center;">${d.getDate()}</th>`;}).join('');
+  const hdr=days.map(d=>{const cls=(isToday(d)?'today-col ':'')+(isWknd(d)?'wknd':'');return `<th class="${cls}" style="min-width:30px;padding:5px 2px;text-align:center;">${d.getDate()}${hdrHolMark(d)}</th>`;}).join('');
   const rows=vis.map(emp=>{
     const ed=canEdit(emp);
     const cells=days.map(d=>{
@@ -4173,7 +4309,7 @@ function renderMonthViewFiltered(days){
       const dimmed=statusFilter&&displaySt!==statusFilter;
       const cls='gv-cell'+(isToday(d)?' today-col':isWknd(d)?' wknd':'')+(ed?' can-edit':'');
       const badge=displaySt
-        ?`<span class="gv-badge ${GV_CLS[displaySt]||''}" style="width:22px;height:18px;font-size:8px;line-height:18px;${dimmed?'opacity:.15':''}">${GV_LBL[displaySt]||'?'}</span>`
+        ?gvBadge(displaySt,dKey,rec,`width:22px;height:18px;font-size:8px;line-height:18px;${dimmed?'opacity:.15':''}`)
         :`<span style="color:var(--t3);font-size:9px;">·</span>`;
       return `<td class="${cls}" ${ed?`onclick="gridCellClick(${emp.id},'${emp.type}','${dKey}',event)"`:''}>${badge}</td>`;
     }).join('');
@@ -4364,7 +4500,7 @@ function updateTotalHrsCell(empId, dKey){
   const entries=getEntries(empId, dKey);
   const d=attCache[dKey]?.[empId]||{};
   const status=d.status||'';
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||['cl','sl','el'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el'].includes(status);
   const pmMins=Number(d.pm_minutes)||0;
   if(disTime){el.textContent='—';el.className='total-hrs na';return;}
   const workedMins=calcTotalMins(entries);
@@ -4438,11 +4574,12 @@ function applyBulk(){
 // SUMMARY
 // ════════════════════════════════════════════════════
 function countSt(attMap,empList,dKey){
-  let p=0,a=0,off=0,cl=0,sl=0,el=0,pm=0,u=0;
+  let p=0,a=0,off=0,cl=0,sl=0,el=0,pm=0,u=0,h=0;
   (empList||employees).forEach(e=>{
     const rec=attMap[e.id]||{};
     const s=autoHoursStatus(e, rec.status||'', rec, dKey);
     const hasCk=!!(rec.checkin || (rec.entries && rec.entries.some(x=>x&&x.in)));
+    { const _ef=effectiveDisplaySt(e,rec.status||'',rec,dKey); if(_ef==='holiday'||_ef==='rh'){ h++; return; } }
     // Admin-role employees are never counted as Absent — count them as
     // Present if they actually checked in that day, otherwise skip them
     // (not counted at all, rather than being force-counted into anything).
@@ -4459,7 +4596,7 @@ function countSt(attMap,empList,dKey){
     else if(s==='half_day')p++;  // 4–7h worked ("OFF+P") counts toward Present
     else u++;
   });
-  return{p,a,off,cl,sl,el,pm,u};
+  return{p,a,off,cl,sl,el,pm,u,h};
 }
 function setSummaryUI(c){
   const ids={present:'sc-present',absent:'sc-absent',off:'sc-off',cl:'sc-cl',sl:'sc-sl',el:'sc-el',pm:'sc-pm'};
@@ -4468,10 +4605,11 @@ function setSummaryUI(c){
     const e1=document.getElementById(ids[k]);if(e1)e1.textContent=c[fk]??c[k]??0;
     const e2=document.getElementById(fids[fk]);if(e2)e2.textContent=c[fk]??c[k]??0;
   });
+  const eh=document.getElementById('sc-hol');if(eh)eh.textContent=c.h??0;
   const fu=document.getElementById('fUnmarked');if(fu)fu.textContent=(c.u??0)?`${c.u} not marked`:'✓ All marked';
 }
 function updateSummaryForDay(dKey){const vis=getVisibleEmployees(dKey);setSummaryUI(countSt(attCache[dKey]||{},vis,dKey));}
-function updateSummaryForRange(dKeys){let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0};dKeys.forEach(dKey=>{const vis=getVisibleEmployees(dKey);const c=countSt(attCache[dKey]||{},vis,dKey);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
+function updateSummaryForRange(dKeys){let tot={p:0,a:0,off:0,cl:0,sl:0,el:0,pm:0,u:0,h:0};dKeys.forEach(dKey=>{const vis=getVisibleEmployees(dKey);const c=countSt(attCache[dKey]||{},vis,dKey);Object.keys(tot).forEach(k=>{tot[k]+=c[k]||0;});});setSummaryUI(tot);}
 function filterStatus(s){
   statusFilter=statusFilter===s?'':s;
   document.querySelectorAll('.sum-pill').forEach(p=>p.classList.remove('active'));
@@ -4495,9 +4633,15 @@ async function saveAttendance(){
   const _isSun=_sp.length===3 && new Date(_sp[0],_sp[1]-1,_sp[2]).getDay()===0;
   // Sunday is a special-class day: only people who actually came get saved (as P);
   // everyone else stays blank instead of being auto-marked Absent.
-  const unmarked=_isSun ? [] : vis.filter(e=>!att[e.id]?.status && !isAdminEmp(e));
+  const _offHol=!!officeHolidayOn(dKey);   // National/Government/Company holiday: nobody is auto-Absent
+  const unmarked=(_isSun||_offHol) ? [] : vis.filter(e=>!att[e.id]?.status && !isAdminEmp(e));
   if(unmarked.length>0){if(!confirm(`${unmarked.length} employees not marked. Save anyway? (→ Absent)`))return;unmarked.forEach(e=>{if(!att[e.id])att[e.id]={};att[e.id].status='absent';});attCache[dKey]=att;}
-  const records=vis.filter(e=>!(isAdminEmp(e) && !att[e.id]?.status)).filter(e=>{
+  const records=vis.filter(e=>{
+    const dd=att[e.id]||{}; const ss=dd.status||'';
+    if(ss==='rh'||ss==='holiday') return false;      // already stored as holiday — never re-save as Absent
+    if(_offHol){ const ck=!!(dd.checkin||(dd.entries&&dd.entries.some(x=>x&&x.in))); if(!ck&&['','absent','off','lop','half_day'].includes(ss)) return false; }
+    return true;
+  }).filter(e=>!(isAdminEmp(e) && !att[e.id]?.status)).filter(e=>{
     if(!_isSun) return true;
     const dd=att[e.id]||{}; const ss=dd.status||'';
     const ck=!!(dd.checkin || (dd.entries && dd.entries.some(x=>x&&x.in)));
@@ -5338,6 +5482,110 @@ async function submitHolidayRequest(){
   }
 }
 
+
+// ════════════════════════════════════════════════════
+// RELIGIOUS HOLIDAY (HR/Admin gives it per employee; stored as status 'rh')
+// ════════════════════════════════════════════════════
+function _fmtDM(k){ const p=String(k).split('-').map(Number); return p.length===3?`${p[2]} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][p[1]-1]}`:k; }
+function rhAllReligious(){
+  const out=[];
+  Object.keys(holidayMap).sort().forEach(k=>holidayMap[k].filter(h=>!h.office_leave).forEach(h=>out.push({date:k,name:h.name,emoji:h.emoji})));
+  return out;
+}
+function openReligiousModal(empId){
+  if(!HOLIDAY_DECLARE_ROLES.includes(currentRole)){ showToast('error','Not Allowed','Only HR/Admin/Superadmin can give a religious holiday.'); return; }
+  document.getElementById('rhDate').value=dk(viewDate);
+  document.getElementById('rhCustomWrap').style.display='none';
+  document.getElementById('rhCustom').value='';
+  rhBuildEmployeeList(empId||null);
+  rhBuildHolidayOptions();
+  rhUpdatePreview();
+  document.getElementById('rhModal').classList.add('open');
+}
+function closeReligiousModal(){ document.getElementById('rhModal').classList.remove('open'); }
+function rhBuildHolidayOptions(){
+  const sel=document.getElementById('rhName'); const date=document.getElementById('rhDate').value||dk(viewDate);
+  const yr=date.slice(0,4);
+  const list=rhAllReligious().filter(h=>h.date.slice(0,4)===yr);
+  const onDate=list.filter(h=>h.date===date), other=list.filter(h=>h.date!==date);
+  const opt=h=>`<option value="${_hEsc(h.date)}|${_hEsc(h.name)}|${_hEsc(h.emoji)}">${h.emoji} ${_hEsc(h.name)} — ${_fmtDM(h.date)}</option>`;
+  let html='<option value="">— Select religious holiday —</option>';
+  if(onDate.length) html+=`<optgroup label="On selected date">${onDate.map(opt).join('')}</optgroup>`;
+  if(other.length)  html+=`<optgroup label="Other religious holidays (${yr})">${other.map(opt).join('')}</optgroup>`;
+  html+='<option value="__custom__">✍ Other — type a holiday name…</option>';
+  sel.innerHTML=html;
+  if(onDate.length){ sel.selectedIndex=1; }
+  document.getElementById('rhCustomWrap').style.display='none';
+}
+function rhOnDateChange(){ rhBuildHolidayOptions(); rhUpdatePreview(); }
+function rhOnNameChange(){
+  const sel=document.getElementById('rhName'); const v=sel.value;
+  document.getElementById('rhCustomWrap').style.display=(v==='__custom__')?'block':'none';
+  if(v && v!=='__custom__'){ const d=v.split('|')[0]; if(d) document.getElementById('rhDate').value=d; }
+  rhUpdatePreview();
+}
+function rhCurrentHoliday(){
+  const v=document.getElementById('rhName').value;
+  if(v==='__custom__'){ const n=document.getElementById('rhCustom').value.trim(); return n?{name:n,emoji:holidayEmojiFor(n,'Religious')}:null; }
+  if(!v) return null;
+  const p=v.split('|'); return {name:p[1],emoji:p[2]};
+}
+function rhBuildEmployeeList(presetId){
+  const box=document.getElementById('rhEmpList');
+  const list=getVisibleEmployees();
+  box.innerHTML=list.map(e=>`<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--t1);">
+      <input type="checkbox" class="rh-emp-cb" value="${e.id}" ${(presetId?e.id===presetId:true)?'checked':''} onchange="rhUpdatePreview()">
+      <span style="font-weight:600;">${_hEsc(e.username)}</span><span style="color:var(--t3);font-size:10px;">${_hEsc(e.dept||'')}</span></label>`).join('');
+}
+function rhSelectAll(v){ document.querySelectorAll('.rh-emp-cb').forEach(c=>c.checked=v); rhUpdatePreview(); }
+function rhSelectedIds(){ return Array.from(document.querySelectorAll('.rh-emp-cb:checked')).map(c=>parseInt(c.value)); }
+function rhUpdatePreview(){
+  const h=rhCurrentHoliday(); const n=rhSelectedIds().length; const d=document.getElementById('rhDate').value;
+  const pv=document.getElementById('rhPreview'); if(!pv) return;
+  pv.innerHTML=h?`${h.emoji} <b>${_hEsc(h.name)}</b> on <b>${_fmtDM(d)}</b> → ${n} employee${n!==1?'s':''}. Status shows as <b>${h.emoji} ${_hEsc(h.name)}</b> in Day / Week / Month view.`:'Select a holiday (or type a name) to continue.';
+  const c=document.getElementById('rhSelCount'); if(c) c.textContent=n;
+}
+function _rhPurgeLocal(dKey,empIds){
+  try{
+    const raw=localStorage.getItem('miim_att_cache'); if(raw){ const o=JSON.parse(raw); if(o[dKey]){ empIds.forEach(id=>{ delete o[dKey][id]; delete o[dKey][String(id)]; }); localStorage.setItem('miim_att_cache',JSON.stringify(o)); } }
+  }catch(_){}
+  delete attCache[dKey];
+}
+async function submitReligiousHoliday(action){
+  const date=document.getElementById('rhDate').value;
+  const h=rhCurrentHoliday();
+  const ids=rhSelectedIds();
+  if(!date){ showToast('error','Missing date','Please pick the date.'); return; }
+  if(action!=='remove' && !h){ showToast('error','Select holiday','Choose the religious holiday from the dropdown or type its name.'); return; }
+  if(!ids.length){ showToast('error','No employee','Select at least one employee.'); return; }
+  const caller=employees.find(e=>e.id===currentUserId)?.username || currentRole;
+  try{
+    const res=await fetchWithTimeout('/api/attendance/religious-holiday',{
+      method:'POST',headers:getHeaders(),
+      body:JSON.stringify({date,name:h?h.name:'',emoji:h?h.emoji:'',emp_ids:ids,caller,action:action||'apply'})
+    },10000);
+    const d=await res.json();
+    if(d.success){
+      showToast('success',action==='remove'?'Religious Holiday Removed':'Religious Holiday Applied',d.message||'Done');
+      closeReligiousModal();
+      _rhPurgeLocal(date,ids);
+      await render();
+    }else{ showToast('error','Failed',d.error||'Could not apply religious holiday.'); }
+  }catch(e){ showToast('error','Server Error','Could not reach server. Try again.'); }
+}
+async function removeReligiousHoliday(empId){
+  if(!confirm('Remove this religious holiday for this employee?')) return;
+  const dKey=dk(viewDate);
+  const caller=employees.find(e=>e.id===currentUserId)?.username || currentRole;
+  try{
+    const res=await fetchWithTimeout('/api/attendance/religious-holiday',{method:'POST',headers:getHeaders(),
+      body:JSON.stringify({date:dKey,emp_ids:[empId],caller,action:'remove'})},8000);
+    const d=await res.json();
+    if(d.success){ showToast('success','Removed',d.message||'Religious holiday removed.'); _rhPurgeLocal(dKey,[empId]); await render(); }
+    else showToast('error','Failed',d.error||'Could not remove.');
+  }catch(e){ showToast('error','Server Error','Could not reach server.'); }
+}
+
 function openHolidayApprovalModal(){
   document.getElementById('holidayApprovalModal').classList.add('open');
   loadHolidayApprovals();
@@ -5592,6 +5840,9 @@ async function boot(){
 
   if(mc) mc.innerHTML = `<div class="loading"><div class="spinner"></div><div>Loading employees…</div></div>`;
   try { await loadEmployees(); } catch(e){ console.warn('loadEmployees failed',e); loadDemo(); }
+  if(_navigatingAway) return;
+
+  try { await loadHolidays(); } catch(e){ console.warn('loadHolidays failed',e); }
   if(_navigatingAway) return;
 
   // Seed today's attCache slot — must happen BEFORE render()
