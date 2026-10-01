@@ -2212,15 +2212,30 @@ async function sseAutoFillDaysWorked(force){
   const dwEl = document.getElementById('sseDaysWorked');
   const noteEl = document.getElementById('sseDWBreakdown');
   if(!empId || !ym || !dwEl) return;
-  if(!force && dwEl.value !== '' && dwEl.value != null) return; // don't clobber an existing/edited value
+  // Existing/edited value: don't clobber it — but still verify it against attendance (see below)
+  const _checkOnly = !force && dwEl.value !== '' && dwEl.value != null;
 
   const myToken = ++_sseDWFetchToken;
-  if(noteEl) noteEl.textContent = 'Calculating from attendance…';
+  if(noteEl && !_checkOnly) noteEl.textContent = 'Calculating from attendance…';
   try{
     const r = await fetch(`${BASE}/api/attendance/monthly-summary?emp_id=${empId}&period=${ym}`, {headers: hdrs()});
     const d = await r.json();
     if(myToken !== _sseDWFetchToken) return; // a newer request superseded this one
     if(d && d.success){
+      if(_checkOnly){
+        const _cur = parseFloat(dwEl.value);
+        const _tot = d.total_days_in_month || sseTotalDaysInPeriod();
+        if(!(_cur > _tot)){
+          // Saved value is plausible -> keep it, but flag if attendance now says otherwise
+          // (e.g. record saved before a leave/joining-date fix).
+          if(noteEl && Math.abs(_cur - d.days_worked) > 0.001){
+            noteEl.textContent = '⚠ Attendance now shows '+d.days_worked+'/'+_tot+' payable days (saved: '+_cur+') — click 🔄 to update';
+            noteEl.style.color = 'var(--orange, #fb923c)';
+          }
+          return;
+        }
+        // Saved Days Worked is MORE than the days in the month -> invalid; fall through and overwrite.
+      }
       dwEl.value = d.days_worked;
       _sseDWIsAuto = true;
       var badge = document.getElementById('sseDWAutoBadge');
