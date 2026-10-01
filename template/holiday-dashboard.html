@@ -456,6 +456,7 @@
   
       <span class="role-badge" id="role-badge"></span>
       <!-- + ADD button: shown to admin + hr + senior_hr only -->
+      <button class="btn-primary" id="btn-sync" onclick="syncFromGoogle()" style="display:none;align-items:center;gap:6px;background:#1a73e8;" title="Import this year's holidays from Google Calendar">📅 SYNC GOOGLE CALENDAR</button>
       <button class="btn-primary" id="btn-add" onclick="openAddModal()" style="display:none;align-items:center;gap:6px;">+ ADD</button>
       <button class="btn-icon">✉</button>
       <button class="btn-icon">📞</button>
@@ -703,7 +704,12 @@ const CAT = {
   Religious:  { label:'Religious',         color:'#a78bfa', bg:'rgba(124,58,237,0.14)', emoji:'🕌' },
   National:   { label:'National Festival', color:'#4ade80', bg:'rgba(22,163,74,0.14)',  emoji:'🇮🇳' },
   Optional:   { label:'Optional',          color:'#f59e0b', bg:'rgba(245,158,11,0.14)', emoji:'📅' },
+  Company:    { label:'Company Holiday',   color:'#14b8a6', bg:'rgba(20,184,166,0.14)', emoji:'🏢' },
 };
+
+// National / Government / Company = OFFICE LEAVE for everyone.
+// Religious (and Optional) = NOT an office leave — HR gives it per employee from the Attendance page.
+function isOfficeLeave(h){ const c=catOf(h); return c==='National'||c==='Government'||c==='Company'; }
 
 const RELIGIOUS_NAMES = [
   'shivratri','shivaratri','eid','christmas','good friday','easter',
@@ -778,6 +784,8 @@ function applyRoleUI() {
 
   // + ADD button: admin, hr, senior_hr only
   const btnAdd = document.getElementById('btn-add');
+  const btnSync = document.getElementById('btn-sync');
+  if (btnSync) btnSync.style.display = (r.isAdmin || r.role==='hr' || r.role==='senior_hr') ? 'inline-flex' : 'none';
   if (r.canAdd) {
     btnAdd.style.display = 'inline-flex';
     // Modal text & notice
@@ -1083,8 +1091,9 @@ function renderTable(data) {
       <td style="color:var(--muted)">${String(i+1).padStart(2,'0')}</td>
       <td style="color:var(--muted);font-size:12px">${DAYS[d.getDay()]}</td>
       <td style="font-size:12px;color:#ccc">${String(day).padStart(2,'0')}-${String(mon+1).padStart(2,'0')}-${yr}</td>
-      <td><div class="holiday-name">${h.emoji||cfg.emoji} ${h.name}</div></td>
-      <td><span style="font-size:10px;padding:3px 10px;background:${cfg.bg};color:${cfg.color};letter-spacing:1px;text-transform:uppercase;border-radius:2px">${cfg.label}</span></td>
+      <td><div class="holiday-name">${(h.emoji && !/[ðÃâ\uFFFD]/.test(h.emoji))?h.emoji:cfg.emoji} ${h.name}</div></td>
+      <td><span style="font-size:10px;padding:3px 10px;background:${cfg.bg};color:${cfg.color};letter-spacing:1px;text-transform:uppercase;border-radius:2px">${cfg.label}</span>
+        <div style="margin-top:4px;font-size:10px;letter-spacing:.5px;color:${isOfficeLeave(h)?'#5eead4':'#c4b5fd'}">${isOfficeLeave(h)?'🏢 Office leave for all':'🛐 Optional — HR gives per employee'}</div></td>
       <td>${actions}</td>
     `;
     tbody.appendChild(row);
@@ -1100,6 +1109,7 @@ function catOf(h) {
   if (t === 'Government') return 'Government';
   if (t === 'Religious')  return 'Religious';
   if (t === 'Optional')   return 'Optional';
+  if (t === 'Company')    return 'Company';
   if (t === 'National')   return 'National';
   if (t === 'Festival' || t === '') {
     if (RELIGIOUS_NAMES.some(r => name.includes(r))) return 'Religious';
@@ -1134,6 +1144,21 @@ function showToast(msg, type='success') {
 // ════════════════════════════════════════════════════════════════
 //  LOAD FROM API
 // ════════════════════════════════════════════════════════════════
+async function syncFromGoogle() {
+  const r = getRole();
+  const yr = parseInt(document.getElementById('filter-year')?.value) || new Date().getFullYear();
+  if (!confirm(`Import ${yr} holidays from Google Calendar?\n\n• Public holidays → National / Government (office leave)\n• Observances / festivals → Religious (optional, per employee)\n\nExisting holidays are not overwritten.`)) return;
+  const btn = document.getElementById('btn-sync');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing…'; }
+  try {
+    const res  = await fetch(API + '/sync-google', { method:'POST', headers:getHeaders(), body: JSON.stringify({ year: yr, caller: r.name }) });
+    const data = await res.json();
+    if (data.success) { showToast('✅ ' + data.message); await loadHolidays(); }
+    else showToast('Sync failed: ' + (data.error || 'Unknown'), 'error');
+  } catch { showToast('Server error while syncing.', 'error'); }
+  if (btn) { btn.disabled = false; btn.textContent = '📅 SYNC GOOGLE CALENDAR'; }
+}
+
 async function loadHolidays() {
   const lb = document.getElementById('loading-bar');
   lb.style.display = 'block';
