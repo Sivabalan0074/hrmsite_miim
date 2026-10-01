@@ -82,10 +82,10 @@ leave_requests = [
 holidays = [
     {"id": 1, "name": "Tamil New Year", "date": "2026-04-14", "day": "Tuesday", "type": "National"},
     {"id": 2, "name": "Labour Day", "date": "2026-05-01", "day": "Friday", "type": "National"},
-    {"id": 3, "name": "Eid al-Adha", "date": "2026-06-07", "day": "Sunday", "type": "National"},
+    {"id": 3, "name": "Bakrid (Eid al-Adha)", "date": "2026-05-28", "day": "Thursday", "type": "Religious"},
     {"id": 4, "name": "Independence Day", "date": "2026-08-15", "day": "Saturday", "type": "National"},
     {"id": 5, "name": "Gandhi Jayanti", "date": "2026-10-02", "day": "Friday", "type": "National"},
-    {"id": 6, "name": "Diwali", "date": "2026-10-19", "day": "Monday", "type": "National"},
+    {"id": 6, "name": "Deepavali", "date": "2026-11-08", "day": "Sunday", "type": "National"},
     {"id": 7, "name": "Christmas", "date": "2026-12-25", "day": "Friday", "type": "National"},
     {"id": 8, "name": "Company Foundation Day", "date": "2026-03-10", "day": "Tuesday", "type": "Company"},
 ]
@@ -969,6 +969,145 @@ def delete_holiday(hid):
     except Exception as ex:
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
+
+
+# ════════════════════════════════════════════════════════════════
+#  2026 HOLIDAY CALENDAR (India / Tamil Nadu) + Google Calendar sync
+#  National / Government / Company  -> OFFICE LEAVE (shown on Attendance)
+#  Religious / Optional             -> Holiday page only (HR gives per employee)
+# ════════════════════════════════════════════════════════════════
+_HOLIDAYS_2026 = [
+    ("2026-01-01", "New Year's Day",          "Government", "🎉"),
+    ("2026-01-15", "Pongal",                  "National",   "🌾"),
+    ("2026-01-16", "Thiruvalluvar Day",       "National",   "📜"),
+    ("2026-01-17", "Uzhavar Thirunal",        "National",   "🌻"),
+    ("2026-01-26", "Republic Day",            "Government", "🇮🇳"),
+    ("2026-03-19", "Telugu New Year (Ugadi)", "Religious",  "🌿"),
+    ("2026-03-21", "Ramzan (Eid al-Fitr)",    "Religious",  "🌙"),
+    ("2026-03-31", "Mahavir Jayanthi",        "Religious",  "🕉️"),
+    ("2026-04-03", "Good Friday",             "Religious",  "✝️"),
+    ("2026-04-14", "Tamil New Year",          "National",   "🎊"),
+    ("2026-04-14", "Dr. Ambedkar Jayanti",    "Government", "🙏"),
+    ("2026-05-01", "Labour Day",              "Government", "⚒️"),
+    ("2026-05-28", "Bakrid (Eid al-Adha)",    "Religious",  "🌙"),
+    ("2026-06-26", "Muharram",                "Religious",  "🌙"),
+    ("2026-08-15", "Independence Day",        "Government", "🇮🇳"),
+    ("2026-08-26", "Milad-un-Nabi",           "Religious",  "🌙"),
+    ("2026-09-04", "Krishna Jayanthi",        "Religious",  "🪈"),
+    ("2026-09-14", "Vinayagar Chathurthi",    "Religious",  "🐘"),
+    ("2026-10-02", "Gandhi Jayanti",          "Government", "🕊️"),
+    ("2026-10-19", "Ayudha Pooja",            "National",   "🛠️"),
+    ("2026-10-20", "Vijayadasami",            "National",   "🏹"),
+    ("2026-11-08", "Deepavali",               "National",   "🪔"),
+    ("2026-12-25", "Christmas",               "Religious",  "🎄"),
+]
+
+# Wrong rows that the old seed created (date, name) -> removed once by the fix below
+_WRONG_SEED_2026 = [
+    ("2026-01-14", "Pongal"), ("2026-01-15", "Thiruvalluvar Day"), ("2026-01-16", "Uzhavar Thirunal"),
+    ("2026-06-07", "Eid al-Adha"), ("2026-08-19", "Krishna Jayanthi"),
+    ("2026-10-02", "Vijaya Dasami"), ("2026-10-19", "Diwali"), ("2026-10-20", "Diwali Holiday"),
+    ("2026-11-01", "Kannada Rajyotsava"), ("2026-11-14", "Children's Day"),
+]
+
+_GOV_KEYWORDS = ("new year's day", "republic", "independence", "gandhi", "labour", "may day", "ambedkar")
+_REL_KEYWORDS = ("eid", "ramzan", "ramadan", "bakrid", "bakri", "muharram", "milad", "good friday", "christmas",
+                 "janmashtami", "krishna", "ganesh", "vinayak", "vinayag", "mahavir", "mahavira", "shivaratri",
+                 "ram navami", "rama navami", "holi", "guru nanak", "buddha", "ugadi", "telugu", "thai poosam", "onam")
+_HOL_ALIASES = {"deepavali": "diwali", "labour": "may", "ayutha": "ayudha", "ayudha": "ayudha",
+                "pooja": "puja", "poojai": "puja", "jayanthi": "jayanti", "chathurthi": "chaturthi",
+                "vinayagar": "ganesh", "vinayaka": "ganesh", "dasami": "dasara", "vijayadasami": "dasara",
+                "dussehra": "dasara", "dasara": "dasara", "bakrid": "adha", "bakri": "adha"}
+_HOL_STOP = {"day", "the", "of", "and", "new", "al", "un", "nabi", "festival", "holiday", "puja", "jayanti"}
+
+def _hol_tokens(name):
+    import re as _r
+    words = _r.findall(r"[a-z]+", (name or "").lower())
+    out = set()
+    for w in words:
+        w = _HOL_ALIASES.get(w, w)
+        if w not in _HOL_STOP and len(w) > 2:
+            out.add(w)
+    return out
+
+def _hol_exists(conn, date, name):
+    toks = _hol_tokens(name)
+    for r in conn.execute("SELECT name FROM holidays WHERE date=?", (date,)).fetchall():
+        rn = r[0] if not isinstance(r, dict) else r.get('name')
+        if (rn or "").strip().lower() == (name or "").strip().lower() or (toks & _hol_tokens(rn)):
+            return True
+    return False
+
+def _hol_insert_missing(conn, rows):
+    added = 0
+    for (d, n, t, e) in rows:
+        if not _hol_exists(conn, d, n):
+            conn.execute("INSERT INTO holidays (date, name, type, emoji, `desc`) VALUES (?,?,?,?,?)", (d, n, t, e, ''))
+            added += 1
+    return added
+
+def _fix_holidays_2026(conn):
+    """One-time correction of the wrong 2026 seed data (Diwali etc.). Custom rows are never touched."""
+    conn.execute("CREATE TABLE IF NOT EXISTS app_flags (k VARCHAR(100) PRIMARY KEY)")
+    if conn.execute("SELECT 1 FROM app_flags WHERE k=?", ("holidays_2026_fix_v1",)).fetchone():
+        return
+    for (d, n) in _WRONG_SEED_2026:
+        conn.execute("DELETE FROM holidays WHERE date=? AND name=?", (d, n))
+    added = _hol_insert_missing(conn, _HOLIDAYS_2026)
+    conn.execute("INSERT INTO app_flags (k) VALUES (?)", ("holidays_2026_fix_v1",))
+    conn.commit()
+    print(f"[DB] 2026 holidays corrected ({added} added).")
+
+def _fetch_google_india_holidays(year):
+    """Public Google Calendar 'Holidays in India' ICS -> [(date,name,type,emoji)]. Raises on failure."""
+    import urllib.request, re as _r
+    url = "https://calendar.google.com/calendar/ical/en.indian%23holiday%40group.v.calendar.google.com/public/basic.ics"
+    raw = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=15).read().decode("utf-8", "ignore")
+    raw = _r.sub(r"\r?\n[ \t]", "", raw)  # unfold lines
+    out = []
+    for ev in raw.split("BEGIN:VEVENT")[1:]:
+        m_d = _r.search(r"DTSTART[^:]*:(\d{4})(\d{2})(\d{2})", ev)
+        m_s = _r.search(r"SUMMARY:(.*)", ev)
+        if not m_d or not m_s or int(m_d.group(1)) != int(year):
+            continue
+        date = f"{m_d.group(1)}-{m_d.group(2)}-{m_d.group(3)}"
+        name = m_s.group(1).strip().replace("\\,", ",")
+        low = name.lower()
+        is_public = "public holiday" in ev.lower()
+        if is_public and any(k in low for k in _GOV_KEYWORDS):
+            typ = "Government"
+        elif any(k in low for k in _REL_KEYWORDS):
+            typ = "Religious"
+        elif is_public:
+            typ = "National"
+        else:
+            continue   # ignore non-religious observances (Valentine's Day etc.)
+        out.append((date, name, typ, ""))
+    if not out:
+        raise ValueError("no events parsed")
+    return out
+
+@app.route('/api/holidays/sync-google', methods=['POST'])
+@require_auth
+def sync_google_holidays():
+    try:
+        data = request.json or {}
+        year = int(data.get('year') or datetime.datetime.now().year)
+        source = "Google Calendar"
+        try:
+            rows = _fetch_google_india_holidays(year)
+        except Exception as ex:
+            print(f"[Holiday sync] Google fetch failed ({ex}); using built-in calendar")
+            rows = [r for r in _HOLIDAYS_2026 if r[0].startswith(str(year))]
+            source = "built-in India/Tamil Nadu calendar (Google not reachable)"
+        if not rows:
+            return jsonify({"success": False, "error": f"No holiday data available for {year}"}), 404
+        conn = _db()
+        added = _hol_insert_missing(conn, rows)
+        conn.commit(); conn.close()
+        return jsonify({"success": True, "message": f"{added} new holiday(s) added for {year} from {source}."})
+    except Exception as ex:
+        print(f"[API Error] {ex}"); return jsonify({"success": False, "error": "Internal server error"}), 500
 
 # â”€â”€ Company Holiday requests: HR declares -> Admin/Superadmin approves â”€â”€
 def _ensure_holiday_requests_table(conn):
@@ -6283,27 +6422,7 @@ def init_db():
     # Seed default holidays if none exist
     hol_count = conn.execute("SELECT COUNT(*) FROM holidays").fetchone()[0]
     if hol_count == 0:
-        default_holidays = [
-            ("2026-01-01", "New Year's Day", "National", "ðŸŽ‰"),
-            ("2026-01-14", "Pongal", "National", "ðŸŒ¾"),
-            ("2026-01-15", "Thiruvalluvar Day", "National", "ðŸ“œ"),
-            ("2026-01-16", "Uzhavar Thirunal", "National", "ðŸŒ»"),
-            ("2026-01-26", "Republic Day", "Government", "ðŸ‡®ðŸ‡³"),
-            ("2026-03-10", "Company Foundation Day", "National", "ðŸ¢"),
-            ("2026-04-14", "Tamil New Year", "National", "ðŸŽŠ"),
-            ("2026-04-14", "Dr. Ambedkar Jayanti", "Government", "ðŸ™"),
-            ("2026-05-01", "Labour Day", "Government", "âš’ï¸"),
-            ("2026-06-07", "Eid al-Adha", "Religious", "ðŸŒ™"),
-            ("2026-08-15", "Independence Day", "Government", "ðŸ‡®ðŸ‡³"),
-            ("2026-08-19", "Krishna Jayanthi", "Religious", "ðŸªˆ"),
-            ("2026-10-02", "Gandhi Jayanti", "Government", "ðŸ•Šï¸"),
-            ("2026-10-02", "Vijaya Dasami", "Religious", "âš”ï¸"),
-            ("2026-10-19", "Diwali", "Religious", "ðŸª”"),
-            ("2026-10-20", "Diwali Holiday", "National", "ðŸª”"),
-            ("2026-11-01", "Kannada Rajyotsava", "National", "ðŸŒŸ"),
-            ("2026-11-14", "Children's Day", "National", "ðŸ§’"),
-            ("2026-12-25", "Christmas", "Religious", "ðŸŽ„"),
-        ]
+        default_holidays = list(_HOLIDAYS_2026) + [("2026-03-10", "Company Foundation Day", "National", "🏢")]
         for h in default_holidays:
             conn.execute(
                 "INSERT INTO holidays (date, name, type, emoji, `desc`) VALUES (?,?,?,?,?)",
@@ -6311,6 +6430,8 @@ def init_db():
             )
         conn.commit()
         print(f"[DB] {len(default_holidays)} default holidays seeded.")
+
+    _fix_holidays_2026(conn)
 
     # â”€â”€ users table (for landing page login) â”€â”€
     conn.execute(f"""CREATE TABLE IF NOT EXISTS users (
