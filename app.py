@@ -3837,6 +3837,101 @@ def _pm_used_count(conn, emp_id, start_iso, end_iso, exclude_leave_id=None):
     return sum(_pm_counts_by_date(rows, exclude_leave_id).values())
 
 
+# ════════════════════════════════════════════════════════════════
+#  COMP-OFF
+#  EARN : work a Sunday and put in >= 8 hours (sessions + approved
+#         Permission credit) -> +1 comp-off for that Sunday.
+#  USE  : apply "Comp Off" leave on any LATER working day. It is a paid
+#         day (status 'compoff'), never LOP, and never above the balance.
+#  The balance is always computed from the attendance table (ground
+#         truth) - nothing extra is stored, so it can never drift.
+# ════════════════════════════════════════════════════════════════
+COMPOFF_MIN_MINUTES = 480
+_COMPOFF_NOT_WORK_STATUS = ('cl', 'sl', 'el', 'compoff', 'holiday', 'rh', 'off', 'absent')
+
+def _hm_to_min(t):
+    t = (t or '').strip()
+    if not t or t == '--':
+        return None
+    for fmt in ('%H:%M', '%H:%M:%S', '%I:%M %p', '%I:%M:%S %p'):
+        try:
+            x = datetime.datetime.strptime(t, fmt)
+            return x.hour * 60 + x.minute
+        except Exception:
+            pass
+    return None
+
+def _day_worked_minutes(rows):
+    """rows = attendance rows of ONE date -> (worked_minutes incl. PM credit, has_open_punch)."""
+    mins, open_punch = 0, False
+    for x in rows:
+        a, b = _hm_to_min(x['checkin']), _hm_to_min(x['checkout'])
+        if a is None and b is None:
+            continue
+        if a is None or b is None:
+            open_punch = True
+        elif b > a:
+            mins += (b - a)
+    try:
+        mins += max([int(x['pm_minutes'] or 0) for x in rows] or [0])
+    except Exception:
+        pass
+    return mins, open_punch
+
+def _compoff_earned_dates(conn, emp_id, upto_iso=None):
+    """Sorted list of Sundays on which this employee worked >= 8h."""
+    rows = conn.execute(
+        "SELECT date, status, checkin, checkout, pm_minutes FROM attendance WHERE emp_id=?", (emp_id,)
+    ).fetchall()
+    by_date = {}
+    for r in rows:
+        by_date.setdefault(str(r['date'])[:10], []).append(r)
+    out = []
+    for d, rs in by_date.items():
+        try:
+            if datetime.datetime.strptime(d, '%Y-%m-%d').weekday() != 6:
+                continue
+        except Exception:
+            continue
+        if upto_iso and d >= upto_iso:
+            continue
+        if any((x['status'] or '').lower().strip() in _COMPOFF_NOT_WORK_STATUS for x in rs):
+            continue
+        mins, open_punch = _day_worked_minutes(rs)
+        if not open_punch and mins >= COMPOFF_MIN_MINUTES:
+            out.append(d)
+    return sorted(out)
+
+def _compoff_used_dates(conn, emp_id, exclude_from=None, exclude_to=None):
+    rows = conn.execute(
+        "SELECT DISTINCT date FROM attendance WHERE emp_id=? AND status='compoff'", (emp_id,)
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = str(r['date'])[:10]
+        if exclude_from and exclude_to and exclude_from <= d <= exclude_to:
+            continue   # the request being (re)synced must not count against itself
+        out.append(d)
+    return sorted(out)
+
+def _compoff_summary(conn, emp_id):
+    earned = _compoff_earned_dates(conn, emp_id)
+    used = _compoff_used_dates(conn, emp_id)
+    return {
+        "earned": len(earned), "used": len(used), "remaining": max(0, len(earned) - len(used)),
+        "earned_dates": earned, "used_dates": used,
+    }
+
+def _compoff_available_for(conn, emp_id, from_iso, to_iso):
+    """Comp-offs usable for a request starting `from_iso`: only Sundays worked BEFORE
+    that date count, and the overall balance may never go negative."""
+    used = _compoff_used_dates(conn, emp_id, from_iso, to_iso)
+    earned_all = _compoff_earned_dates(conn, emp_id)
+    earned_before = [d for d in earned_all if d < from_iso]
+    used_before = [d for d in used if d < from_iso]
+    return float(max(0, min(len(earned_before) - len(used_before), len(earned_all) - len(used))))
+
+
 def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exclude_from, exclude_to, exclude_leave_id=None):
     """How many paid days of `leave_code` are still available for this
     employee, evaluated just before `exclude_from` — used to decide, day by
@@ -3863,6 +3958,10 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
     """
     exclude_from_s = exclude_from.isoformat()
     exclude_to_s = exclude_to.isoformat()
+
+    # COMP-OFF: earned on worked Sundays, usable only AFTER the Sunday, for every employee type.
+    if leave_code == 'compoff':
+        return _compoff_available_for(conn, emp_id, exclude_from_s, exclude_to_s)
 
     # PM (Permission) is its own quota for everyone now — checked first so
     # it never falls into the probation Monthly-Leave branch below.
@@ -4266,7 +4365,11 @@ def attendance_monthly_summary():
                     continue  # Sunday not worked -> blank, never Absent/LOP
                 if _has_ck and _st in ('half_day', 'half-day', 'half', 'lop', 'present', 'p', 'late'):
                     _st = 'present'  # Sunday special class: any check-in = full P
-                    sunday_worked += 1
+                    # >= 8h on a Sunday earns a COMP-OFF instead of the extra paid day
+                    # (otherwise the same Sunday would be rewarded twice).
+                    _sun_mins, _sun_open = _day_worked_minutes(_rs)
+                    if _sun_open or _sun_mins < COMPOFF_MIN_MINUTES:
+                        sunday_worked += 1
             if _st in ('present', 'p') and not _is_sunday and not _exempt_hours and not any((x['pm_minutes'] or 0) > 0 for x in _rs):
                 _mins, _open, _any = 0, False, False
                 for x in _rs:
@@ -4299,7 +4402,7 @@ def attendance_monthly_summary():
             if pre_join_days:
                 rows = [r for r in rows if r['date'] >= _jd.isoformat()]
 
-        counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0, "half_day": 0, "holiday": 0, "other": 0}
+        counts = {"present": 0, "absent": 0, "off": 0, "cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0, "half_day": 0, "holiday": 0, "compoff": 0, "other": 0}
         marked_dates = set()
         for r in rows:
             d = str(r['date'])[:10]
@@ -4319,6 +4422,8 @@ def attendance_monthly_summary():
                 counts['half_day'] += 1
             elif st == 'holiday':
                 counts['holiday'] += 1
+            elif st == 'compoff':
+                counts['compoff'] += 1     # paid day (comp-off taken) - never reduces Days Worked
             else:
                 counts['other'] += 1
         not_marked = max(0, total_days - pre_join_days - len(marked_dates))
@@ -4416,6 +4521,7 @@ def attendance_monthly_summary():
             "lop": counts['lop'],
             "half_day": half_day_count,
             "holiday": counts['holiday'],
+            "compoff": counts['compoff'],
             "not_marked": not_marked,
             "emp_type": emp_type,
             "is_permanent": is_permanent,
@@ -4998,6 +5104,7 @@ def apply_leave_new():
             'paid leave': 'el', 'paid': 'el', 'pl': 'el',
             'annual leave': 'el', 'annual': 'el',
             'permission': 'pm', 'pm': 'pm',
+            'comp off': 'compoff', 'comp-off': 'compoff', 'compoff': 'compoff', 'comp_off': 'compoff', 'co': 'compoff',
         }
         leave_code = lt_map.get(leave_type_in, 'cl')
         try:
@@ -5011,8 +5118,17 @@ def apply_leave_new():
             is_permanent = emp_type in ('Regular', 'Regular(PIP)')
             joindate = emp_row['joindate'] if 'joindate' in emp_row.keys() else None
             remaining = _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, from_dt_obj, to_dt_obj)
+            if leave_code == 'compoff' and from_dt_obj.weekday() == 6:
+                conn.close()
+                return jsonify({"success": False, "no_balance": True,
+                                "error": "Sunday is already a company off day - pick a working day for Comp Off."}), 400
             if remaining <= 0:
                 conn.close()
+                if leave_code == 'compoff':
+                    return jsonify({
+                        "success": False, "no_balance": True,
+                        "error": "No Comp Off available for this date. Comp Off is earned by working 8+ hours on a Sunday and can only be used on a date AFTER that Sunday."
+                    }), 400
                 return jsonify({
                     "success": False,
                     "no_balance": True,
@@ -5169,10 +5285,12 @@ def get_leave_balance_by_id(emp_id):
 
         cl_remaining = max(0.0, cl_total - counts_year['cl']) if is_perm else 0
         el_remaining = max(0.0, el_total - counts_year['el']) if is_perm else 0
+        compoff = _compoff_summary(conn, emp_id)
         conn.close()
 
         balance = {
             "is_permanent": is_perm,
+            "compoff": compoff,
             "fy_label": fy_label,
             "month_in_fy": cur_month_in_fy,
             "sl": {"used_month": counts_month['sl'], "used_year": counts_year['sl'],
@@ -5252,6 +5370,7 @@ def _sync_leave_to_attendance(conn, leave_id, now):
             'paid leave': 'el', 'paid': 'el', 'pl': 'el',
             'annual leave': 'el', 'annual': 'el',
             'permission': 'pm', 'pm': 'pm',
+            'comp off': 'compoff', 'comp-off': 'compoff', 'compoff': 'compoff', 'comp_off': 'compoff', 'co': 'compoff',
         }
         leave_code = lt_map.get(leave_type, 'cl')
         from_dt = datetime.datetime.strptime(str(row['from_date'])[:10], '%Y-%m-%d').date()
@@ -5271,6 +5390,9 @@ def _sync_leave_to_attendance(conn, leave_id, now):
         cur = from_dt
         while cur <= to_dt:
             date_str = str(cur)
+            if leave_code == 'compoff' and cur.weekday() == 6:
+                cur += datetime.timedelta(days=1)   # Sunday is already off - no comp-off consumed
+                continue
             if leave_code == 'pm' and remaining <= 0:
                 # PM over its 2/month quota: give no credit, but never turn a
                 # worked day into LOP / wipe its check-in (it is only a 2hr slip).
