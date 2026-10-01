@@ -2256,6 +2256,7 @@ async function sseAutoFillDaysWorked(force){
         if(d.is_notice_period) tail += ' — ⚠ Notice period: all leave = LOP';
         else if(_sseLopDaysCache>0){
           var _lopParts = [];
+          if(d.pre_join_days>0) _lopParts.push(d.pre_join_days+' day(s) before joining');
           if(d.absent) _lopParts.push(d.absent+' Absent');
           if(d.lop_leave_days>0) _lopParts.push(d.lop_leave_days+' over-quota leave'+(d.is_permanent?'':' (Probationary/Intern: 1 day/month only)'));
           if(d.half_day) _lopParts.push(d.half_day+' Half Day (×0.5)');
