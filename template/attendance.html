@@ -2001,6 +2001,7 @@ function effectiveDisplaySt(emp, rawSt, rec, dKey){
 // ════════════════════════════════════════════════════
 const ROLE_CONFIG={
   admin:    {label:'Admin',    badgeCls:'rb-admin',    canMarkAll:true, canMarkDept:false, readOnly:false, canApprove:true},
+  superadmin:{label:'Super Admin',badgeCls:'rb-admin',  canMarkAll:true, canMarkDept:false, readOnly:false, canApprove:true},
   senior_hr:{label:'Senior HR',badgeCls:'rb-senior_hr',canMarkAll:true, canMarkDept:false, readOnly:false, canApprove:true},
   hr:       {label:'HR',       badgeCls:'rb-hr',       canMarkAll:true, canMarkDept:false, readOnly:false, canApprove:true},
   sm:       {label:'SM',       badgeCls:'rb-sm',       canMarkAll:false,canMarkDept:true, readOnly:true,  canApprove:true},
@@ -2036,7 +2037,13 @@ function deriveRoleFromDesig(desig,dept){
   if(d.includes('project')&&d.includes('manager')) return 'pm';
   return 'employee';
 }
-function getApprovalChain(role){
+function getApprovalChain(role,leaveType){
+  // COMP-OFF: Employee/PM -> SM (own dept) -> HR.
+  //           SM / HR / Senior HR applying comp-off -> Admin / Superadmin only.
+  if(leaveType==='compoff'){
+    if(role==='sm'||role==='hr'||role==='senior_hr') return ['admin'];
+    if(role==='pm'||role==='employee')               return ['sm','hr'];
+  }
   if(role==='sm')                        return ['admin'];
   if(role==='hr'||role==='senior_hr')    return ['sm','admin'];
   if(role==='pm'||role==='employee')     return ['sm','hr'];
@@ -2046,16 +2053,17 @@ function getApprovalChain(role){
 // A role "slot" in the chain is satisfied by the matching currentRole (hr slot accepts hr or senior_hr)
 function roleMatchesSlot(slot,role){
   if(slot==='hr') return role==='hr'||role==='senior_hr';
+  if(slot==='admin') return role==='admin'||role==='superadmin';
   return slot===role;
 }
 function canApproveLeaveOf(req){
   if(!req) return false;
-  const chain=req.chain||getApprovalChain(req.empRole||'employee');
+  const chain=req.chain||getApprovalChain(req.empRole||'employee',req.type);
   const stage=req.stage||0;
   if(stage>=chain.length) return false; // already fully approved
   const neededRole=chain[stage];
   // admin can always act as a stand-in for the current stage (keeps things moving)
-  if(currentRole==='admin') return true;
+  if(currentRole==='admin'||currentRole==='superadmin') return true;
   if(!roleMatchesSlot(neededRole,currentRole)) return false;
   // The SM stage is department-scoped — only the SM of the SAME department as the requester
   if(neededRole==='sm') return req.dept===currentUserDept;
@@ -2542,7 +2550,7 @@ async function loadEmployees(){
         const role=deriveRoleFromDesig(l.desig||'', l.dept||'');
         let chain=null;
         try{ chain = l.approval_chain ? JSON.parse(l.approval_chain) : null; }catch(e){ chain=null; }
-        if(!chain || !chain.length) chain=getApprovalChain(role);
+        if(!chain || !chain.length) chain=getApprovalChain(role,mapLeaveType(l.leave_type));
         return {
           id:       l.id,
           empId:    l.emp_id,
@@ -3790,6 +3798,9 @@ async function applyLeave(){
     req.type=selectedLeaveType;
     req.date=dKey;
     req.reason=reason||'';
+    // Leave type may have changed (e.g. CL -> Comp Off) -> re-derive the approval chain
+    { const _newChain=getApprovalChain(req.empRole||'employee',selectedLeaveType);
+      if(JSON.stringify(_newChain)!==JSON.stringify(req.chain||[])){ req.chain=_newChain; req.stage=0; } }
     persistPendingLeaves();
     persistAttCache();
 
@@ -3881,7 +3892,7 @@ async function applyLeave(){
       date: dKey,
       reason: reason || '',
       status: 'pending',
-      chain: getApprovalChain(applicantRole),
+      chain: getApprovalChain(applicantRole,selectedLeaveType),
       stage: 0
     });
     persistPendingLeaves();
@@ -3952,8 +3963,8 @@ async function applyLeave(){
     showToast('success',`✅ ${selectedLeaveType.toUpperCase()} – Auto Approved`,`${emp?.username||'Employee'} · ${dKey}`);
   } else {
     // Tell the user who will approve their leave first (stage 1 of the chain)
-    const chain=getApprovalChain(applicantRole);
-    const stageLabel={sm:`SM (${applicantDept})`,hr:'HR',admin:'Admin'};
+    const chain=getApprovalChain(applicantRole,selectedLeaveType);
+    const stageLabel={sm:`SM (${applicantDept})`,hr:'HR',admin:'Admin / Superadmin'};
     const approverHint=chain.map(r=>stageLabel[r]||r).join(' → ');
     showToast('success',`${selectedLeaveType.toUpperCase()} Applied – Pending`,`${emp?.username||''} · ${dKey} → Awaiting ${approverHint}`);
   }
@@ -3992,17 +4003,17 @@ function renderApprovalList(){
   const allPending=pendingLeaves.filter(l=>l.status==='pending');
   const body=document.getElementById('approvalModalBody');
   if(!allPending.length){body.innerHTML=`<div class="appr-empty">✅ No pending leave requests</div>`;return;}
-  const ROLE_COLORS={employee:'#22c55e',sm:'#eab308',pm:'#eab308',senior_hr:'#a855f7',hr:'#3b82f6',admin:'#f97316'};
-  const ROLE_LABELS={employee:'Employee',sm:'SM',pm:'PM',senior_hr:'Senior HR',hr:'HR',admin:'Admin'};
+  const ROLE_COLORS={employee:'#22c55e',sm:'#eab308',pm:'#eab308',senior_hr:'#a855f7',hr:'#3b82f6',admin:'#f97316',superadmin:'#f97316'};
+  const ROLE_LABELS={employee:'Employee',sm:'SM',pm:'PM',senior_hr:'Senior HR',hr:'HR',admin:'Admin',superadmin:'Super Admin'};
   body.innerHTML=allPending.map(req=>{
     const color=LEAVE_TYPE_COLORS[req.type]||'var(--orange)';
     const label=LEAVE_TYPE_LABELS[req.type]||req.type.toUpperCase();
     const dateObj=parseDK(req.date);
     const roleColor=ROLE_COLORS[req.empRole||'employee']||'#22c55e';
     const roleLabel=ROLE_LABELS[req.empRole||'employee']||req.empRole;
-    const chain=req.chain||getApprovalChain(req.empRole||'employee');
+    const chain=req.chain||getApprovalChain(req.empRole||'employee',req.type);
     const stage=req.stage||0;
-    const stageChainLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'};
+    const stageChainLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin / SA'};
     const stageProgress=`Stage ${stage+1}/${chain.length} · ${chain.map((r,i)=>i<stage?`✓${stageChainLabel[r]||r}`:i===stage?`→${stageChainLabel[r]||r}`:(stageChainLabel[r]||r)).join(' · ')}`;
     const isOwn=String(req.empId)===String(currentUserId);
     const myTurn=!isOwn && canApproveLeaveOf(req);
@@ -4057,9 +4068,9 @@ function closeLeaveFlowModal(){document.getElementById('leaveFlowModal').classLi
 
 function renderLeaveFlow(req){
   const body=document.getElementById('leaveFlowBody');
-  const chain=req.chain||getApprovalChain(req.empRole||'employee');
+  const chain=req.chain||getApprovalChain(req.empRole||'employee',req.type);
   const stage=req.stage||0;
-  const stageChainLabel={sm:`SM (${req.dept}) Approval`,hr:'HR Department',admin:'Admin Final Approval'};
+  const stageChainLabel={sm:`SM (${req.dept}) Approval`,hr:'HR Department',admin:'Admin / Superadmin Approval'};
   // Match this request's own approval-history entries so we can show WHO approved each stage
   const hist=approvalHistory.filter(h=>h.empName===req.empName && h.leaveDate===req.date && h.leaveType===req.type);
   function approverFor(i){
@@ -4134,7 +4145,7 @@ async function handleApproval(reqId,action){
   const req=pendingLeaves.find(l=>l.id===reqId);
   if(!req)return;
   const leaveId=req.leave_id||req.id;
-  const chain=req.chain||getApprovalChain(req.empRole||'employee');
+  const chain=req.chain||getApprovalChain(req.empRole||'employee',req.type);
   const stage=req.stage||0;
 
   // Admin can stand in for any stage in the chain — so an admin's single
@@ -4144,13 +4155,13 @@ async function handleApproval(reqId,action){
   // 'pending' server-side with no attendance sync — it *looked* approved
   // (toast, history entry) but never showed up in the Leave Balance Report
   // until a second, unexplained approve click reached the final stage.
-  const isFinalizing = (action==='approved' && currentRole==='admin') || stage+1>=chain.length;
+  const isFinalizing = (action==='approved' && (currentRole==='admin'||currentRole==='superadmin')) || stage+1>=chain.length;
 
   // ── Intermediate stage: this approver signs off, but the chain isn't finished yet ──
   if(action==='approved' && !isFinalizing){
     req.stage=stage+1;
     const nextRole=chain[req.stage];
-    const nextLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin'}[nextRole]||nextRole;
+    const nextLabel={sm:`SM (${req.dept})`,hr:'HR',admin:'Admin / Superadmin'}[nextRole]||nextRole;
     // Persist the stage advance to the backend (non-blocking) so a reload doesn't lose progress
     try{
       await fetch(`/api/leave/${leaveId}/advance`,{
