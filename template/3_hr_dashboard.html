@@ -10854,9 +10854,9 @@ async function _loadMyLeaveBalance() {
   var co = b.compoff || {earned:0,used:0,remaining:0,earned_dates:[]};
   var coPct = co.earned > 0 ? Math.round(co.remaining/co.earned*100) : 0;
   var coDates = (co.earned_dates||[]).slice(-3).map(function(x){return x.slice(8,10)+'/'+x.slice(5,7);}).join(', ');
-  var coCard = card('compoff','🔄','Comp Off','Earned by working 8+ hrs on a Sunday. Use it on any day after that Sunday.','Sunday work credit',coPct,
+  var coCard = card('compoff','🔄','Comp Off','Earned by working 8+ hrs on a Sunday or holiday. Use it on any day after that.','Sunday / holiday work credit',coPct,
           row('EARNED',co.earned)+row('USED',co.used),
-          co.remaining, coDates ? ('📅 Sundays worked: '+coDates) : '📅 Work 8+ hrs on a Sunday to earn');
+          co.remaining, coDates ? ('📅 Sundays/holidays worked: '+coDates) : '📅 Work 8+ hrs on a Sunday or holiday to earn');
 
   // Probationary/Intern — MIIM Leave Policy V24: ONE paid leave day/month,
   // shared across all leave types (not separate CL/SL/EL/PM quotas). Pulled
@@ -11186,7 +11186,7 @@ async function _renderDashLeaveBalance() {
   var _co = b.compoff || {earned:0,used:0,remaining:0,earned_dates:[]};
   var _coPct = _co.earned > 0 ? Math.min(100, Math.round(_co.used / _co.earned * 100)) : 0;
   var _coD = (_co.earned_dates||[]).slice(-3).map(function(x){return x.slice(8,10)+'/'+x.slice(5,7);}).join(', ');
-  cards.push(mc({icon:'\uD83D\uDD04',title:'Comp Off',tc:'#22d3ee',desc:'Earned by working 8+ hrs on a Sunday. Use it on any day after that Sunday.',tag:'Sunday work credit',tbg:'rgba(6,182,212,.15)',tbd:'rgba(6,182,212,.3)',br:'rgba(6,182,212,.4)',bc:'#06b6d4',left:_co.remaining,pct:_coPct,always:true,rows:[{k:'EARNED',v:_co.earned},{k:'USED',v:_co.used}],note:_coD?('\uD83D\uDCC5 Sundays worked: '+_coD):'\uD83D\uDCC5 Work 8+ hrs on a Sunday to earn'}));
+  cards.push(mc({icon:'\uD83D\uDD04',title:'Comp Off',tc:'#22d3ee',desc:'Earned by working 8+ hrs on a Sunday or holiday. Use it on any day after that.',tag:'Sunday / holiday work credit',tbg:'rgba(6,182,212,.15)',tbd:'rgba(6,182,212,.3)',br:'rgba(6,182,212,.4)',bc:'#06b6d4',left:_co.remaining,pct:_coPct,always:true,rows:[{k:'EARNED',v:_co.earned},{k:'USED',v:_co.used}],note:_coD?('\uD83D\uDCC5 Sundays worked: '+_coD):'\uD83D\uDCC5 Work 8+ hrs on a Sunday or holiday to earn'}));
   container.innerHTML = cards.join('');
   // all cards (incl. Comp Off) on ONE line, whatever the count (4 for probation, 5 for permanent)
   container.style.gridTemplateColumns = 'repeat(' + cards.length + ',minmax(0,1fr))';
