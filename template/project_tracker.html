@@ -1324,12 +1324,15 @@ var _assignedUsername = (_currentUser && _currentUser.username)
   ? _currentUser.username.trim().toLowerCase() : '';
 
 // ── DB Sync helpers ───────────────────────────────────────────
-function _dbSync(key, value) {
-  // Fire-and-forget: save one key to server DB
+function _dbSync(key, value, onOk) {
+  // Save one key to server DB. onOk() runs only if the server confirmed the save.
   fetch('/api/tracker/' + encodeURIComponent(key), {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ value: typeof value === 'string' ? value : JSON.stringify(value) })
+  }).then(function(r) {
+    if (r && r.ok && typeof onOk === 'function') onOk();
   }).catch(function() {});
 }
 
@@ -1482,12 +1485,18 @@ async function _guestFetchEmployees() {
 async function _hrDbSync() {
   var dbData = await _dbLoadAll();
   if (!dbData) return;
-  if (dbData['miim_projects']) {
+  if (dbData['miim_projects'] !== undefined) {
     try {
-      var srvProjects = JSON.parse(dbData['miim_projects']);
-      if (Array.isArray(srvProjects) && srvProjects.length > 0) {
-        if (srvProjects.length >= projects.length) {
+      var _dirty = localStorage.getItem('miim_projects_dirty') === '1';
+      if (_dirty) {
+        // local has changes the server never confirmed → push them up, don't overwrite them
+        save();
+      } else {
+        var srvProjects = JSON.parse(dbData['miim_projects'] || '[]');
+        // server is the source of truth (an empty list is valid: all projects were deleted)
+        if (Array.isArray(srvProjects)) {
           projects = srvProjects;
+          try { localStorage.setItem('miim_projects', JSON.stringify(projects)); } catch(e){}
         }
       }
     } catch(e) {}
@@ -1498,7 +1507,7 @@ async function _hrDbSync() {
         k.indexOf('whdProductNames_') === 0 || k.indexOf('whdType_') === 0 ||
         k.indexOf('whdTabCount_') === 0 || k.indexOf('whdModal_') === 0 ||
         k.indexOf('phaseData_') === 0 || k.indexOf('whdToolColumns_') === 0 ||
-        k.indexOf('whdToolUnits_') === 0 || k.indexOf('whdLayout_') === 0) {
+        k.indexOf('whdToolUnits_') === 0 || k.indexOf('whdLayout_') === 0 || k === 'whdCustomLayouts') {
       try {
         var v = dbData[k];
         if (v && v !== 'null') localStorage.setItem(k, v);
@@ -1746,6 +1755,31 @@ document.addEventListener('DOMContentLoaded', function() {
       <label for="whd-6040" title="3D Concept + 3D Finish = 60 (30 each), 2D Draft = 40">60/40</label>
       <input type="radio" name="whdLayout" id="whd-full" value="full" onchange="whdApplyLayout(this.value,true)">
       <label for="whd-full">100% All</label>
+      <span id="whd-custom-layouts" style="display:contents;"></span>
+    </div>
+    <button type="button" id="whd-add-dist-btn" onclick="whdOpenAddDist()" style="display:inline-flex;align-items:center;gap:4px;margin:0 0 14px 10px;vertical-align:top;height:34px;font-family:'Rajdhani',sans-serif;font-size:0.8rem;font-weight:700;letter-spacing:1px;padding:0 14px;border-radius:7px;border:1.5px dashed var(--orange);background:rgba(249,115,22,0.08);color:var(--orange);cursor:pointer;">+ Add</button>
+
+    <!-- Add Work Hour Distribution popup -->
+    <div id="whd-adddist-overlay" onclick="if(event.target===this)whdCloseAddDist()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10050;align-items:center;justify-content:center;">
+      <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;width:380px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,0.7);overflow:hidden;">
+        <div style="background:linear-gradient(90deg,#f97316,#ea580c);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1rem;color:#fff;letter-spacing:.5px;">&#10133; Add Work Hour Distribution</span>
+          <button type="button" onclick="whdCloseAddDist()" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;">&#10005;</button>
+        </div>
+        <div style="padding:16px 18px 18px;">
+          <div style="font-size:0.8rem;color:var(--muted);line-height:1.5;margin-bottom:14px;">Enter the % for each work type &mdash; the total must be <b style="color:var(--text);">100</b>.<br>e.g. <b style="color:var(--text);">30 / 30 / 40</b> = 3D-Concept + 3D-Finish get 60 together, 2D-Draft gets 40.</div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;"><div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.78rem;color:#3b82f6;margin-bottom:4px;">3D-Concept</div><input id="whd-ad-c" type="number" min="0" max="100" oninput="whdAddDistCheck()" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>
+            <div style="flex:1;"><div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.78rem;color:#22c55e;margin-bottom:4px;">3D-Finish</div><input id="whd-ad-f" type="number" min="0" max="100" oninput="whdAddDistCheck()" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>
+            <div style="flex:1;"><div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.78rem;color:#f97316;margin-bottom:4px;">2D-Draft</div><input id="whd-ad-d" type="number" min="0" max="100" oninput="whdAddDistCheck()" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>
+          </div>
+          <div id="whd-ad-msg" style="font-size:0.78rem;font-weight:700;margin:12px 0 14px;min-height:18px;"></div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <button type="button" onclick="whdCloseAddDist()" style="background:#4b5563;border:none;color:#fff;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;">Cancel</button>
+            <button type="button" id="whd-ad-add" onclick="whdAddDistConfirm()" style="background:var(--orange);border:none;color:#fff;border-radius:6px;padding:8px 22px;font-weight:700;cursor:pointer;">Add</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Product Names Input -->
@@ -2122,7 +2156,11 @@ var editingId = null;
 function save() {
   var val = JSON.stringify(projects);
   try { localStorage.setItem('miim_projects', val); } catch(e){}
-  _dbSync('miim_projects', val);
+  // mark "not yet on server" until the server confirms – so a failed/slow save is never lost or overwritten
+  try { localStorage.setItem('miim_projects_dirty', '1'); } catch(e){}
+  _dbSync('miim_projects', val, function() {
+    try { if (localStorage.getItem('miim_projects') === val) localStorage.removeItem('miim_projects_dirty'); } catch(e){}
+  });
 }
 
 /* ── STATUS CONFIG ── */
@@ -2553,8 +2591,8 @@ function renderAccTable(rowId, toolName) {
   var safeRowId = rowId.replace(/'/g,"\\'");
   var _guestOnlyHdr = (_isGuest && !_isEmployee);
   var _sel = accGetSel(rowId, toolName, phase);
-  var _fillCols = phase==='draft2d' ? [['completion','Completion'],['internal','Internal Review'],['changes','Checker Changes'],['approved','Approved Date']]
-                                    : [['completion','Completion'],['internal','Internal Review'],['changes','Review Changes'],['customer','Customer Review'],['approved','Approved Date']];
+  var _fillCols = phase==='draft2d' ? [['start','Start Date'],['completion','Completion'],['internal','Internal Review'],['changes','Checker Changes'],['approved','Approved Date'],['end','End Date']]
+                                    : [['start','Start Date'],['completion','Completion'],['internal','Internal Review'],['changes','Review Changes'],['customer','Customer Review'],['approved','Approved Date'],['end','End Date']];
   function _colHdr(f, label){
     if (_guestOnlyHdr) return '<th class="ph-sub">'+label+'</th>';
     return '<th class="ph-sub"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;" title="Select this column to fill one date for all selected rows">'
@@ -2564,7 +2602,7 @@ function renderAccTable(rowId, toolName) {
 
   var toolHeaderCells1 = '';
   var toolHeaderCells2 = '';
-  var totalCols = 13;
+  var totalCols = 15;
 
   var thead = '<thead>'
     + '<tr>'
@@ -2574,7 +2612,7 @@ function renderAccTable(rowId, toolName) {
     + '<th colspan="2" class="ph-group-hdr" style="background:rgba('+rgb+',0.18);color:'+col+';">Total Hours</th>'
     + '<th rowspan="2" class="ph-fixed" style="min-width:110px;">Unit Wise Completion</th>'
     + '<th rowspan="2" class="ph-fixed" style="min-width:90px;">'+totalHoursLabel[phase]+'</th>'
-    + '<th colspan="'+(phase==='draft2d'?'4':'5')+'" class="ph-group-hdr" style="background:rgba('+rgb+',0.18);color:'+col+';">'+phaseLabels[phase]+'</th>'
+    + '<th colspan="'+(phase==='draft2d'?'6':'7')+'" class="ph-group-hdr" style="background:rgba('+rgb+',0.18);color:'+col+';">'+phaseLabels[phase]+'</th>'
     + toolHeaderCells1
     + '<th rowspan="2" class="ph-fixed" style="min-width:60px;">Action</th>'
     + '</tr>'
@@ -2620,11 +2658,13 @@ function renderAccTable(rowId, toolName) {
         + '</div>'
         + '</td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleNum+' id="tph-'+phase+'-'+idx+'" type="number" value="'+(r.totalPhaseHrs||'')+'" oninput="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].totalPhaseHrs=+this.value;savePhaseDataStorage();"></td>'
+        + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.start||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].start=this.value;savePhaseDataStorage();"></td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.completion||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].completion=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.internal||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].internal=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.changes||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].changes=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
         + (phase !== 'draft2d' ? '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.customer||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].customer=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>' : '')
         + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.approved||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].approved=this.value;savePhaseDataStorage();autoCalcUWC(\''+toolName+'\',\''+phase+'\','+idx+');"></td>'
+        + '<td class="ph-cell"><input class="ph-cell-input" '+inStyleDate+' type="date" value="'+(r.end||'')+'" onchange="getToolPhaseData(\''+toolName+'\')[\''+phase+'\']['+idx+'].end=this.value;savePhaseDataStorage();"></td>'
         + toolCells
         + '<td class="ph-cell" style="text-align:center;">'
           + (_isGuest ? '' : '<button onclick="accDeleteRow(\''+safeRowId+'\',\''+safeName+'\',\''+phase+'\','+idx+')" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#ef4444;border-radius:6px;padding:3px 8px;font-size:0.7rem;cursor:pointer;">Del</button>')
@@ -2734,6 +2774,82 @@ function accDeleteToolCol(rowId, toolName, phase, idx) {
 
 /* ── ACCORDION TOOL DETAIL (replaces modal) ── */
 
+/* ── CUSTOM WORK-HOUR DISTRIBUTIONS (the "+ Add" button) ── */
+var whdCustomLayouts = [];
+try { whdCustomLayouts = JSON.parse(localStorage.getItem('whdCustomLayouts') || '[]') || []; } catch(e) { whdCustomLayouts = []; }
+function whdFindCustom(id) {
+  for (var i = 0; i < whdCustomLayouts.length; i++) if (whdCustomLayouts[i].id === id) return whdCustomLayouts[i];
+  return null;
+}
+function whdSaveCustomLayouts() {
+  var v = JSON.stringify(whdCustomLayouts);
+  try { localStorage.setItem('whdCustomLayouts', v); } catch(e) {}
+  _dbSync('whdCustomLayouts', v);
+}
+function whdRenderCustomLayouts(selectedVal) {
+  var box = document.getElementById('whd-custom-layouts');
+  if (!box) return;
+  var cur = selectedVal;
+  if (!cur) { var ck = document.querySelector('input[name="whdLayout"]:checked'); cur = ck ? ck.value : ''; }
+  box.innerHTML = whdCustomLayouts.map(function(c) {
+    return '<input type="radio" name="whdLayout" id="whd-' + c.id + '" value="' + c.id + '"' + (cur === c.id ? ' checked' : '') + ' onchange="whdApplyLayout(this.value,true)">'
+      + '<label for="whd-' + c.id + '" title="3D-Concept ' + c.c + ' / 3D-Finish ' + c.f + ' / 2D-Draft ' + c.d + '">' + c.c + '/' + c.f + '/' + c.d
+      + (_isGuest ? '' : ' <span onclick="event.preventDefault();event.stopPropagation();whdDeleteCustom(\'' + c.id + '\')" title="Remove this distribution" style="margin-left:6px;opacity:.6;font-size:.7rem;">&#10005;</span>')
+      + '</label>';
+  }).join('');
+}
+function whdOpenAddDist() {
+  ['c','f','d'].forEach(function(k) { var e = document.getElementById('whd-ad-' + k); if (e) e.value = ''; });
+  var o = document.getElementById('whd-adddist-overlay'); if (o) o.style.display = 'flex';
+  whdAddDistCheck();
+  var f = document.getElementById('whd-ad-c'); if (f) f.focus();
+}
+function whdCloseAddDist() {
+  var o = document.getElementById('whd-adddist-overlay'); if (o) o.style.display = 'none';
+}
+function whdAddDistCheck() {
+  var c = parseFloat(document.getElementById('whd-ad-c').value) || 0;
+  var f = parseFloat(document.getElementById('whd-ad-f').value) || 0;
+  var d = parseFloat(document.getElementById('whd-ad-d').value) || 0;
+  var t = c + f + d, ok = (t === 100 && c >= 0 && f >= 0 && d >= 0);
+  var m = document.getElementById('whd-ad-msg');
+  if (m) { m.style.color = ok ? '#22c55e' : '#ef4444'; m.textContent = (ok ? '\u2713 ' : '\u2717 ') + c + '/' + f + '/' + d + ' (Total ' + t + '%)' + (ok ? '' : ' \u2014 must be 100'); }
+  var b = document.getElementById('whd-ad-add'); if (b) { b.disabled = !ok; b.style.opacity = ok ? '1' : '0.5'; b.style.cursor = ok ? 'pointer' : 'not-allowed'; }
+  return ok;
+}
+function whdAddDistConfirm() {
+  if (!whdAddDistCheck()) return;
+  var c = parseFloat(document.getElementById('whd-ad-c').value) || 0;
+  var f = parseFloat(document.getElementById('whd-ad-f').value) || 0;
+  var d = parseFloat(document.getElementById('whd-ad-d').value) || 0;
+  var id = 'custom-' + c + '-' + f + '-' + d;
+  var presets = [[40,20,40],[45,25,30],[40,40,20],[30,30,40],[100,100,100]];
+  if (whdFindCustom(id) || (f === 20 && c === 40 && d === 40) || (c === 45 && f === 25 && d === 30) || (c === 40 && f === 40 && d === 20) || (c === 30 && f === 30 && d === 40)) {
+    // already available – just select it
+    if (!whdFindCustom(id)) { showToast('\u2139\ufe0f That distribution already exists as a preset.'); whdCloseAddDist(); return; }
+  } else {
+    whdCustomLayouts.push({ id: id, c: c, f: f, d: d });
+    whdSaveCustomLayouts();
+  }
+  whdRenderCustomLayouts(id);
+  var r = document.getElementById('whd-' + id);
+  if (r) r.checked = true;
+  whdApplyLayout(id, true);
+  whdCloseAddDist();
+  showToast('\u2705 Distribution ' + c + '/' + f + '/' + d + ' added.');
+}
+function whdDeleteCustom(id) {
+  if (!confirm('Remove this distribution button?')) return;
+  var wasSel = (localStorage.getItem('whdLayout_' + _whdModalProjectId) === id);
+  whdCustomLayouts = whdCustomLayouts.filter(function(x) { return x.id !== id; });
+  whdSaveCustomLayouts();
+  whdRenderCustomLayouts();
+  if (wasSel) {
+    var b = document.getElementById('whd-bal'); if (b) b.checked = true;
+    whdApplyLayout('balanced', true);
+  }
+}
+
 function whdApplyLayout(val, recalc) {
   // Layouts: tool% | concept% | finish% | draft%
   var layouts = {
@@ -2744,6 +2860,7 @@ function whdApplyLayout(val, recalc) {
     'full':      { tool:'',    concept:'',    finish:'',    draft:''    }
   };
   var l = layouts[val] || layouts['balanced'];
+  if (!layouts[val] && whdFindCustom(val)) l = layouts['balanced'];
   var tc = document.getElementById('whd-col-tool');
   var cc = document.getElementById('whd-col-concept');
   var fc = document.getElementById('whd-col-finish');
@@ -3676,6 +3793,8 @@ function selectProject(id) {
   whdSetType(_whdProductType);
   // Restore WHD layout selection per-project
   var savedLayout = localStorage.getItem('whdLayout_'+id) || 'balanced';
+  if (whdFindCustom && !whdFindCustom(savedLayout) && /^custom-/.test(savedLayout)) savedLayout = 'balanced';
+  whdRenderCustomLayouts(savedLayout);
   var layoutRadio = document.querySelector('input[name="whdLayout"][value="'+savedLayout+'"]');
   if (layoutRadio) { layoutRadio.checked = true; }
   whdApplyLayout(savedLayout);
@@ -5105,6 +5224,8 @@ function getPhaseWeights() {
     'split-60-40': { concept: 30, finish: 30, draft2d: 40 },
     'full':      { concept: 100, finish: 100, draft2d: 100 }
   };
+  var _cu = whdFindCustom(v);
+  if (_cu) return { concept: _cu.c, finish: _cu.f, draft2d: _cu.d };
   return map[v] || map['balanced'];
 }
 
