@@ -1507,7 +1507,7 @@ async function _hrDbSync() {
         k.indexOf('whdProductNames_') === 0 || k.indexOf('whdType_') === 0 ||
         k.indexOf('whdTabCount_') === 0 || k.indexOf('whdModal_') === 0 ||
         k.indexOf('phaseData_') === 0 || k.indexOf('whdToolColumns_') === 0 ||
-        k.indexOf('whdToolUnits_') === 0 || k.indexOf('whdLayout_') === 0 || k === 'whdCustomLayouts') {
+        k.indexOf('whdToolUnits_') === 0 || k.indexOf('whdLayout_') === 0 || k === 'whdCustomLayouts' || k === 'whdHiddenPresets') {
       try {
         var v = dbData[k];
         if (v && v !== 'null') localStorage.setItem(k, v);
@@ -1761,18 +1761,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Add Work Hour Distribution popup -->
     <div id="whd-adddist-overlay" onclick="if(event.target===this)whdCloseAddDist()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10050;align-items:center;justify-content:center;">
-      <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;width:380px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,0.7);overflow:hidden;">
+      <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;width:430px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,0.7);overflow:hidden;">
         <div style="background:linear-gradient(90deg,#f97316,#ea580c);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;">
           <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1rem;color:#fff;letter-spacing:.5px;">&#10133; Add Work Hour Distribution</span>
           <button type="button" onclick="whdCloseAddDist()" style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;">&#10005;</button>
         </div>
         <div style="padding:16px 18px 18px;">
-          <div style="font-size:0.8rem;color:var(--muted);line-height:1.5;margin-bottom:14px;">Enter the % for each work type &mdash; the total must be <b style="color:var(--text);">100</b>.<br>e.g. <b style="color:var(--text);">30 / 30 / 40</b> = 3D-Concept + 3D-Finish get 60 together, 2D-Draft gets 40.</div>
-          <div style="display:flex;gap:10px;">
-            <div style="flex:1;"><div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.78rem;color:#3b82f6;margin-bottom:4px;">3D-Concept</div><input id="whd-ad-c" type="number" min="0" max="100" oninput="whdAddDistCheck()" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>
-            <div style="flex:1;"><div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.78rem;color:#22c55e;margin-bottom:4px;">3D-Finish</div><input id="whd-ad-f" type="number" min="0" max="100" oninput="whdAddDistCheck()" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>
-            <div style="flex:1;"><div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.78rem;color:#f97316;margin-bottom:4px;">2D-Draft</div><input id="whd-ad-d" type="number" min="0" max="100" oninput="whdAddDistCheck()" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>
-          </div>
+          <div style="font-size:0.8rem;color:var(--muted);line-height:1.5;margin-bottom:14px;">Enter the % for each work type &mdash; the total must be <b style="color:var(--text);">100</b>.<br>Click the <b style="color:var(--orange);">+</b> between two work types to give them <b style="color:var(--text);">one shared %</b> (split equally between them). e.g. 3D-Concept + 3D-Finish = 60, 2D-Draft = 40.</div>
+          <div id="whd-ad-fields"></div>
           <div id="whd-ad-msg" style="font-size:0.78rem;font-weight:700;margin:12px 0 14px;min-height:18px;"></div>
           <div style="display:flex;justify-content:flex-end;gap:10px;">
             <button type="button" onclick="whdCloseAddDist()" style="background:#4b5563;border:none;color:#fff;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;">Cancel</button>
@@ -2774,81 +2770,211 @@ function accDeleteToolCol(rowId, toolName, phase, idx) {
 
 /* ── ACCORDION TOOL DETAIL (replaces modal) ── */
 
-/* ── CUSTOM WORK-HOUR DISTRIBUTIONS (the "+ Add" button) ── */
+/* ── WORK-HOUR DISTRIBUTION BUTTONS: add (+ Add) / merge (+) / right-click delete ── */
 var whdCustomLayouts = [];
-try { whdCustomLayouts = JSON.parse(localStorage.getItem('whdCustomLayouts') || '[]') || []; } catch(e) { whdCustomLayouts = []; }
+var whdHiddenPresets = [];
+var WHD_PRESETS = [
+  { value: 'balanced',    id: 'whd-bal',  c: 40,  f: 20,  d: 40  },
+  { value: 'wide-proj',   id: 'whd-wp',   c: 45,  f: 25,  d: 30  },
+  { value: 'wide-prog',   id: 'whd-wg',   c: 40,  f: 40,  d: 20  },
+  { value: 'split-60-40', id: 'whd-6040', c: 30,  f: 30,  d: 40  },
+  { value: 'full',        id: 'whd-full', c: 100, f: 100, d: 100 }
+];
+function whdLoadLayoutPrefs() {
+  try { whdCustomLayouts = JSON.parse(localStorage.getItem('whdCustomLayouts') || '[]') || []; } catch(e) { whdCustomLayouts = []; }
+  try { whdHiddenPresets = JSON.parse(localStorage.getItem('whdHiddenPresets') || '[]') || []; } catch(e) { whdHiddenPresets = []; }
+}
+whdLoadLayoutPrefs();
 function whdFindCustom(id) {
   for (var i = 0; i < whdCustomLayouts.length; i++) if (whdCustomLayouts[i].id === id) return whdCustomLayouts[i];
   return null;
 }
-function whdSaveCustomLayouts() {
-  var v = JSON.stringify(whdCustomLayouts);
-  try { localStorage.setItem('whdCustomLayouts', v); } catch(e) {}
-  _dbSync('whdCustomLayouts', v);
+function whdSaveLayoutPrefs() {
+  var v1 = JSON.stringify(whdCustomLayouts), v2 = JSON.stringify(whdHiddenPresets);
+  try { localStorage.setItem('whdCustomLayouts', v1); localStorage.setItem('whdHiddenPresets', v2); } catch(e) {}
+  _dbSync('whdCustomLayouts', v1);
+  _dbSync('whdHiddenPresets', v2);
 }
+function whdIsLayoutVisible(v) {
+  for (var i = 0; i < WHD_PRESETS.length; i++) if (WHD_PRESETS[i].value === v) return whdHiddenPresets.indexOf(v) === -1;
+  var c = whdFindCustom(v);
+  return !!(c && !c.hidden);
+}
+function whdVisibleLayouts() {
+  var out = [];
+  WHD_PRESETS.forEach(function(p) { if (whdHiddenPresets.indexOf(p.value) === -1) out.push(p.value); });
+  whdCustomLayouts.forEach(function(c) { if (!c.hidden) out.push(c.id); });
+  return out;
+}
+function whdFirstVisibleLayout() { var v = whdVisibleLayouts(); return v.length ? v[0] : 'balanced'; }
+
 function whdRenderCustomLayouts(selectedVal) {
-  var box = document.getElementById('whd-custom-layouts');
-  if (!box) return;
   var cur = selectedVal;
   if (!cur) { var ck = document.querySelector('input[name="whdLayout"]:checked'); cur = ck ? ck.value : ''; }
-  box.innerHTML = whdCustomLayouts.map(function(c) {
+  // built-in buttons: hide the ones the user deleted
+  WHD_PRESETS.forEach(function(p) {
+    var lab = document.querySelector('label[for="' + p.id + '"]');
+    if (lab) lab.style.display = (whdHiddenPresets.indexOf(p.value) === -1) ? '' : 'none';
+  });
+  var box = document.getElementById('whd-custom-layouts');
+  if (!box) return;
+  box.innerHTML = whdCustomLayouts.filter(function(c) { return !c.hidden; }).map(function(c) {
+    var txt = c.label || (c.c + '/' + c.f + '/' + c.d);
+    var tip = c.tip || ('3D-Concept ' + c.c + ' / 3D-Finish ' + c.f + ' / 2D-Draft ' + c.d);
     return '<input type="radio" name="whdLayout" id="whd-' + c.id + '" value="' + c.id + '"' + (cur === c.id ? ' checked' : '') + ' onchange="whdApplyLayout(this.value,true)">'
-      + '<label for="whd-' + c.id + '" title="3D-Concept ' + c.c + ' / 3D-Finish ' + c.f + ' / 2D-Draft ' + c.d + '">' + c.c + '/' + c.f + '/' + c.d
-      + (_isGuest ? '' : ' <span onclick="event.preventDefault();event.stopPropagation();whdDeleteCustom(\'' + c.id + '\')" title="Remove this distribution" style="margin-left:6px;opacity:.6;font-size:.7rem;">&#10005;</span>')
-      + '</label>';
+      + '<label for="whd-' + c.id + '" title="' + tip + (_isGuest ? '' : ' (right-click to delete)') + '">' + txt + '</label>';
   }).join('');
 }
-function whdOpenAddDist() {
-  ['c','f','d'].forEach(function(k) { var e = document.getElementById('whd-ad-' + k); if (e) e.value = ''; });
-  var o = document.getElementById('whd-adddist-overlay'); if (o) o.style.display = 'flex';
+
+/* ---- Add popup: 3 fields with "+" between them ---- */
+var _ad = { merge: '', c: '', f: '', d: '', m: '' };
+function _adNum(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function _adField(key, label, color, flex) {
+  return '<div style="flex:' + flex + ';min-width:0;"><div style="font-family:\'Rajdhani\',sans-serif;font-weight:700;font-size:0.78rem;color:' + color + ';margin-bottom:4px;">' + label + '</div>'
+    + '<input type="number" min="0" max="100" value="' + _ad[key] + '" oninput="whdAdInput(\'' + key + '\',this.value)" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>';
+}
+function _adPlus(which, active) {
+  return '<button type="button" onclick="whdAdToggleMerge(\'' + which + '\')" title="' + (active ? 'Click to split again' : 'Click to give these two one shared %') + '" style="flex:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1.1rem;font-weight:700;line-height:1;display:inline-flex;align-items:center;justify-content:center;'
+    + (active ? 'background:var(--orange);color:#fff;border:1.5px solid var(--orange);' : 'background:transparent;color:var(--orange);border:1.5px solid var(--orange);') + '">+</button>';
+}
+function _adGroup(which, l1, c1, l2, c2) {
+  return '<div style="flex:2;min-width:0;border:1.5px dashed rgba(249,115,22,0.55);border-radius:10px;padding:6px 8px 8px;background:rgba(249,115,22,0.05);">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;font-family:\'Rajdhani\',sans-serif;font-weight:700;font-size:0.76rem;">'
+    + '<span style="color:' + c1 + ';">' + l1 + '</span>' + _adPlus(which, true) + '<span style="color:' + c2 + ';">' + l2 + '</span></div>'
+    + '<input type="number" min="0" max="100" value="' + _ad.m + '" oninput="whdAdInput(\'m\',this.value)" style="width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:1rem;outline:none;"></div>';
+}
+function whdAdRender() {
+  var h, row = 'display:flex;align-items:flex-end;gap:8px;';
+  var plusWrap = function(btn) { return '<div style="flex:none;padding-bottom:7px;">' + btn + '</div>'; };
+  if (_ad.merge === 'cf') {
+    h = '<div style="' + row + '">' + _adGroup('cf', '3D-Concept', '#3b82f6', '3D-Finish', '#22c55e') + _adField('d', '2D-Draft', '#f97316', 1) + '</div>';
+  } else if (_ad.merge === 'fd') {
+    h = '<div style="' + row + '">' + _adField('c', '3D-Concept', '#3b82f6', 1) + _adGroup('fd', '3D-Finish', '#22c55e', '2D-Draft', '#f97316') + '</div>';
+  } else {
+    h = '<div style="' + row + '">' + _adField('c', '3D-Concept', '#3b82f6', 1) + plusWrap(_adPlus('cf', false))
+      + _adField('f', '3D-Finish', '#22c55e', 1) + plusWrap(_adPlus('fd', false)) + _adField('d', '2D-Draft', '#f97316', 1) + '</div>';
+  }
+  var box = document.getElementById('whd-ad-fields');
+  if (box) box.innerHTML = h;
   whdAddDistCheck();
-  var f = document.getElementById('whd-ad-c'); if (f) f.focus();
+}
+function whdAdToggleMerge(which) {
+  var cur = _ad.merge;
+  if (cur === which) {                       // split again: shared % goes half/half
+    var half = _ad.m === '' ? '' : String(_adNum(_ad.m) / 2);
+    if (which === 'cf') { _ad.c = half; _ad.f = half; } else { _ad.f = half; _ad.d = half; }
+    _ad.merge = ''; _ad.m = '';
+  } else {
+    if (cur) { whdAdToggleMerge(cur); }      // only one shared pair at a time
+    if (which === 'cf') _ad.m = (_ad.c === '' && _ad.f === '') ? '' : String(_adNum(_ad.c) + _adNum(_ad.f));
+    else _ad.m = (_ad.f === '' && _ad.d === '') ? '' : String(_adNum(_ad.f) + _adNum(_ad.d));
+    _ad.merge = which;
+  }
+  whdAdRender();
+}
+function whdAdInput(k, v) { _ad[k] = v; whdAddDistCheck(); }
+function whdAdWeights() {
+  var c, f, d, label, tip;
+  if (_ad.merge === 'cf') {
+    var m1 = _adNum(_ad.m); c = f = m1 / 2; d = _adNum(_ad.d);
+    label = m1 + '/' + d; tip = '3D-Concept + 3D-Finish = ' + m1 + ' (' + c + ' each), 2D-Draft ' + d;
+  } else if (_ad.merge === 'fd') {
+    var m2 = _adNum(_ad.m); c = _adNum(_ad.c); f = d = m2 / 2;
+    label = c + '/' + m2; tip = '3D-Concept ' + c + ', 3D-Finish + 2D-Draft = ' + m2 + ' (' + f + ' each)';
+  } else {
+    c = _adNum(_ad.c); f = _adNum(_ad.f); d = _adNum(_ad.d);
+    label = c + '/' + f + '/' + d; tip = '3D-Concept ' + c + ' / 3D-Finish ' + f + ' / 2D-Draft ' + d;
+  }
+  var total = _ad.merge ? (_adNum(_ad.m) + (_ad.merge === 'cf' ? d : c)) : (c + f + d);
+  total = Math.round(total * 100) / 100;
+  return { c: c, f: f, d: d, total: total, label: label, tip: tip, ok: (total === 100 && c >= 0 && f >= 0 && d >= 0) };
+}
+function whdOpenAddDist() {
+  _ad = { merge: '', c: '', f: '', d: '', m: '' };
+  var o = document.getElementById('whd-adddist-overlay'); if (o) o.style.display = 'flex';
+  whdAdRender();
+  var f = document.querySelector('#whd-ad-fields input'); if (f) f.focus();
 }
 function whdCloseAddDist() {
   var o = document.getElementById('whd-adddist-overlay'); if (o) o.style.display = 'none';
 }
 function whdAddDistCheck() {
-  var c = parseFloat(document.getElementById('whd-ad-c').value) || 0;
-  var f = parseFloat(document.getElementById('whd-ad-f').value) || 0;
-  var d = parseFloat(document.getElementById('whd-ad-d').value) || 0;
-  var t = c + f + d, ok = (t === 100 && c >= 0 && f >= 0 && d >= 0);
+  var w = whdAdWeights();
   var m = document.getElementById('whd-ad-msg');
-  if (m) { m.style.color = ok ? '#22c55e' : '#ef4444'; m.textContent = (ok ? '\u2713 ' : '\u2717 ') + c + '/' + f + '/' + d + ' (Total ' + t + '%)' + (ok ? '' : ' \u2014 must be 100'); }
-  var b = document.getElementById('whd-ad-add'); if (b) { b.disabled = !ok; b.style.opacity = ok ? '1' : '0.5'; b.style.cursor = ok ? 'pointer' : 'not-allowed'; }
-  return ok;
+  if (m) { m.style.color = w.ok ? '#22c55e' : '#ef4444'; m.textContent = (w.ok ? '\u2713 ' : '\u2717 ') + w.label + ' (Total ' + w.total + '%)' + (w.ok ? '' : ' \u2014 must be 100'); }
+  var b = document.getElementById('whd-ad-add'); if (b) { b.disabled = !w.ok; b.style.opacity = w.ok ? '1' : '0.5'; b.style.cursor = w.ok ? 'pointer' : 'not-allowed'; }
+  return w.ok;
 }
 function whdAddDistConfirm() {
   if (!whdAddDistCheck()) return;
-  var c = parseFloat(document.getElementById('whd-ad-c').value) || 0;
-  var f = parseFloat(document.getElementById('whd-ad-f').value) || 0;
-  var d = parseFloat(document.getElementById('whd-ad-d').value) || 0;
-  var id = 'custom-' + c + '-' + f + '-' + d;
-  var presets = [[40,20,40],[45,25,30],[40,40,20],[30,30,40],[100,100,100]];
-  if (whdFindCustom(id) || (f === 20 && c === 40 && d === 40) || (c === 45 && f === 25 && d === 30) || (c === 40 && f === 40 && d === 20) || (c === 30 && f === 30 && d === 40)) {
-    // already available – just select it
-    if (!whdFindCustom(id)) { showToast('\u2139\ufe0f That distribution already exists as a preset.'); whdCloseAddDist(); return; }
+  var w = whdAdWeights();
+  var id = 'custom-' + w.c + '-' + w.f + '-' + w.d;
+  var target = id;
+  // same weights as a built-in button? bring that one back / select it
+  var preset = null;
+  WHD_PRESETS.forEach(function(p) { if (p.c === w.c && p.f === w.f && p.d === w.d) preset = p; });
+  if (preset) {
+    target = preset.value;
+    var hi = whdHiddenPresets.indexOf(preset.value);
+    if (hi !== -1) { whdHiddenPresets.splice(hi, 1); whdSaveLayoutPrefs(); }
+    else showToast('\u2139\ufe0f ' + preset.c + '/' + preset.f + '/' + preset.d + ' already exists \u2014 selected it.');
   } else {
-    whdCustomLayouts.push({ id: id, c: c, f: f, d: d });
-    whdSaveCustomLayouts();
+    var ex = whdFindCustom(id);
+    if (ex) { if (ex.hidden) { ex.hidden = false; ex.label = w.label; ex.tip = w.tip; whdSaveLayoutPrefs(); } }
+    else { whdCustomLayouts.push({ id: id, c: w.c, f: w.f, d: w.d, label: w.label, tip: w.tip }); whdSaveLayoutPrefs(); }
   }
-  whdRenderCustomLayouts(id);
-  var r = document.getElementById('whd-' + id);
+  whdRenderCustomLayouts(target);
+  var r = document.querySelector('input[name="whdLayout"][value="' + target + '"]');
   if (r) r.checked = true;
-  whdApplyLayout(id, true);
+  whdApplyLayout(target, true);
   whdCloseAddDist();
-  showToast('\u2705 Distribution ' + c + '/' + f + '/' + d + ' added.');
+  showToast('\u2705 Distribution ' + w.label + ' added.');
 }
-function whdDeleteCustom(id) {
-  if (!confirm('Remove this distribution button?')) return;
-  var wasSel = (localStorage.getItem('whdLayout_' + _whdModalProjectId) === id);
-  whdCustomLayouts = whdCustomLayouts.filter(function(x) { return x.id !== id; });
-  whdSaveCustomLayouts();
-  whdRenderCustomLayouts();
-  if (wasSel) {
-    var b = document.getElementById('whd-bal'); if (b) b.checked = true;
-    whdApplyLayout('balanced', true);
+
+/* ---- right-click a distribution button -> Delete ---- */
+function whdCloseLayoutCtx() { var m = document.getElementById('whd-layout-ctx'); if (m) m.remove(); }
+function whdDeleteLayout(value) {
+  whdCloseLayoutCtx();
+  if (whdVisibleLayouts().length <= 1) { showToast('\u26a0\ufe0f At least one distribution button must remain.'); return; }
+  var isPreset = WHD_PRESETS.some(function(p) { return p.value === value; });
+  if (isPreset) { if (whdHiddenPresets.indexOf(value) === -1) whdHiddenPresets.push(value); }
+  else { var c = whdFindCustom(value); if (c) c.hidden = true; }
+  whdSaveLayoutPrefs();
+  var ck = document.querySelector('input[name="whdLayout"]:checked');
+  var wasSelected = !ck || ck.value === value || !whdIsLayoutVisible(ck.value);
+  var next = wasSelected ? whdFirstVisibleLayout() : ck.value;
+  whdRenderCustomLayouts(next);
+  if (wasSelected) {
+    var r = document.querySelector('input[name="whdLayout"][value="' + next + '"]');
+    if (r) r.checked = true;
+    whdApplyLayout(next, true);
   }
+  showToast('\uD83D\uDDD1\uFE0F Distribution button removed.');
 }
+document.addEventListener('contextmenu', function(e) {
+  if (typeof _isGuest !== 'undefined' && _isGuest) return;
+  var lab = e.target && e.target.closest ? e.target.closest('.layout-radio-group label') : null;
+  if (!lab) return;
+  var inp = document.getElementById(lab.getAttribute('for'));
+  if (!inp) return;
+  e.preventDefault();
+  whdCloseLayoutCtx();
+  var m = document.createElement('div');
+  m.id = 'whd-layout-ctx';
+  m.style.cssText = 'position:fixed;z-index:10100;left:' + e.clientX + 'px;top:' + e.clientY + 'px;background:var(--card-bg,#1a1a1a);border:1px solid var(--border,#333);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.6);padding:4px;min-width:150px;';
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = '\uD83D\uDDD1\uFE0F Delete  ' + lab.textContent.trim();
+  btn.style.cssText = 'width:100%;text-align:left;background:transparent;border:none;color:#ef4444;font-family:inherit;font-size:0.82rem;font-weight:700;padding:8px 12px;border-radius:6px;cursor:pointer;';
+  btn.onmouseover = function() { btn.style.background = 'rgba(239,68,68,0.12)'; };
+  btn.onmouseout = function() { btn.style.background = 'transparent'; };
+  btn.onclick = function(ev) { ev.stopPropagation(); whdDeleteLayout(inp.value); };
+  m.appendChild(btn);
+  document.body.appendChild(m);
+});
+document.addEventListener('click', function(e) { if (!e.target.closest || !e.target.closest('#whd-layout-ctx')) whdCloseLayoutCtx(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') whdCloseLayoutCtx(); });
+window.addEventListener('scroll', whdCloseLayoutCtx, true);
 
 function whdApplyLayout(val, recalc) {
   // Layouts: tool% | concept% | finish% | draft%
@@ -3793,7 +3919,9 @@ function selectProject(id) {
   whdSetType(_whdProductType);
   // Restore WHD layout selection per-project
   var savedLayout = localStorage.getItem('whdLayout_'+id) || 'balanced';
-  if (whdFindCustom && !whdFindCustom(savedLayout) && /^custom-/.test(savedLayout)) savedLayout = 'balanced';
+  whdLoadLayoutPrefs();
+  if (!whdFindCustom(savedLayout) && /^custom-/.test(savedLayout)) savedLayout = 'balanced';
+  if (!whdIsLayoutVisible(savedLayout)) savedLayout = whdFirstVisibleLayout();
   whdRenderCustomLayouts(savedLayout);
   var layoutRadio = document.querySelector('input[name="whdLayout"][value="'+savedLayout+'"]');
   if (layoutRadio) { layoutRadio.checked = true; }
