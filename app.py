@@ -3850,8 +3850,9 @@ def _pm_used_count(conn, emp_id, start_iso, end_iso, exclude_leave_id=None):
 
 # ════════════════════════════════════════════════════════════════
 #  COMP-OFF
-#  EARN : work a Sunday and put in >= 8 hours (sessions + approved
-#         Permission credit) -> +1 comp-off for that Sunday.
+#  EARN : work a Sunday OR an office holiday (National / Government /
+#         Company) and put in >= 8 hours (sessions + approved Permission
+#         credit) -> +1 comp-off for that day.
 #  USE  : apply "Comp Off" leave on any LATER working day. It is a paid
 #         day (status 'compoff'), never LOP, and never above the balance.
 #  The balance is always computed from the attendance table (ground
@@ -3889,24 +3890,46 @@ def _day_worked_minutes(rows):
         pass
     return mins, open_punch
 
+_OFFICE_HOLIDAY_TYPES = ('national', 'government', 'company')
+
+def _office_holiday_dates(conn):
+    """Set of ISO dates that are office holidays for everyone (National / Government / Company).
+    Religious / optional holidays are per-employee and do NOT earn comp-off."""
+    out = set()
+    try:
+        for h in conn.execute("SELECT date, type FROM holidays").fetchall():
+            if (h['type'] or 'National').strip().lower() in _OFFICE_HOLIDAY_TYPES:
+                out.add(str(h['date'])[:10])
+    except Exception as ex:
+        print(f"[office holidays] {ex}")
+    return out
+
+_COMPOFF_LEAVE_STATUS = ('cl', 'sl', 'el', 'compoff')
+
 def _compoff_earned_dates(conn, emp_id, upto_iso=None):
-    """Sorted list of Sundays on which this employee worked >= 8h."""
+    """Sorted list of Sundays AND office holidays on which this employee worked >= 8h."""
     rows = conn.execute(
         "SELECT date, status, checkin, checkout, pm_minutes FROM attendance WHERE emp_id=?", (emp_id,)
     ).fetchall()
     by_date = {}
     for r in rows:
         by_date.setdefault(str(r['date'])[:10], []).append(r)
+    hol = _office_holiday_dates(conn)
     out = []
     for d, rs in by_date.items():
         try:
-            if datetime.datetime.strptime(d, '%Y-%m-%d').weekday() != 6:
-                continue
+            is_sunday = datetime.datetime.strptime(d, '%Y-%m-%d').weekday() == 6
         except Exception:
+            continue
+        is_hol = d in hol
+        if not (is_sunday or is_hol):
             continue
         if upto_iso and d >= upto_iso:
             continue
-        if any((x['status'] or '').lower().strip() in _COMPOFF_NOT_WORK_STATUS for x in rs):
+        # On a holiday every non-worker is stored as 'holiday', so only a LEAVE status
+        # blocks it there; real punches totalling 8h+ are what count.
+        blocked = _COMPOFF_LEAVE_STATUS if is_hol else _COMPOFF_NOT_WORK_STATUS
+        if any((x['status'] or '').lower().strip() in blocked for x in rs):
             continue
         mins, open_punch = _day_worked_minutes(rs)
         if not open_punch and mins >= COMPOFF_MIN_MINUTES:
@@ -5229,16 +5252,16 @@ def apply_leave_new():
             is_permanent = emp_type in ('Regular', 'Regular(PIP)')
             joindate = emp_row['joindate'] if 'joindate' in emp_row.keys() else None
             remaining = _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, from_dt_obj, to_dt_obj)
-            if leave_code == 'compoff' and from_dt_obj.weekday() == 6:
+            if leave_code == 'compoff' and (from_dt_obj.weekday() == 6 or from_dt_obj.isoformat() in _office_holiday_dates(conn)):
                 conn.close()
                 return jsonify({"success": False, "no_balance": True,
-                                "error": "Sunday is already a company off day - pick a working day for Comp Off."}), 400
+                                "error": "Sunday / holiday is already a company off day - pick a working day for Comp Off."}), 400
             if remaining <= 0:
                 conn.close()
                 if leave_code == 'compoff':
                     return jsonify({
                         "success": False, "no_balance": True,
-                        "error": "No Comp Off available for this date. Comp Off is earned by working 8+ hours on a Sunday and can only be used on a date AFTER that Sunday."
+                        "error": "No Comp Off available for this date. Comp Off is earned by working 8+ hours on a Sunday or a holiday and can only be used on a date AFTER that day."
                     }), 400
                 return jsonify({
                     "success": False,
@@ -5494,15 +5517,16 @@ def _sync_leave_to_attendance(conn, leave_id, now):
         is_permanent = emp_type in ('Regular', 'Regular(PIP)')
         is_notice_period = bool(lwd) and str(from_dt)[:7] <= str(lwd)[:10][:7]
 
-        remaining = 0.0 if is_notice_period else _leave_remaining_quota(
+        # Comp-off is a paid day earned by extra work - never LOP, not even in notice period.
+        remaining = 0.0 if (is_notice_period and leave_code != 'compoff') else _leave_remaining_quota(
             conn, emp_id, is_permanent, leave_code, joindate, from_dt, to_dt, exclude_leave_id=leave_id
         )
 
         cur = from_dt
         while cur <= to_dt:
             date_str = str(cur)
-            if leave_code == 'compoff' and cur.weekday() == 6:
-                cur += datetime.timedelta(days=1)   # Sunday is already off - no comp-off consumed
+            if leave_code == 'compoff' and (cur.weekday() == 6 or date_str in _office_holiday_dates(conn)):
+                cur += datetime.timedelta(days=1)   # Sunday / office holiday is already off - no comp-off consumed
                 continue
             if leave_code == 'pm' and remaining <= 0:
                 # PM over its 2/month quota: give no credit, but never turn a
