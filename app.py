@@ -4107,7 +4107,7 @@ def leave_balance_report():
         for e in emps:
             emp_id = e['id']
             is_perm = (e['type'] or '') in ('Regular', 'Regular(PIP)')
-            counts = {"cl": 0, "sl": 0, "el": 0}
+            counts = {"cl": 0, "sl": 0, "el": 0, "lop": 0}
             if month_in_fy > 0:
                 # NOTE: bound by fy_end here, not `usage_end` (which is capped
                 # to today for the current FY). Once a leave is approved it's
@@ -4120,7 +4120,7 @@ def leave_balance_report():
                 # full FY) and this report used to disagree on the same
                 # employee's totals.
                 rows = conn.execute(
-                    "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el') GROUP BY status",
+                    "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el','lop') GROUP BY status",
                     (emp_id, fy_start, fy_end)
                 ).fetchall()
                 for r in rows:
@@ -4178,6 +4178,8 @@ def leave_balance_report():
                 "pm": {"used": pm_used_fy, "total": pm_total_fy,
                        "remaining": max(0, pm_total_fy - pm_used_fy),
                        "carried_over": 0},
+                # Loss of Pay days (attendance status 'lop') for the whole FY
+                "lop": {"used": counts['lop']},
             })
         conn.close()
         return jsonify({
@@ -4224,13 +4226,13 @@ def leave_report_monthly():
 
         rows = conn.execute(
             "SELECT substr(date,1,7) AS ym, status, COUNT(*) AS c FROM attendance "
-            "WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el','pm') "
+            "WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el','pm','lop') "
             "GROUP BY ym, status",
             (emp_id, fy_start, fy_end)
         ).fetchall()
         by_month = {}
         for r in rows:
-            by_month.setdefault(r['ym'], {"cl": 0, "sl": 0, "el": 0, "pm": 0})[r['status']] = r['c']
+            by_month.setdefault(r['ym'], {"cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0})[r['status']] = r['c']
         # PM is stored as present + pm_minutes, so recount it from those columns
         _pm_rows = conn.execute(
             "SELECT date, status, pm_minutes, pm_leave_ids FROM attendance WHERE emp_id=? AND date>=? AND date<=? "
@@ -4242,19 +4244,20 @@ def leave_report_monthly():
         for _ym in list(by_month.keys()):
             by_month[_ym]['pm'] = _pm_month.get(_ym, 0)
         for _ym, _n in _pm_month.items():
-            by_month.setdefault(_ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0})['pm'] = _n
+            by_month.setdefault(_ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0})['pm'] = _n
 
         _MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
         months = []
         cur = datetime.date(fy_start_year, 4, 1)
-        totals = {"cl": 0, "sl": 0, "el": 0, "pm": 0}
+        totals = {"cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0}
         for i in range(12):
             ym = cur.strftime('%Y-%m')
-            counts = by_month.get(ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0})
+            counts = by_month.get(ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0})
             cal_year = cur.year
             months.append({
                 "ym": ym, "label": f"{_MONTHS[i]} {cal_year}",
                 "cl": counts['cl'], "sl": counts['sl'], "el": counts['el'], "pm": counts['pm'],
+                "lop": counts.get('lop', 0),
                 "is_future": cur > today
             })
             for k in totals:
