@@ -4049,21 +4049,26 @@ def _lop_days_by_month(conn, emp_id, username, dept, desig, joindate, fy_start, 
         join = str(joindate or '')[:10]
 
         # dates covered by an APPROVED leave request (permission excluded)
+        # NB: production DB is MySQL, so no CAST(.. AS TEXT) here - plain
+        # equality works on both MySQL and SQLite.
         covered = set()
-        for lr in conn.execute(
-                "SELECT leave_type, from_date, to_date FROM leave_requests "
-                "WHERE CAST(emp_id AS TEXT)=? AND LOWER(COALESCE(status,'')) IN ('approved','approve')",
-                (str(emp_id),)).fetchall():
-            if (lr['leave_type'] or '').lower().strip() in ('permission', 'pm'):
-                continue
-            try:
-                a = datetime.date.fromisoformat(str(lr['from_date'])[:10])
-                b = datetime.date.fromisoformat(str(lr['to_date'])[:10])
-            except Exception:
-                continue
-            while a <= b:
-                covered.add(a.isoformat())
-                a += datetime.timedelta(days=1)
+        try:
+            for lr in conn.execute(
+                    "SELECT leave_type, from_date, to_date FROM leave_requests "
+                    "WHERE emp_id=? AND LOWER(COALESCE(status,'')) IN ('approved','approve')",
+                    (str(emp_id),)).fetchall():
+                if (lr['leave_type'] or '').lower().strip() in ('permission', 'pm'):
+                    continue
+                try:
+                    a = datetime.date.fromisoformat(str(lr['from_date'])[:10])
+                    b = datetime.date.fromisoformat(str(lr['to_date'])[:10])
+                except Exception:
+                    continue
+                while a <= b:
+                    covered.add(a.isoformat())
+                    a += datetime.timedelta(days=1)
+        except Exception as _ce:
+            print(f"[LOP calc] leave lookup skipped: {_ce}")
 
         # office holidays (National / Government / Company)
         office_hol = set()
@@ -4106,7 +4111,8 @@ def _lop_days_by_month(conn, emp_id, username, dept, desig, joindate, fy_start, 
                 out[d[:7]] = out.get(d[:7], 0) + 1
         return out
     except Exception as ex:
-        print(f"[LOP calc error] {ex}")
+        import traceback
+        print(f"[LOP calc error] {ex}\n{traceback.format_exc()}")
         return {}
 
 
