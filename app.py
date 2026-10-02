@@ -4024,6 +4024,92 @@ def _leave_remaining_quota(conn, emp_id, is_permanent, leave_code, joindate, exc
 
 
 
+def _lop_days_by_month(conn, emp_id, username, dept, desig, joindate, fy_start, fy_end):
+    """LOP days per month ({'YYYY-MM': n}) for one employee, for the leave report.
+
+    LOP here means exactly what the attendance page shows as red "A" (Absent):
+      * days marked Absent, and
+      * days worked < 4 hrs (stored as 'lop', or a 'present' day whose punches
+        add up to < 4 hrs).
+    NOT counted (so leave never shows up as LOP):
+      * approved CL/SL/EL/comp-off leave days (even an over-quota day that the
+        approval sync stored as 'lop'),
+      * Sundays (not worked = blank), office holidays with no check-in,
+      * days before the joining date,
+      * admin-role employees (the attendance page never shows them Absent).
+    """
+    try:
+        _dept = (dept or '').strip().lower()
+        _desig = (desig or '').lower()
+        _uname = (username or '').lower()
+        if 'admin' in _desig or _dept == 'admin' or _uname in ('superadmin', 'sivabalan.m'):
+            return {}
+        exempt_hours = _dept.replace('-', ' ') in ('housekeeping', 'housing keeping', 'house keeping')
+        end = min(str(fy_end), datetime.date.today().isoformat())
+        join = str(joindate or '')[:10]
+
+        # dates covered by an APPROVED leave request (permission excluded)
+        covered = set()
+        for lr in conn.execute(
+                "SELECT leave_type, from_date, to_date FROM leave_requests "
+                "WHERE CAST(emp_id AS TEXT)=? AND LOWER(COALESCE(status,'')) IN ('approved','approve')",
+                (str(emp_id),)).fetchall():
+            if (lr['leave_type'] or '').lower().strip() in ('permission', 'pm'):
+                continue
+            try:
+                a = datetime.date.fromisoformat(str(lr['from_date'])[:10])
+                b = datetime.date.fromisoformat(str(lr['to_date'])[:10])
+            except Exception:
+                continue
+            while a <= b:
+                covered.add(a.isoformat())
+                a += datetime.timedelta(days=1)
+
+        # office holidays (National / Government / Company)
+        office_hol = set()
+        try:
+            for h in conn.execute("SELECT date, type FROM holidays WHERE date>=? AND date<=?", (str(fy_start), end)).fetchall():
+                if (h['type'] or 'National').strip().lower() in ('national', 'government', 'company'):
+                    office_hol.add(str(h['date'])[:10])
+        except Exception:
+            pass
+
+        rows = conn.execute(
+            "SELECT date, status, checkin, checkout, pm_minutes FROM attendance "
+            "WHERE emp_id=? AND date>=? AND date<=?", (emp_id, str(fy_start), end)).fetchall()
+        by_date = {}
+        for r in rows:
+            by_date.setdefault(str(r['date'])[:10], []).append(r)
+
+        out = {}
+        for d, rs in by_date.items():
+            if join and d < join:
+                continue
+            try:
+                if datetime.date.fromisoformat(d).weekday() == 6:
+                    continue  # Sunday: worked = Present, not worked = blank - never LOP
+            except Exception:
+                pass
+            st = (rs[-1]['status'] or '').lower().strip()
+            has_ck = any((x['checkin'] or '--').strip() not in ('--', '') for x in rs)
+            if st in ('holiday', 'rh') or (not has_ck and d in office_hol):
+                continue
+            is_lop = False
+            if st in ('absent', 'a'):
+                is_lop = True
+            elif st == 'lop':
+                is_lop = d not in covered
+            elif st in ('present', 'p') and not exempt_hours and not any((x['pm_minutes'] or 0) > 0 for x in rs):
+                mins, open_punch = _day_worked_minutes(rs)
+                is_lop = (not open_punch) and 0 < mins < 240
+            if is_lop:
+                out[d[:7]] = out.get(d[:7], 0) + 1
+        return out
+    except Exception as ex:
+        print(f"[LOP calc error] {ex}")
+        return {}
+
+
 @app.route('/api/leave/report', methods=['GET'])
 @require_auth
 def leave_balance_report():
@@ -4120,7 +4206,7 @@ def leave_balance_report():
                 # full FY) and this report used to disagree on the same
                 # employee's totals.
                 rows = conn.execute(
-                    "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el','lop') GROUP BY status",
+                    "SELECT status, COUNT(*) AS c FROM attendance WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el') GROUP BY status",
                     (emp_id, fy_start, fy_end)
                 ).fetchall()
                 for r in rows:
@@ -4178,8 +4264,8 @@ def leave_balance_report():
                 "pm": {"used": pm_used_fy, "total": pm_total_fy,
                        "remaining": max(0, pm_total_fy - pm_used_fy),
                        "carried_over": 0},
-                # Loss of Pay days (attendance status 'lop') for the whole FY
-                "lop": {"used": counts['lop']},
+                # Loss of Pay = Absent days (as shown on the attendance page) for the whole FY
+                "lop": {"used": sum(_lop_days_by_month(conn, emp_id, e['username'], e['dept'], e['desig'], e['joindate'], fy_start, fy_end).values()) if month_in_fy > 0 else 0},
             })
         conn.close()
         return jsonify({
@@ -4226,7 +4312,7 @@ def leave_report_monthly():
 
         rows = conn.execute(
             "SELECT substr(date,1,7) AS ym, status, COUNT(*) AS c FROM attendance "
-            "WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el','pm','lop') "
+            "WHERE emp_id=? AND date>=? AND date<=? AND status IN ('cl','sl','el','pm') "
             "GROUP BY ym, status",
             (emp_id, fy_start, fy_end)
         ).fetchall()
@@ -4245,6 +4331,11 @@ def leave_report_monthly():
             by_month[_ym]['pm'] = _pm_month.get(_ym, 0)
         for _ym, _n in _pm_month.items():
             by_month.setdefault(_ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0})['pm'] = _n
+
+        # LOP = Absent days as shown on the attendance page (leave never counts)
+        if emp:
+            for _ym, _n in _lop_days_by_month(conn, emp_id, emp['username'], emp['dept'], emp['desig'], emp['joindate'], fy_start, fy_end).items():
+                by_month.setdefault(_ym, {"cl": 0, "sl": 0, "el": 0, "pm": 0, "lop": 0})['lop'] = _n
 
         _MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
         months = []
