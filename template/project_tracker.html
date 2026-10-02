@@ -1736,13 +1736,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- Layout Radio Buttons -->
     <div class="layout-radio-group" style="display:inline-flex;margin-bottom:14px;">
-      <input type="radio" name="whdLayout" id="whd-bal" value="balanced" checked onchange="whdApplyLayout(this.value)">
+      <input type="radio" name="whdLayout" id="whd-bal" value="balanced" checked onchange="whdApplyLayout(this.value,true)">
       <label for="whd-bal">40/20/40</label>
-      <input type="radio" name="whdLayout" id="whd-wp" value="wide-proj" onchange="whdApplyLayout(this.value)">
+      <input type="radio" name="whdLayout" id="whd-wp" value="wide-proj" onchange="whdApplyLayout(this.value,true)">
       <label for="whd-wp">45/25/30</label>
-      <input type="radio" name="whdLayout" id="whd-wg" value="wide-prog" onchange="whdApplyLayout(this.value)">
+      <input type="radio" name="whdLayout" id="whd-wg" value="wide-prog" onchange="whdApplyLayout(this.value,true)">
       <label for="whd-wg">40/40/20</label>
-      <input type="radio" name="whdLayout" id="whd-full" value="full" onchange="whdApplyLayout(this.value)">
+      <input type="radio" name="whdLayout" id="whd-6040" value="split-60-40" onchange="whdApplyLayout(this.value,true)">
+      <label for="whd-6040" title="3D Concept + 3D Finish = 60 (30 each), 2D Draft = 40">60/40</label>
+      <input type="radio" name="whdLayout" id="whd-full" value="full" onchange="whdApplyLayout(this.value,true)">
       <label for="whd-full">100% All</label>
     </div>
 
@@ -2732,12 +2734,13 @@ function accDeleteToolCol(rowId, toolName, phase, idx) {
 
 /* ── ACCORDION TOOL DETAIL (replaces modal) ── */
 
-function whdApplyLayout(val) {
+function whdApplyLayout(val, recalc) {
   // Layouts: tool% | concept% | finish% | draft%
   var layouts = {
     'balanced':  { tool:'40%', concept:'20%', finish:'20%', draft:'20%' },
     'wide-proj': { tool:'45%', concept:'18%', finish:'18%', draft:'19%' },
     'wide-prog': { tool:'40%', concept:'40%', finish:'40%', draft:'20%' },
+    'split-60-40': { tool:'40%', concept:'20%', finish:'20%', draft:'20%' },
     'full':      { tool:'',    concept:'',    finish:'',    draft:''    }
   };
   var l = layouts[val] || layouts['balanced'];
@@ -2752,6 +2755,26 @@ function whdApplyLayout(val) {
   // Save layout selection per-project
   if (_whdModalProjectId) {
     localStorage.setItem('whdLayout_'+_whdModalProjectId, val);
+  }
+  // User picked a new distribution: re-weight every saved row so progress follows it immediately
+  if (recalc) {
+    try {
+      Object.keys(phaseData).forEach(function(tn){
+        ['concept','finish','draft2d'].forEach(function(ph){
+          (phaseData[tn][ph] || []).forEach(function(r){
+            if (!r || typeof r !== 'object') return;
+            var v = calcPhaseUWC(ph, r);
+            if (!r.phaseOverall) r.phaseOverall = {};
+            r.phaseOverall[ph] = v;
+            r.overall = v;
+          });
+        });
+      });
+      savePhaseDataStorage();
+      try { refreshAllProductHeaders(); } catch(e) {}
+      var ob = document.querySelector('[id$="-body"][data-open="1"]');
+      if (ob && _accTool) renderAccTable(ob.id.replace('-body',''), _accTool);
+    } catch(e) { console.error(e); }
   }
 }
 
@@ -5078,6 +5101,8 @@ function getPhaseWeights() {
     'balanced':  { concept: 40, finish: 20, draft2d: 40 },
     'wide-proj': { concept: 45, finish: 25, draft2d: 30 },
     'wide-prog': { concept: 40, finish: 40, draft2d: 20 },
+    // 60/40: 3D Concept + 3D Finish share 60 (30 + 30), 2D Draft gets 40
+    'split-60-40': { concept: 30, finish: 30, draft2d: 40 },
     'full':      { concept: 100, finish: 100, draft2d: 100 }
   };
   return map[v] || map['balanced'];
