@@ -1086,7 +1086,7 @@ tr.emp-row td {
 #rhEmpList .rh-name{font-weight:600;text-align:left;text-transform:uppercase;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #rhEmpList .rh-dept{color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:right;white-space:nowrap;}
 
-/* Comp-Off (earned by working 8h+ on a Sunday) */
+/* Comp-Off (earned by working 8h+ on a Sunday or holiday) */
 .gv-compoff{background:rgba(6,182,212,0.18);color:#22d3ee;}
 .lt-compoff{--ltc-color:#06b6d4;}.lt-compoff .ltc-name{color:#22d3ee;}.lt-compoff .ltc-stat-val{color:#22d3ee;}
 .pill-compoff{--pill-color:#06b6d4;}.pill-compoff.active{background:rgba(6,182,212,0.15);}.pill-compoff .sum-count{color:#22d3ee;}
@@ -1411,7 +1411,7 @@ tr.emp-row td {
     <span class="sum-icon">🕐</span>
     <div><div class="sum-label">PM</div><div class="sum-count" id="sc-pm">0</div></div>
   </div>
-  <div class="sum-pill pill-compoff" onclick="filterStatus('compoff')" id="spill-compoff" title="Comp Off taken (earned by working 8h+ on a Sunday)">
+  <div class="sum-pill pill-compoff" onclick="filterStatus('compoff')" id="spill-compoff" title="Comp Off taken (earned by working 8h+ on a Sunday or holiday)">
     <span class="sum-icon">🔄</span>
     <div><div class="sum-label">Comp Off</div><div class="sum-count" id="sc-compoff">0</div></div>
   </div>
@@ -3371,6 +3371,7 @@ function compoffAvailableFor(empId,dKey){
   if(!dKey) return 0;
   const _p=String(dKey).split('-').map(Number);
   if(_p.length===3 && new Date(_p[0],_p[1]-1,_p[2]).getDay()===0) return 0;   // Sunday is already off
+  if(officeHolidayOn(dKey)) return 0;   // office holiday is already off
   const c=compoffInfo(empId), e=c.earned_dates||[], u=(c.used_dates||[]).filter(d=>d!==dKey);
   const eb=e.filter(d=>d<dKey).length, ub=u.filter(d=>d<dKey).length;
   return Math.max(0,Math.min(eb-ub, e.length-u.length));
@@ -3379,14 +3380,15 @@ function compoffBlockMsg(empId,dKey){
   const c=compoffInfo(empId);
   const _p=String(dKey||'').split('-').map(Number);
   if(_p.length===3 && new Date(_p[0],_p[1]-1,_p[2]).getDay()===0) return '🚫 Sunday is already an off day';
-  if((c.remaining||0)>0) return '🚫 Comp Off can only be used AFTER the Sunday you worked';
-  return '🚫 No Comp Off — work 8h+ on a Sunday to earn one';
+  if(officeHolidayOn(dKey)) return '🚫 Holiday is already an off day';
+  if((c.remaining||0)>0) return '🚫 Comp Off can only be used AFTER the Sunday/holiday you worked';
+  return '🚫 No Comp Off — work 8h+ on a Sunday or holiday to earn one';
 }
 function _fmtDM2(d){ const p=String(d).split('-'); return p.length===3?`${p[2]}/${p[1]}`:d; }
 function compoffStripHtml(empId){
   const c=compoffInfo(empId);
   const dates=(c.earned_dates||[]).slice(-6).map(_fmtDM2).join(', ');
-  return `<div class="co-strip">🔄 <b>Comp Off:</b> ${c.remaining||0} available <span class="co-sub">(earned ${c.earned||0} · used ${c.used||0})</span>${dates?`<div class="co-sub">Sundays worked 8h+: ${dates}${(c.earned_dates||[]).length>6?' …':''}</div>`:`<div class="co-sub">Work 8+ hours on a Sunday to earn a Comp Off.</div>`}</div>`;
+  return `<div class="co-strip">🔄 <b>Comp Off:</b> ${c.remaining||0} available <span class="co-sub">(earned ${c.earned||0} · used ${c.used||0})</span>${dates?`<div class="co-sub">Sundays/holidays worked 8h+: ${dates}${(c.earned_dates||[]).length>6?' …':''}</div>`:`<div class="co-sub">Work 8+ hours on a Sunday or holiday to earn a Comp Off.</div>`}</div>`;
 }
 function refreshCompoffCard(){
   const card=document.getElementById('ltcard-compoff'); if(!card) return;
@@ -3499,7 +3501,7 @@ function openLeaveModal(empId, dKey, e, preselect){
 
   // Comp Off — available to every employee type (perm / probation / intern)
   { const _co=compoffInfo(empId);
-    ltypes.push({id:'compoff',cls:'lt-compoff',icon:'🔄',name:'Comp Off',desc:'Earned by working 8+ hrs on a Sunday. Use it on any day after that Sunday.',
+    ltypes.push({id:'compoff',cls:'lt-compoff',icon:'🔄',name:'Comp Off',desc:'Earned by working 8+ hrs on a Sunday or holiday. Use it on any day after that.',
       bal:_co.remaining||0,total:_co.earned||0,used:_co.used||0,disabled:false,period:'Sunday work credit',
       avail:compoffAvailableFor(empId,dKey),blockMsg:compoffBlockMsg(empId,dKey)}); }
 
