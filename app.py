@@ -4269,9 +4269,22 @@ def leave_balance_report():
             sl_used = counts['sl']
             sl_total = round(sl_used + sl_remaining, 1)
 
+            # COMP OFF: earned = Sundays / office holidays worked 8h+, used = days the
+            # employee applied "Comp Off" (attendance status 'compoff'). Scoped to the
+            # selected financial year, same source as the employee's own Comp Off card.
+            co_earned_n = co_used_n = 0
+            if month_in_fy > 0:
+                try:
+                    co_earned_n = len([d for d in _compoff_earned_dates(conn, emp_id) if fy_start <= d <= fy_end])
+                    co_used_n = len([d for d in _compoff_used_dates(conn, emp_id) if fy_start <= d <= fy_end])
+                except Exception as _co_ex:
+                    print(f"[CompOff report] {_co_ex}")
+
             result.append({
                 "id": emp_id, "username": e['username'], "dept": e['dept'],
                 "desig": e['desig'], "type": e['type'], "is_permanent": is_perm,
+                "compoff": {"used": co_used_n, "total": co_earned_n,
+                            "remaining": max(0, co_earned_n - co_used_n), "carried_over": 0},
                 # Sick/Earned/Casual quotas don't apply during probation — the
                 # frontend hides these columns entirely for non-permanent rows
                 # rather than showing an empty dash.
