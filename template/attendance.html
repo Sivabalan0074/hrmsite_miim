@@ -54,6 +54,12 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--t1);display
 .cal-trigger:hover{border-color:var(--orange);color:var(--orange);}
 .cal-popup{position:absolute;top:calc(100% + 6px);left:0;z-index:500;background:var(--bg3);border:1px solid var(--orange);border-radius:12px;width:280px;box-shadow:0 20px 60px rgba(0,0,0,0.8);opacity:0;transform:translateY(-6px) scale(.97);pointer-events:none;transition:opacity .2s,transform .2s;}
 .cal-popup.open{opacity:1;transform:translateY(0) scale(1);pointer-events:all;}
+.cal-popup.wk{width:318px;}
+.cal-grid.wk8{grid-template-columns:36px repeat(7,1fr);}
+.cal-wn{text-align:center;padding:6px 2px;font-size:10.5px;font-weight:700;border-radius:5px;cursor:pointer;color:var(--blue,#3b82f6);background:rgba(59,130,246,.10);border:1px solid rgba(59,130,246,.25);transition:all .12s;}
+.cal-wn:hover{background:rgba(249,115,22,.2);color:var(--orange);border-color:var(--orange);}
+.cal-wn.sel{background:var(--orange);color:#fff;border-color:var(--orange);}
+.cal-dh.wn-h{color:var(--blue,#3b82f6);font-weight:700;}
 .cal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);}
 .cal-nav{width:28px;height:28px;border-radius:6px;background:var(--bg2);border:1px solid var(--border);color:var(--t2);font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;}
 .cal-nav:hover{border-color:var(--orange);color:var(--orange);}
@@ -2303,7 +2309,7 @@ function goToday(){viewDate=new Date(TODAY);calYear=TODAY.getFullYear();calMonth
 function updateRangeLabel(){
   const rl=document.getElementById('rangeLbl'),tl=document.getElementById('calTriggerLbl');
   if(currentView==='day'){rl.textContent=fmtLong(viewDate);tl.textContent=fmtShort(viewDate);}
-  else if(currentView==='week'){const wd=weekDays(viewDate);rl.textContent=`${fmtShort(wd[0])} – ${fmtShort(wd[6])}`;tl.textContent=`Week ${wd[0].getDate()} ${MONTHS[wd[0].getMonth()].slice(0,3)}`;}
+  else if(currentView==='week'){const wd=weekDays(viewDate);rl.textContent=`${fmtShort(wd[0])} – ${fmtShort(wd[6])}`;tl.textContent=`Week ${isoWeekNo(wd[0])} · ${wd[0].getDate()} ${MONTHS[wd[0].getMonth()].slice(0,3)}`;}
   else{rl.textContent=`${MONTHS[viewDate.getMonth()]} ${viewDate.getFullYear()}`;tl.textContent=`${MONTHS[viewDate.getMonth()].slice(0,3)} ${viewDate.getFullYear()}`;}
 }
 
@@ -2313,8 +2319,54 @@ function updateRangeLabel(){
 function toggleCal(e){e.stopPropagation();calOpen=!calOpen;const p=document.getElementById('calPopup');if(calOpen){calYear=viewDate.getFullYear();calMonth=viewDate.getMonth();renderCal();p.classList.add('open');}else p.classList.remove('open');}
 function closeCal(){calOpen=false;document.getElementById('calPopup').classList.remove('open');}
 document.addEventListener('click',e=>{if(!e.target.closest('#calWrap'))closeCal();});
+function isoWeekNo(d){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const dn=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-dn);
+  const y0=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil((((t-y0)/86400000)+1)/7);
+}
+function renderWeekCal(pop){
+  // Week view: Monday-first grid with a clickable week-number column on the left
+  pop.classList.add('wk');
+  const first=new Date(calYear,calMonth,1);
+  const offset=(first.getDay()+6)%7;
+  const total=new Date(calYear,calMonth+1,0).getDate();
+  const rows=Math.ceil((offset+total)/7);
+  const curMon=weekDays(viewDate)[0];const curMonK=dk(curMon);
+  const DAYS_M=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let html=`<div class="cal-header"><div class="cal-nav" onclick="calNav(-1,event)">‹</div><div class="cal-month-yr">${MONTHS[calMonth]} ${calYear}</div><div class="cal-nav" onclick="calNav(1,event)">›</div></div><div class="cal-grid wk8"><div class="cal-dh wn-h" title="Week number">Wk</div>${DAYS_M.map(d=>`<div class="cal-dh">${d}</div>`).join('')}`;
+  for(let r=0;r<rows;r++){
+    const mon=new Date(calYear,calMonth,1-offset+r*7);
+    const sun=addDays(mon,6);
+    const wn=isoWeekNo(mon);
+    const isCur=dk(mon)===curMonK;
+    html+=`<div class="cal-wn${isCur?' sel':''}" title="Week ${wn}: ${fmtShort(mon)} – ${fmtShort(sun)}" onclick="calPickWeek(${mon.getTime()},event)">${wn}</div>`;
+    for(let c=0;c<7;c++){
+      const dt=addDays(mon,c);const dKey=dk(dt);
+      const inMonth=dt.getMonth()===calMonth;
+      const hasD=!!attCache[dKey]&&Object.keys(attCache[dKey]).some(k=>attCache[dKey][k]?.status);
+      let cls='cal-day';
+      if(isCur)cls+=' in-range';else if(isToday(dt))cls+=' today';
+      if(hasD)cls+=' has-data';if(isWknd(dt))cls+=' weekend';
+      if(!inMonth)cls+=' other-m';
+      html+=`<div class="${cls}" onclick="calPickDay(${dt.getFullYear()},${dt.getMonth()},${dt.getDate()},event)">${dt.getDate()}</div>`;
+    }
+  }
+  html+=`</div><div class="cal-footer"><span class="cal-today-link" onclick="calPickDay(${TODAY.getFullYear()},${TODAY.getMonth()},${TODAY.getDate()},event)">This week</span><span class="cal-sel-lbl">Week ${isoWeekNo(curMon)} · ${fmtShort(curMon)} – ${fmtShort(addDays(curMon,6))}</span></div>`;
+  pop.innerHTML=html;
+}
+function calPickWeek(ts,e){
+  e.stopPropagation();
+  const mon=new Date(ts);
+  if(addDays(mon,6) < MIN_DATE){ showMinDateToast(); return; }
+  viewDate=mon;
+  calYear=mon.getFullYear();calMonth=mon.getMonth();
+  closeCal();updateRangeLabel();renderCal();render().catch(x=>console.warn('render error:',x));
+}
 function renderCal(){
   const pop=document.getElementById('calPopup');
+  if(currentView==='week'){renderWeekCal(pop);return;}
+  pop.classList.remove('wk');
   const firstDay=new Date(calYear,calMonth,1).getDay();
   const total=new Date(calYear,calMonth+1,0).getDate();
   const prevTotal=new Date(calYear,calMonth,0).getDate();
