@@ -5011,10 +5011,16 @@ def _role_from_desig_dept(desig, dept, username=''):
     return "employee"
 
 
-def _approval_chain_for_role(role):
+def _approval_chain_for_role(role, leave_code=None):
     """Mirrors getApprovalChain() in attendance.html — keep both in sync.
     NOTE: 'sm' role leave goes to Admin ONLY — HR does not approve/reject an
-    SM's leave, HR can only view the outcome afterwards (Approval History)."""
+    SM's leave, HR can only view the outcome afterwards (Approval History).
+    COMP-OFF: employee/PM -> SM (own dept) -> HR.
+              SM / HR applying comp-off -> Admin / Superadmin only.
+    The 'admin' slot is satisfied by BOTH admin and superadmin."""
+    if leave_code == 'compoff':
+        if role in ('sm', 'hr'): return ['admin']
+        if role in ('pm', 'employee'): return ['sm', 'hr']
     if role == 'sm': return ['admin']
     if role == 'hr': return ['sm', 'admin']
     if role in ('pm', 'employee'): return ['sm', 'hr']
@@ -5224,7 +5230,7 @@ def apply_leave_new():
         # Look up the applicant's designation/dept so the correct approval chain is stored
         emp_row = conn.execute("SELECT dept, desig, username, empid, company_email, type, joindate FROM employees WHERE id=?", (emp_id,)).fetchone()
         role = _role_from_desig_dept(emp_row['desig'] if emp_row else '', emp_row['dept'] if emp_row else '', emp_row['username'] if emp_row else '')
-        chain = _approval_chain_for_role(role)
+        chain = _approval_chain_for_role(role)   # re-computed below once leave_code is known
 
         # ── Block the application outright if this leave type's balance is
         # already exhausted (0 left) — matches the Apply Leave UI, which
@@ -5241,6 +5247,7 @@ def apply_leave_new():
             'comp off': 'compoff', 'comp-off': 'compoff', 'compoff': 'compoff', 'comp_off': 'compoff', 'co': 'compoff',
         }
         leave_code = lt_map.get(leave_type_in, 'cl')
+        chain = _approval_chain_for_role(role, leave_code)
         try:
             from_dt_obj = datetime.datetime.strptime(str(data.get('from_date'))[:10], '%Y-%m-%d').date()
             to_dt_obj = datetime.datetime.strptime(str(data.get('to_date'))[:10], '%Y-%m-%d').date()
@@ -5305,7 +5312,7 @@ def update_leave_new(leave_id):
     try:
         data = request.json or {}
         conn = _db()
-        row = conn.execute("SELECT status FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
+        row = conn.execute("SELECT status, emp_id, approval_chain FROM leave_requests WHERE id=?", (leave_id,)).fetchone()
         if not row:
             conn.close()
             return jsonify({"success": False, "error": "Leave request not found"}), 404
@@ -5317,6 +5324,19 @@ def update_leave_new(leave_id):
             (data.get('leave_type'), data.get('from_date'), data.get('to_date'),
              data.get('days', 1), data.get('reason', ''), leave_id)
         )
+        # Leave type may have changed (e.g. CL -> Comp Off) -> re-derive the approval chain
+        try:
+            import json as _json_pe
+            _lt = (data.get('leave_type') or '').lower().strip()
+            _code = 'compoff' if _lt in ('comp off', 'comp-off', 'compoff', 'comp_off', 'co') else _lt
+            _emp = conn.execute("SELECT dept, desig, username FROM employees WHERE id=?", (row['emp_id'],)).fetchone()
+            _role = _role_from_desig_dept(_emp['desig'] if _emp else '', _emp['dept'] if _emp else '', _emp['username'] if _emp else '')
+            _new_chain = _approval_chain_for_role(_role, _code)
+            if _json_pe.dumps(_new_chain) != (row['approval_chain'] or ''):
+                conn.execute("UPDATE leave_requests SET approval_chain=?, approval_stage=0 WHERE id=?",
+                             (_json_pe.dumps(_new_chain), leave_id))
+        except Exception as _ex_pe:
+            print(f"[WARN update_leave_new chain] {_ex_pe}")
         conn.commit(); conn.close()
         return jsonify({"success": True})
     except Exception as ex:
