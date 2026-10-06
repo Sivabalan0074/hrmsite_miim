@@ -1952,7 +1952,7 @@ async function exportSavedAccountsClientFallback(){
       var key=String(a.emp_id);
       if(!accMap[key]) accMap[key]=a;
     });
-    var headers=['S.No','Name','Phone Number','Account Number','IFSC Code'];
+    var headers=['S.No','Name','Bank Name','Account Number','IFSC Code'];
     var rows=[headers];
     (allEmps||[]).forEach(function(e){
       var acc=accMap[String(e.id)];
@@ -1960,8 +1960,12 @@ async function exportSavedAccountsClientFallback(){
       var accNo = acc.account_number||acc.acc_no||acc.accountNo||'';
       var ifsc  = acc.ifsc_code||acc.ifsc||'';
       if(!accNo || !ifsc) return;
-      var phone = e.mobile||e.phone||e.phone_number||e.contact||'—';
-      rows.push([rows.length, e.username||e.name||'', phone, accNo, ifsc]);
+      var bn = String(acc.bank_name||'').trim();
+      if(!bn || bn.toLowerCase()==='bank'){
+        var bm = String(acc.branch||'').match(/\(([^()]+)\)\s*$/);
+        bn = bm ? bm[1].trim() : '-';
+      }
+      rows.push([rows.length, String(e.username||e.name||'').toUpperCase(), bn.toUpperCase(), accNo, ifsc]);
     });
     if(rows.length===1){
       toast('No employees have saved bank details yet','info');
