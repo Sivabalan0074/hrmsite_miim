@@ -609,11 +609,11 @@
       <div class="form-grid">
         <div class="form-field"><label>Account Number *</label><input id="mAccNo" type="text" placeholder="e.g. 123456789012"/></div>
         <div class="form-field"><label>IFSC Code *</label><input id="mIFSC" type="text" placeholder="e.g. SBIN0001234" oninput="this.value=this.value.toUpperCase()"/></div>
+        <div class="form-field"><label>Bank Name *</label><input id="mBank" type="text" placeholder="e.g. State Bank of India"/></div>
         <div class="form-field"><label>Branch Name</label><input id="mBranch" type="text" placeholder="e.g. Coimbatore Main"/></div>
         <div class="form-field"><label>Status</label><select id="mStatus"><option value="Approved">Approved</option><option value="Pending">Pending</option><option value="Rejected">Rejected</option></select></div>
       </div>
       <input type="hidden" id="mAccType" value="Salary"/>
-      <input type="hidden" id="mBank" value="Bank"/>
       <input type="hidden" id="mNotes" value=""/>
       <input type="hidden" id="mUPI" value=""/>
     </div>
@@ -1220,7 +1220,15 @@ function prefillEdit(accId){
   document.getElementById('mUPI').value=acc.upi_id||'';
   document.getElementById('mStatus').value=acc.status||'Approved';
   document.getElementById('mAccType').value=acc.account_type||'Salary';
-  document.getElementById('mBank').value=acc.bank_name||'';
+  (function(){
+    var bn=String(acc.bank_name||'').trim();
+    if(!bn || bn.toLowerCase()==='bank'){
+      // old records saved the placeholder "Bank" -- suggest it from the branch, e.g. "Kangayam (SBI)" -> SBI
+      var bm=String(acc.branch||'').match(/\(([^()]+)\)\s*$/);
+      bn=bm?bm[1].trim():'';
+    }
+    document.getElementById('mBank').value=bn;
+  })();
   document.getElementById('mNotes').value=acc.notes||'';
   // Always load days_worked: priority order = emp in-memory > account record > localStorage emp cache > acc localStorage
   const _emp = allEmps.find(e => String(e.id) === String(acc.emp_id));
@@ -1262,7 +1270,7 @@ function prefillEdit(accId){
 function clearForm(){
   // Only clear bank account fields — NOT employee info fields
   document.getElementById('mAccId').value='';
-  ['mAccNo','mIFSC','mBranch'].forEach(id=>document.getElementById(id).value='');
+  ['mAccNo','mIFSC','mBank','mBranch'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('mStatus').value='Approved';
   document.getElementById('mFormLabel').textContent='Employee Information';
   document.getElementById('mSaveBtn').textContent='Save Account';
@@ -1363,7 +1371,7 @@ async function saveAcc(){
     }
   }
   const empId=parseInt(document.getElementById('mEmpId').value),accId=document.getElementById('mAccId').value;
-  const bank='Bank',accNo=document.getElementById('mAccNo').value.trim(),ifsc=document.getElementById('mIFSC').value.trim();
+  const bank=document.getElementById('mBank').value.trim(),accNo=document.getElementById('mAccNo').value.trim(),ifsc=document.getElementById('mIFSC').value.trim();
 
   // ── Full form validation: only fields marked "* required" in the UI must block Save ──
   // (Date of Birth, Father's Name, Mode of Payment, Days Worked, Pay Date are optional
@@ -1374,6 +1382,7 @@ async function saveAcc(){
   let hasError = false;
   if(!accNo)  { markFieldError('mAccNo','⚠ Account number required'); hasError=true; }
   if(!ifsc)   { markFieldError('mIFSC','⚠ IFSC code required'); hasError=true; }
+  if(!bank)   { markFieldError('mBank','⚠ Bank name required'); hasError=true; }
   if(hasError){
     toast('Please fill in all highlighted required fields','error');
     // Scroll to first error
@@ -1952,7 +1961,7 @@ async function exportSavedAccountsClientFallback(){
       var key=String(a.emp_id);
       if(!accMap[key]) accMap[key]=a;
     });
-    var headers=['S.No','Name','Bank Name','Account Number','IFSC Code'];
+    var headers=['S.No','Name','Bank Name','Account Number','IFSC Code','Branch'];
     var rows=[headers];
     (allEmps||[]).forEach(function(e){
       var acc=accMap[String(e.id)];
@@ -1965,7 +1974,7 @@ async function exportSavedAccountsClientFallback(){
         var bm = String(acc.branch||'').match(/\(([^()]+)\)\s*$/);
         bn = bm ? bm[1].trim() : '-';
       }
-      rows.push([rows.length, String(e.username||e.name||'').toUpperCase(), bn.toUpperCase(), accNo, ifsc]);
+      rows.push([rows.length, String(e.username||e.name||'').toUpperCase(), bn.toUpperCase(), accNo, ifsc, String(acc.branch||'-').toUpperCase()]);
     });
     if(rows.length===1){
       toast('No employees have saved bank details yet','info');
