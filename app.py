@@ -3169,7 +3169,7 @@ def _ist_now():
 @app.route('/api/accounts/export-bank-details-excel', methods=['GET'])
 @require_auth
 def export_bank_details_excel():
-    """Export Name, Phone Number, Account Number, IFSC Code to Excel --
+    """Export Name, Bank Name, Account Number, IFSC Code to Excel --
     only for employees whose bank account has actually been saved
     (account_number AND ifsc_code both present). Includes the real
     company logo, properly aligned as a letterhead at the top.
@@ -3215,7 +3215,7 @@ def export_bank_details_excel():
             # run, not a general roster.
             rows = conn.execute("""
                 SELECT e.username AS name, e.mobile AS phone,
-                       a.account_number, a.ifsc_code, a.branch,
+                       a.bank_name, a.account_number, a.ifsc_code, a.branch,
                        ss.period AS salary_period, ss.pay_date, ss.net_pay
                 FROM employees e
                 JOIN accounts a ON a.emp_id = e.id
@@ -3231,7 +3231,7 @@ def export_bank_details_excel():
         else:
             rows = conn.execute("""
                 SELECT e.username AS name, e.mobile AS phone,
-                       a.account_number, a.ifsc_code, a.branch
+                       a.bank_name, a.account_number, a.ifsc_code, a.branch
                 FROM employees e
                 JOIN accounts a ON a.emp_id = e.id
                 WHERE e.status = 'active'
@@ -3266,7 +3266,18 @@ def export_bank_details_excel():
         longest_branch = max((len(v) for v in branch_values), default=6)
         branch_width = max(18, min(40, longest_branch + 4))
 
-        COLUMNS = [("S.No", 8), ("Name", 26), ("Phone Number", 18),
+        def _bank_name_of(d):
+            """Bank name for the export: the saved bank_name; if that is empty or
+            just the generic 'Bank' placeholder, fall back to the bank written in
+            brackets in the branch, e.g. 'Kangayam (SBI)' -> 'SBI'."""
+            bn = str(d.get('bank_name') or '').strip()
+            if bn and bn.lower() != 'bank':
+                return bn.upper()
+            import re as _re_bn
+            m = _re_bn.search(r'\(([^()]+)\)\s*$', str(d.get('branch') or ''))
+            return m.group(1).strip().upper() if m else '-'
+
+        COLUMNS = [("S.No", 8), ("Name", 26), ("Bank Name", 22),
                    ("Account Number", 24), ("IFSC Code", 16), ("Branch", branch_width)]
         IFSC_COL_IDX = 5   # 1-based column index of "IFSC Code" -- kept centered like S.No below
 
@@ -3451,7 +3462,7 @@ def export_bank_details_excel():
         for ri, r in enumerate(rows, start=1):
             rn = header_row + ri
             d = dict(r)
-            vals = [ri, d.get('name') or '-', d.get('phone') or '-',
+            vals = [ri, str(d.get('name') or '-').upper(), _bank_name_of(d),
                     d.get('account_number') or '-', d.get('ifsc_code') or '-',
                     d.get('branch') or '-']
             if with_salary:
