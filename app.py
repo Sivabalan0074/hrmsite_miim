@@ -3464,7 +3464,7 @@ def export_bank_details_excel():
             d = dict(r)
             vals = [ri, str(d.get('name') or '-').upper(), _bank_name_of(d),
                     d.get('account_number') or '-', d.get('ifsc_code') or '-',
-                    d.get('branch') or '-']
+                    str(d.get('branch') or '-').upper()]
             if with_salary:
                 # Net pay is a real number (right-aligned, thousands-separated,
                 # 2 decimals) so it sums/sorts correctly in Excel -- it is
