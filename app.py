@@ -5620,8 +5620,16 @@ def _sync_leave_to_attendance(conn, leave_id, now):
                 # Don't clobber a row that's already correctly marked with this leave
                 # code (idempotent — safe to re-run the backfill any number of times).
                 if existing['status'] != att_status:
-                    conn.execute("UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='LEAVE_AUTO',updated_at=? WHERE id=?",
-                                 (att_status, now, existing['id']))
+                    _has_punch = any(v not in (None, '', '--') for v in (existing['checkin'], existing['checkout']))
+                    if att_status == 'el' and _has_punch:
+                        # EL applied on a day the employee actually came in (e.g. an
+                        # OFF day with morning->afternoon punches): keep the real
+                        # check-in/out so the time worked still shows next to EL.
+                        conn.execute("UPDATE attendance SET status=?,marked_by='LEAVE_AUTO',updated_at=? WHERE emp_id=? AND date=?",
+                                     (att_status, now, emp_id, date_str))
+                    else:
+                        conn.execute("UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='LEAVE_AUTO',updated_at=? WHERE id=?",
+                                     (att_status, now, existing['id']))
             else:
                 conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,marked_by,updated_at) VALUES (?,?,'--','--',?,?,?)",
                              (emp_id, date_str, att_status, 'LEAVE_AUTO', now))
@@ -5922,13 +5930,17 @@ def _sync_approval_history_to_attendance(conn, now):
                 failed.append({"emp_name": uname, "date": ldate, "error": "employee not found"})
                 continue
             emp_id = emp['id']
-            existing = conn.execute("SELECT id, status FROM attendance WHERE emp_id=? AND date=?", (emp_id, ldate)).fetchone()
+            existing = conn.execute("SELECT id, status, checkin, checkout FROM attendance WHERE emp_id=? AND date=?", (emp_id, ldate)).fetchone()
             if existing:
                 if existing['status'] != ltype:
-                    conn.execute(
-                        "UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='APPROVAL_HISTORY_REPAIR',updated_at=? WHERE id=?",
-                        (ltype, now, existing['id'])
-                    )
+                    if ltype == 'el' and any(v not in (None, '', '--') for v in (existing['checkin'], existing['checkout'])):
+                        conn.execute("UPDATE attendance SET status=?,marked_by='APPROVAL_HISTORY_REPAIR',updated_at=? WHERE emp_id=? AND date=?",
+                                     (ltype, now, emp_id, ldate))
+                    else:
+                        conn.execute(
+                            "UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='APPROVAL_HISTORY_REPAIR',updated_at=? WHERE id=?",
+                            (ltype, now, existing['id'])
+                        )
                     synced.append({"emp_name": uname, "date": ldate})
             else:
                 conn.execute(
