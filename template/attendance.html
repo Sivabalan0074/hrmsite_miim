@@ -3319,7 +3319,7 @@ function buildDayRow(emp,idx,att,cfg){
   const pmLabel = isMorningPm(d.pm_slots, entries) ? 'PM+P' : 'P+PM';
   const pmTimeHtml = '';
   const pmStyle = pmPresent ? 'width:auto;padding:0 8px;background:rgba(249,115,22,.18);color:var(--orange);border-color:rgba(249,115,22,.45);' : '';
-  const leaveBadgeMap={compoff:'🔄 CO',cl:'🌴 CL',sl:'🤒 SL',el:'⭐ EL',pm: pmWithCheckin ? '🕐 '+pmLabel : '🕐 PM'};
+  const leaveBadgeMap={compoff:'🔄 CO',cl:'🌴 CL',sl:'🤒 SL',el:(_elWorked?'⭐ EL · OFF DAY':'⭐ EL'),pm: pmWithCheckin ? '🕐 '+pmLabel : '🕐 PM'};
   const leaveBadgeColor={compoff:'#22d3ee',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)'};
   const leaveActive=['cl','sl','el','pm','compoff'].includes(status);
   const holidayActive=(status==='holiday'||status==='rh');
