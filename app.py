@@ -5627,6 +5627,7 @@ def _sync_leave_to_attendance(conn, leave_id, now):
                         # check-in/out so the time worked still shows next to EL.
                         conn.execute("UPDATE attendance SET status=?,marked_by='LEAVE_AUTO',updated_at=? WHERE emp_id=? AND date=?",
                                      (att_status, now, emp_id, date_str))
+                        print(f"[LEAVE SYNC] EL kept punches emp={emp_id} date={date_str} in={existing['checkin']} out={existing['checkout']}")
                     else:
                         conn.execute("UPDATE attendance SET status=?,checkin='--',checkout='--',marked_by='LEAVE_AUTO',updated_at=? WHERE id=?",
                                      (att_status, now, existing['id']))
