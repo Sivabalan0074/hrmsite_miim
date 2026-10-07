@@ -3269,6 +3269,13 @@ function renderDayTable(){
   updateSelCount();
 }
 
+function hasRealPunch(d, entries){
+  const ok=v=>v&&v!=='--';
+  return !!(ok(d&&d.checkin) || (entries&&entries.some(e=>e&&(ok(e.in)||ok(e.out)))) || (d&&d.entries&&d.entries.some(e=>e&&(ok(e.in)||ok(e.out)))));
+}
+// EL applied on a day the employee actually came in (OFF day worked): keep showing the worked time
+function isElWorked(status, d, entries){ return status==='el' && hasRealPunch(d, entries); }
+
 function buildDayRow(emp,idx,att,cfg){
   const d=att[emp.id]||{};const rawStatus=d.status||'';
   const isAdminRow=isAdminEmp(emp);
@@ -3284,7 +3291,8 @@ function buildDayRow(emp,idx,att,cfg){
   const isOwnRow=(emp.id===currentUserId);
   const dotColor=STATUS_DOT[status]||'var(--border)';
   const editable=canEdit(emp);
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el','compoff'].includes(status);
+  const _elWorked=isElWorked(status, d, getEntries(emp.id, dk(viewDate)));
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||(['cl','sl','el','compoff'].includes(status) && !_elWorked);
 
   // ── Check-in / Check-out state for row highlighting ──
   const entries=getEntries(emp.id, dk(viewDate));
@@ -3842,8 +3850,11 @@ async function applyLeave(){
     if(!attCache[dKey])attCache[dKey]={};
     if(!attCache[dKey][leaveModalEmpId])attCache[dKey][leaveModalEmpId]={status:'',checkin:'',checkout:''};
     attCache[dKey][leaveModalEmpId].status=selectedLeaveType;
-    attCache[dKey][leaveModalEmpId].checkin='';
-    attCache[dKey][leaveModalEmpId].checkout='';
+    // EL on a day the employee actually worked: keep the real punches (time shows with EL)
+    if(!(selectedLeaveType==='el' && hasRealPunch(attCache[dKey][leaveModalEmpId]))){
+      attCache[dKey][leaveModalEmpId].checkin='';
+      attCache[dKey][leaveModalEmpId].checkout='';
+    }
 
     // Update the request fields directly — status stays 'pending', so the
     // leave balance is still untouched (it's only ever deducted on approval).
@@ -3894,8 +3905,11 @@ async function applyLeave(){
   if(!attCache[dKey])attCache[dKey]={};
   if(!attCache[dKey][leaveModalEmpId])attCache[dKey][leaveModalEmpId]={status:'',checkin:'',checkout:''};
   attCache[dKey][leaveModalEmpId].status=selectedLeaveType;
-  attCache[dKey][leaveModalEmpId].checkin='';
-  attCache[dKey][leaveModalEmpId].checkout='';
+  // EL on a day the employee actually worked: keep the real punches (time shows with EL)
+  if(!(selectedLeaveType==='el' && hasRealPunch(attCache[dKey][leaveModalEmpId]))){
+    attCache[dKey][leaveModalEmpId].checkin='';
+    attCache[dKey][leaveModalEmpId].checkout='';
+  }
 
   if(isAdminSelfApply){
     // Auto-approved — deduct balance immediately and save to approved list
@@ -4720,7 +4734,7 @@ function updateTotalHrsCell(empId, dKey){
   const entries=getEntries(empId, dKey);
   const d=attCache[dKey]?.[empId]||{};
   const status=d.status||'';
-  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||['cl','sl','el','compoff'].includes(status);
+  const disTime=!status||status==='absent'||status==='off'||status==='holiday'||status==='rh'||(['cl','sl','el','compoff'].includes(status) && !isElWorked(status,d,entries));
   const pmMins=Number(d.pm_minutes)||0;
   if(disTime){el.textContent='—';el.className='total-hrs na';return;}
   const workedMins=calcTotalMins(entries);
