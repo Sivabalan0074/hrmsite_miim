@@ -724,7 +724,10 @@
       <div>
         <div class="sse-section-lbl" style="display:flex;align-items:center;justify-content:space-between">
           <span>📉 Deductions</span>
-          <button type="button" class="btn-add-row" onclick="addDedRow()">＋ Add</button>
+          <span style="display:flex;gap:8px">
+            <button type="button" class="btn-add-row" onclick="sseToggleLoanForm()">🏦 ＋ Loan</button>
+            <button type="button" class="btn-add-row" onclick="addDedRow()">＋ Add</button>
+          </span>
         </div>
         <div class="sse-grid" id="dedGrid">
           <div class="sse-field"><label>Professional Tax (₹)</label><input id="ssePT" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
@@ -736,9 +739,33 @@
             <input id="sseLOP" type="number" min="0" placeholder="0" readonly style="opacity:.75;cursor:not-allowed"/>
             <div style="font-size:10px;color:var(--text3);margin-top:3px">Calculated from Days Worked shortfall (Absent + over-quota leave + half-days) · included in Total Deductions below</div>
           </div>
+          <div class="sse-field">
+            <label>Loan EMI (₹) <span id="sseLoanAutoBadge" style="display:none;font-size:9px;font-weight:700;color:var(--orange);background:rgba(249,115,22,.12);padding:1px 6px;border-radius:4px;margin-left:4px;">AUTO</span></label>
+            <input id="sseLoan" type="number" min="0" placeholder="0" readonly style="opacity:.75;cursor:not-allowed"/>
+            <div style="font-size:10px;color:var(--text3);margin-top:3px">Auto-filled from the employee's active Loan(s) for this month · included in Total Deductions</div>
+          </div>
         </div>
         <!-- Dynamic extra deduction rows -->
         <div id="dedExtraRows" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
+
+        <!-- Loan panel -->
+        <div id="sseLoanPanel" style="margin-top:12px">
+          <div id="sseLoanForm" style="display:none;border:1px solid var(--orange);border-radius:10px;padding:14px;background:rgba(249,115,22,.05)">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--orange);margin-bottom:10px">🏦 NEW LOAN</div>
+            <div class="sse-grid">
+              <div class="sse-field"><label>Loan Name</label><input id="sseLoanName" type="text" placeholder="e.g. Personal Loan"/></div>
+              <div class="sse-field"><label>Monthly Deduction (₹)</label><input id="sseLoanAmt" type="number" min="1" placeholder="e.g. 2000"/></div>
+              <div class="sse-field"><label>From (Month)</label><input id="sseLoanFrom" type="month"/></div>
+              <div class="sse-field"><label>To (Month)</label><input id="sseLoanTo" type="month"/></div>
+            </div>
+            <div id="sseLoanSummary" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+              <button type="button" class="btn-cancel" onclick="sseToggleLoanForm(false)">Cancel</button>
+              <button type="button" class="btn-save" onclick="sseSaveLoan()">Save Loan</button>
+            </div>
+          </div>
+          <div id="sseLoanList" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+        </div>
       </div>
 
       <!-- Live Calc -->
@@ -1480,6 +1507,7 @@ function renderSSTable(){
                   <div><span style="color:var(--text3)">TDS: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.tds)}</b></div>
                   <div><span style="color:var(--text3)">Advance: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.existing_advance)}</b></div>
                   <div><span style="color:var(--text3)">Other: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.other_deductions)}</b></div>
+                  <div><span style="color:var(--text3)">Loan EMI: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.loan_emi)}</b></div>
                   <div><span style="color:var(--text3)">LOP: </span><b style="color:var(--red);font-family:'JetBrains Mono',monospace">₹${fmtN(s.lop)}</b></div>
                   <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
                     <span style="color:var(--text3)">Total Deductions: </span><b style="color:var(--red);font-size:14px;font-family:'JetBrains Mono',monospace">₹${Number(s.total_deductions||0).toLocaleString('en-IN')}</b>
@@ -1629,6 +1657,7 @@ function openSSEntry(empId, period){
     const _preEmp=allEmps.find(e=>e.id===empId);
     if(_preEmp) document.getElementById('sseEmpName').value=`${_preEmp.username} (${_preEmp.empid||_preEmp.user_id||_preEmp.id})`;
     sseOnEmpChange();
+    sseLoadLoans(empId);
     // Always fetch FRESH data from API so HR deduction updates reflect immediately
     fetch(`${BASE}/api/salary-structures?emp_id=${empId}`, {headers: hdrs()})
       .then(r=>r.json())
@@ -1830,7 +1859,7 @@ function ssePopulateFromExisting(s){
   setV('sseBasic',s.basic);setV('sseHRA',s.hra);setV('sseDA',s.dearness_allowance);
   setV('sseMA',s.medical_allowance);setV('sseLTA',s.lta);setV('sseSA',s.special_allowance);
   setV('sseCCA',s.city_compensatory_allowance);setV('ssePT',s.professional_tax);
-  setV('sseTDS',s.tds);setV('sseAdv',s.existing_advance);setV('sseOtherDed',s.other_deductions);setV('sseLOP',s.lop);
+  setV('sseTDS',s.tds);setV('sseAdv',s.existing_advance);setV('sseOtherDed',s.other_deductions);setV('sseLOP',s.lop);setV('sseLoan',s.loan_emi||'');
   // days_worked: use the value already saved on this salary structure (including 0).
   // If it's empty, leave it empty here — openSSEntry() will auto-calc it live from
   // the Attendance table (leave-aware) via sseAutoFillDaysWorked() right after this.
@@ -2092,6 +2121,8 @@ async function applyAllSetSalaries(){
 
   let applied = 0, skippedExisting = 0, skippedNoMaster = 0, failed = 0;
   const [py, pm] = period.split('-').map(Number);
+  let _allLoans = [];
+  try{ const lr = await fetch(`${BASE}/api/employee-loans`, {headers: hdrs()}); const ld = await lr.json(); if(ld && ld.success) _allLoans = ld.data || []; }catch(e){}
 
   for(const emp of allEmps){
     try{
@@ -2121,7 +2152,8 @@ async function applyAllSetSalaries(){
       // Structure editor, so bulk-applied entries show the missed-days
       // amount in Deductions too, not a hidden ₹0.
       const lop = totalDays>0 ? Math.round(earn*unpaidDays/totalDays) : 0;
-      const ded  = (m.professional_tax||0)+(m.tds||0)+(m.existing_advance||0)+(m.other_deductions||0)+lop;
+      const loanEmi = _loanEmiFor(_allLoans.filter(l=>String(l.emp_id)===String(emp.id)), period);
+      const ded  = (m.professional_tax||0)+(m.tds||0)+(m.existing_advance||0)+(m.other_deductions||0)+loanEmi+lop;
 
       const payload = {
         emp_id: emp.id, period: period+'-01',
@@ -2129,7 +2161,7 @@ async function applyAllSetSalaries(){
         medical_allowance: m.medical_allowance||0, lta: m.lta||0, special_allowance: m.special_allowance||0,
         city_compensatory_allowance: m.city_compensatory_allowance||0,
         professional_tax: m.professional_tax||0, tds: m.tds||0,
-        existing_advance: m.existing_advance||0, other_deductions: m.other_deductions||0, lop: lop,
+        existing_advance: m.existing_advance||0, other_deductions: m.other_deductions||0, lop: lop, loan_emi: loanEmi,
         total_earnings: Math.round(earn), total_deductions: Math.round(ded), net_pay: Math.round(earn-ded),
         days_worked: daysWorked, mode_of_payment: emp.mode_of_payment || 'Account',
         pay_date: `${py}-${String(pm).padStart(2,'0')}-07`,
@@ -2288,6 +2320,7 @@ async function sseAutoFillDaysWorked(force){
 }
 
 function _sseRefreshLOPField(){
+  if(typeof _sseRefreshLoanField==='function') _sseRefreshLoanField();
   const lopEl = document.getElementById('sseLOP');
   if(!lopEl) return;
   const g2=id=>parseFloat(document.getElementById(id).value)||0;
@@ -2314,7 +2347,7 @@ function sseRecalc(){
   // silently baked into a pro-rated Total Earnings figure.
   _sseRefreshLOPField();
   const lop = g('sseLOP');
-  const baseDed = g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+lop;
+  const baseDed = g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+g('sseLoan')+lop;
   const extraDed  = typeof getExtraDeductions==='function' ? getExtraDeductions() : 0;
   const ded  = baseDed + extraDed;
 
@@ -2343,7 +2376,7 @@ async function saveSSEntry(){
   //    visible in the deductions total, matching the Live Calc panel above.
   _sseRefreshLOPField();
   const lop = g('sseLOP');
-  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+lop;
+  const baseDed =g('ssePT')+g('sseTDS')+g('sseAdv')+g('sseOtherDed')+g('sseLoan')+lop;
   const ded  = baseDed  + (typeof getExtraDeductions==='function'?getExtraDeductions():0);
   // Block save if no salary components are filled — prevents stale ₹0/junk records
   if(earn === 0 && ded === 0){ toast('Please fill in at least one salary component before saving.','error'); return; }
@@ -2356,7 +2389,7 @@ async function saveSSEntry(){
     basic:g('sseBasic'),hra:g('sseHRA'),dearness_allowance:g('sseDA'),
     medical_allowance:g('sseMA'),lta:g('sseLTA'),special_allowance:g('sseSA'),
     city_compensatory_allowance:g('sseCCA'),
-    professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),lop:lop,
+    professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),lop:lop,loan_emi:g('sseLoan'),
     total_earnings:Math.round(earn),total_deductions:Math.round(ded),net_pay:Math.round(earn-ded),
     days_worked:daysWorkedVal,
     mode_of_payment:document.getElementById('sseMOP').value,
@@ -2958,7 +2991,7 @@ function buildSlipHTML(emp, s, period){
           </tr>
           <tr>
             <td>LTA</td><td>${fmt(s.lta)}</td>
-            <td></td><td></td>
+            <td>Loan EMI</td><td>${fmt(s.loan_emi)}</td>
           </tr>
           <tr>
             <td>Special Allowance*</td><td>${fmt(s.special_allowance)}</td>
@@ -3800,6 +3833,130 @@ function openBulkApprove(){
 }
 
 // ════════════════════════════════════════════════════
+//  EMPLOYEE LOANS  (monthly EMI auto-deducted between From and To month)
+// ════════════════════════════════════════════════════
+let _sseLoans = [];
+let _sseLoansLoaded = false;
+
+function _loanMonthLabel(ym){
+  if(!ym) return '';
+  const [y,m] = ym.split('-').map(Number);
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]+' '+y;
+}
+function _loanMonthsBetween(a,b){
+  const [ay,am]=a.split('-').map(Number), [by,bm]=b.split('-').map(Number);
+  return (by-ay)*12 + (bm-am) + 1;
+}
+function _loanActiveIn(l, ym){ return !!ym && l.start_month <= ym && ym <= l.end_month; }
+function _loanEmiFor(loans, ym){
+  return (loans||[]).filter(l=>_loanActiveIn(l,ym)).reduce((s,l)=>s+(Number(l.monthly_amount)||0),0);
+}
+
+function _sseRefreshLoanField(){
+  const el = document.getElementById('sseLoan');
+  if(!el || !_sseLoansLoaded) return;      // keep saved value until loans are loaded
+  const ym = (document.getElementById('ssePeriod')||{}).value || '';
+  const emi = _loanEmiFor(_sseLoans, ym);
+  el.value = emi > 0 ? emi : '';
+  const b = document.getElementById('sseLoanAutoBadge');
+  if(b) b.style.display = emi > 0 ? '' : 'none';
+}
+
+function sseRenderLoans(){
+  const box = document.getElementById('sseLoanList');
+  if(!box) return;
+  const ym = (document.getElementById('ssePeriod')||{}).value || '';
+  if(!_sseLoans.length){ box.innerHTML=''; return; }
+  const fmtN = v => '₹'+Number(v||0).toLocaleString('en-IN');
+  box.innerHTML = _sseLoans.map(l=>{
+    const active = _loanActiveIn(l, ym);
+    const months = _loanMonthsBetween(l.start_month, l.end_month);
+    const tag = active
+      ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px">DEDUCTING THIS MONTH</span>'
+      : (ym < l.start_month
+          ? '<span style="background:rgba(96,165,250,.15);color:#60a5fa;font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px">STARTS LATER</span>'
+          : '<span style="background:rgba(148,163,184,.15);color:var(--text3);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px">COMPLETED</span>');
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px">'
+      + '<div><b style="color:var(--text1)">🏦 '+_fcEscLoan(l.label)+'</b> '+tag
+      + '<div style="color:var(--text3);font-size:11px;margin-top:3px">'+fmtN(l.monthly_amount)+' / month · '+_loanMonthLabel(l.start_month)+' → '+_loanMonthLabel(l.end_month)+' ('+months+' month'+(months!==1?'s':'')+' · total '+fmtN(l.monthly_amount*months)+')</div></div>'
+      + '<button type="button" class="dyn-row-del" title="Remove loan" onclick="sseDeleteLoan('+l.id+')">✕</button></div>';
+  }).join('');
+}
+function _fcEscLoan(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function sseLoadLoans(empId){
+  _sseLoans = []; _sseLoansLoaded = false;
+  sseRenderLoans();
+  if(!empId) return;
+  try{
+    const r = await fetch(`${BASE}/api/employee-loans?emp_id=${empId}`, {headers: hdrs()});
+    const d = await r.json();
+    if(d && d.success){ _sseLoans = d.data || []; _sseLoansLoaded = true; }
+  }catch(e){ console.error('sseLoadLoans', e); }
+  sseRenderLoans();
+  sseRecalc();
+}
+
+function sseToggleLoanForm(show){
+  const f = document.getElementById('sseLoanForm');
+  if(!f) return;
+  const open = (show === undefined) ? f.style.display === 'none' : !!show;
+  f.style.display = open ? '' : 'none';
+  if(open){
+    const ym = (document.getElementById('ssePeriod')||{}).value || '';
+    document.getElementById('sseLoanName').value = '';
+    document.getElementById('sseLoanAmt').value = '';
+    document.getElementById('sseLoanFrom').value = ym;
+    document.getElementById('sseLoanTo').value = '';
+    sseLoanSummary();
+    ['sseLoanAmt','sseLoanFrom','sseLoanTo'].forEach(id=>{ document.getElementById(id).oninput = sseLoanSummary; });
+    document.getElementById('sseLoanName').focus();
+  }
+}
+function sseLoanSummary(){
+  const amt = parseFloat(document.getElementById('sseLoanAmt').value)||0;
+  const a = document.getElementById('sseLoanFrom').value, b = document.getElementById('sseLoanTo').value;
+  const el = document.getElementById('sseLoanSummary');
+  if(amt>0 && a && b && b>=a){
+    const n = _loanMonthsBetween(a,b);
+    el.textContent = '₹'+amt.toLocaleString('en-IN')+' × '+n+' month'+(n!==1?'s':'')+' = ₹'+(amt*n).toLocaleString('en-IN')+' total, deducted from salary every month';
+  } else el.textContent = '';
+}
+
+async function sseSaveLoan(){
+  const empId = parseInt(document.getElementById('sseEmpSel').value);
+  if(!empId){ toast('No employee assigned','error'); return; }
+  const label = document.getElementById('sseLoanName').value.trim() || 'Loan';
+  const amt = parseFloat(document.getElementById('sseLoanAmt').value)||0;
+  const from = document.getElementById('sseLoanFrom').value;
+  const to = document.getElementById('sseLoanTo').value;
+  if(amt<=0){ toast('Enter the monthly deduction amount','error'); return; }
+  if(!from || !to){ toast('Select From and To month','error'); return; }
+  if(to < from){ toast('To month cannot be before From month','error'); return; }
+  try{
+    const r = await fetch(`${BASE}/api/employee-loans`, {method:'POST', headers:hdrs(),
+      body: JSON.stringify({emp_id: empId, label, monthly_amount: amt, start_month: from, end_month: to})});
+    const d = await r.json();
+    if(!d.success) throw new Error(d.error || 'Save failed');
+    toast('Loan added ✓');
+    sseToggleLoanForm(false);
+    await sseLoadLoans(empId);
+  }catch(e){ toast('⚠ '+e.message,'error'); }
+}
+
+async function sseDeleteLoan(id){
+  const l = _sseLoans.find(x=>x.id===id);
+  if(!confirm('Remove loan "'+(l?l.label:'')+'"?\n\nIt will no longer be deducted from salary (already saved months keep their saved amount).')) return;
+  try{
+    const r = await fetch(`${BASE}/api/employee-loans/${id}`, {method:'DELETE', headers:hdrs()});
+    const d = await r.json();
+    if(!d.success) throw new Error(d.error || 'Delete failed');
+    toast('Loan removed');
+    await sseLoadLoans(parseInt(document.getElementById('sseEmpSel').value));
+  }catch(e){ toast('⚠ '+e.message,'error'); }
+}
+
+// ════════════════════════════════════════════════════
 //  DYNAMIC EARN / DED ROWS
 // ════════════════════════════════════════════════════
 
@@ -3865,6 +4022,8 @@ function getExtraDeductions(){
 }
 
 function clearExtraRows(){
+  _sseLoans = []; _sseLoansLoaded = false;
+  { const lf=document.getElementById('sseLoanForm'); if(lf) lf.style.display='none'; const ll=document.getElementById('sseLoanList'); if(ll) ll.innerHTML=''; const lb=document.getElementById('sseLoan'); if(lb) lb.value=''; }
   document.getElementById('earnExtraRows').innerHTML = '';
   document.getElementById('dedExtraRows').innerHTML  = '';
   _earnRowCount = 0;
