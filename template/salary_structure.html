@@ -754,7 +754,8 @@
             <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--orange);margin-bottom:10px">🏦 NEW LOAN</div>
             <div class="sse-grid">
               <div class="sse-field"><label>Loan Name</label><input id="sseLoanName" type="text" placeholder="e.g. Personal Loan"/></div>
-              <div class="sse-field"><label>Monthly Deduction (₹)</label><input id="sseLoanAmt" type="number" min="1" placeholder="e.g. 2000"/></div>
+              <div class="sse-field"><label>Total Loan Amount (₹)</label><input id="sseLoanTotal" type="number" min="1" placeholder="e.g. 60000"/></div>
+              <div class="sse-field"><label>Monthly Deduction (₹)</label><input id="sseLoanAmt" type="number" min="1" placeholder="e.g. 10000"/></div>
               <div class="sse-field"><label>From (Month)</label><input id="sseLoanFrom" type="month"/></div>
               <div class="sse-field"><label>To (Month)</label><input id="sseLoanTo" type="month"/></div>
             </div>
@@ -3848,8 +3849,22 @@ function _loanMonthsBetween(a,b){
   return (by-ay)*12 + (bm-am) + 1;
 }
 function _loanActiveIn(l, ym){ return !!ym && l.start_month <= ym && ym <= l.end_month; }
+// EMI for one loan in a given month. Never deducts more than the total loan amount
+// (the last installment is the remaining balance).
+function _loanAmtFor(l, ym){
+  if(!_loanActiveIn(l, ym)) return 0;
+  const monthly = Number(l.monthly_amount)||0, total = Number(l.total_amount)||0;
+  if(total <= 0) return monthly;
+  const idx = _loanMonthsBetween(l.start_month, ym) - 1;
+  return Math.max(0, Math.min(monthly, total - monthly*idx));
+}
 function _loanEmiFor(loans, ym){
-  return (loans||[]).filter(l=>_loanActiveIn(l,ym)).reduce((s,l)=>s+(Number(l.monthly_amount)||0),0);
+  return (loans||[]).reduce((s,l)=>s+_loanAmtFor(l,ym),0);
+}
+function _loanAddMonths(ym, n){
+  let [y,m] = ym.split('-').map(Number);
+  const t = (y*12 + (m-1)) + n;
+  return Math.floor(t/12)+'-'+String((t%12)+1).padStart(2,'0');
 }
 
 function _sseRefreshLoanField(){
@@ -3869,8 +3884,11 @@ function sseRenderLoans(){
   if(!_sseLoans.length){ box.innerHTML=''; return; }
   const fmtN = v => '₹'+Number(v||0).toLocaleString('en-IN');
   box.innerHTML = _sseLoans.map(l=>{
-    const active = _loanActiveIn(l, ym);
+    const active = _loanAmtFor(l, ym) > 0;
     const months = _loanMonthsBetween(l.start_month, l.end_month);
+    const totalAmt = Number(l.total_amount)||0;
+    const paidSoFar = (function(){ let s=0; for(let i=0;i<months;i++){ const m=_loanAddMonths(l.start_month,i); if(m<=ym) s+=_loanAmtFor(l,m); } return s; })();
+    const balance = totalAmt>0 ? Math.max(0, totalAmt-paidSoFar) : null;
     const tag = active
       ? '<span style="background:rgba(34,197,94,.15);color:var(--green);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px">DEDUCTING THIS MONTH</span>'
       : (ym < l.start_month
@@ -3878,7 +3896,7 @@ function sseRenderLoans(){
           : '<span style="background:rgba(148,163,184,.15);color:var(--text3);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px">COMPLETED</span>');
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px">'
       + '<div><b style="color:var(--text1)">🏦 '+_fcEscLoan(l.label)+'</b> '+tag
-      + '<div style="color:var(--text3);font-size:11px;margin-top:3px">'+fmtN(l.monthly_amount)+' / month · '+_loanMonthLabel(l.start_month)+' → '+_loanMonthLabel(l.end_month)+' ('+months+' month'+(months!==1?'s':'')+' · total '+fmtN(l.monthly_amount*months)+')</div></div>'
+      + '<div style="color:var(--text3);font-size:11px;margin-top:3px">'+(totalAmt>0 ? 'Loan '+fmtN(totalAmt)+' · ' : '')+fmtN(l.monthly_amount)+' / month · '+_loanMonthLabel(l.start_month)+' → '+_loanMonthLabel(l.end_month)+' ('+months+' month'+(months!==1?'s':'')+')'+(balance!==null ? ' · Balance after this month: '+fmtN(balance) : '')+'</div></div>'
       + '<button type="button" class="dyn-row-del" title="Remove loan" onclick="sseDeleteLoan('+l.id+')">✕</button></div>';
   }).join('');
 }
@@ -3897,6 +3915,17 @@ async function sseLoadLoans(empId){
   sseRecalc();
 }
 
+let _loanToAuto = true;
+// To-month is auto-suggested from Total ÷ Monthly (you can still change it)
+function sseLoanAuto(){
+  const total = parseFloat(document.getElementById('sseLoanTotal').value)||0;
+  const mon = parseFloat(document.getElementById('sseLoanAmt').value)||0;
+  const from = document.getElementById('sseLoanFrom').value;
+  if(_loanToAuto && total>0 && mon>0 && from){
+    document.getElementById('sseLoanTo').value = _loanAddMonths(from, Math.ceil(total/mon)-1);
+  }
+  sseLoanSummary();
+}
 function sseToggleLoanForm(show){
   const f = document.getElementById('sseLoanForm');
   if(!f) return;
@@ -3905,21 +3934,33 @@ function sseToggleLoanForm(show){
   if(open){
     const ym = (document.getElementById('ssePeriod')||{}).value || '';
     document.getElementById('sseLoanName').value = '';
+    document.getElementById('sseLoanTotal').value = '';
     document.getElementById('sseLoanAmt').value = '';
     document.getElementById('sseLoanFrom').value = ym;
     document.getElementById('sseLoanTo').value = '';
+    _loanToAuto = true;
     sseLoanSummary();
-    ['sseLoanAmt','sseLoanFrom','sseLoanTo'].forEach(id=>{ document.getElementById(id).oninput = sseLoanSummary; });
+    ['sseLoanTotal','sseLoanAmt','sseLoanFrom'].forEach(id=>{ document.getElementById(id).oninput = sseLoanAuto; });
+    document.getElementById('sseLoanTo').oninput = function(){ _loanToAuto = false; sseLoanSummary(); };
     document.getElementById('sseLoanName').focus();
   }
 }
 function sseLoanSummary(){
+  const total = parseFloat(document.getElementById('sseLoanTotal').value)||0;
   const amt = parseFloat(document.getElementById('sseLoanAmt').value)||0;
   const a = document.getElementById('sseLoanFrom').value, b = document.getElementById('sseLoanTo').value;
   const el = document.getElementById('sseLoanSummary');
-  if(amt>0 && a && b && b>=a){
+  const f = v => '₹'+Number(v).toLocaleString('en-IN');
+  if(total>0 && amt>0 && a && b && b>=a){
     const n = _loanMonthsBetween(a,b);
-    el.textContent = '₹'+amt.toLocaleString('en-IN')+' × '+n+' month'+(n!==1?'s':'')+' = ₹'+(amt*n).toLocaleString('en-IN')+' total, deducted from salary every month';
+    const needed = Math.ceil(total/amt);
+    let msg = f(total)+' loan · '+f(amt)+' / month · '+_loanMonthLabel(a)+' → '+_loanMonthLabel(b)+' ('+n+' month'+(n!==1?'s':'')+')';
+    if(amt > total) msg = '⚠ Monthly deduction is more than the total loan amount';
+    else if(n < needed) msg += ' — ⚠ only '+f(amt*n)+' will be recovered; '+f(total-amt*n)+' stays pending (extend the To month to cover it)';
+    else if(n > needed) msg += ' — loan is fully recovered in '+needed+' month'+(needed!==1?'s':'')+'; nothing is deducted after that';
+    else if(amt*n !== total) msg += ' — last month deducts the remaining '+f(total-amt*(n-1));
+    else msg += ' — fully recovered by the To month ✓';
+    el.textContent = msg;
   } else el.textContent = '';
 }
 
@@ -3927,15 +3968,18 @@ async function sseSaveLoan(){
   const empId = parseInt(document.getElementById('sseEmpSel').value);
   if(!empId){ toast('No employee assigned','error'); return; }
   const label = document.getElementById('sseLoanName').value.trim() || 'Loan';
+  const total = parseFloat(document.getElementById('sseLoanTotal').value)||0;
   const amt = parseFloat(document.getElementById('sseLoanAmt').value)||0;
   const from = document.getElementById('sseLoanFrom').value;
   const to = document.getElementById('sseLoanTo').value;
+  if(total<=0){ toast('Enter the total loan amount','error'); return; }
   if(amt<=0){ toast('Enter the monthly deduction amount','error'); return; }
+  if(amt>total){ toast('Monthly deduction cannot be more than the total loan amount','error'); return; }
   if(!from || !to){ toast('Select From and To month','error'); return; }
   if(to < from){ toast('To month cannot be before From month','error'); return; }
   try{
     const r = await fetch(`${BASE}/api/employee-loans`, {method:'POST', headers:hdrs(),
-      body: JSON.stringify({emp_id: empId, label, monthly_amount: amt, start_month: from, end_month: to})});
+      body: JSON.stringify({emp_id: empId, label, total_amount: total, monthly_amount: amt, start_month: from, end_month: to})});
     const d = await r.json();
     if(!d.success) throw new Error(d.error || 'Save failed');
     toast('Loan added ✓');
