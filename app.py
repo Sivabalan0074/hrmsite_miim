@@ -1886,6 +1886,7 @@ def _ensure_employee_loans(conn):
         id INTEGER PRIMARY KEY {_AUTOINC},
         emp_id INTEGER,
         label TEXT,
+        total_amount REAL DEFAULT 0,
         monthly_amount REAL DEFAULT 0,
         start_month TEXT,
         end_month TEXT,
@@ -1893,6 +1894,10 @@ def _ensure_employee_loans(conn):
         created TEXT,
         is_deleted INTEGER DEFAULT 0
     )""")
+    try:
+        conn.execute("ALTER TABLE employee_loans ADD COLUMN total_amount REAL DEFAULT 0")
+    except Exception:
+        pass
     conn.commit()
 
 @app.route('/api/employee-loans', methods=['GET', 'POST'])
@@ -1913,9 +1918,13 @@ def api_employee_loans():
         try:
             emp_id = int(d.get('emp_id'))
             amount = float(d.get('monthly_amount') or 0)
+            total = float(d.get('total_amount') or 0)
         except (TypeError, ValueError):
             conn.close()
             return jsonify({"success": False, "error": "Invalid employee or amount"}), 400
+        if total <= 0 or amount > total:
+            conn.close()
+            return jsonify({"success": False, "error": "Total loan amount is required and must be at least the monthly deduction"}), 400
         start_m = str(d.get('start_month') or '')[:7]
         end_m = str(d.get('end_month') or '')[:7]
         if amount <= 0 or not start_m or not end_m:
@@ -1926,8 +1935,8 @@ def api_employee_loans():
             return jsonify({"success": False, "error": "End month cannot be before start month"}), 400
         label = (str(d.get('label') or '').strip() or 'Loan')[:120]
         cur = conn.execute(
-            "INSERT INTO employee_loans (emp_id,label,monthly_amount,start_month,end_month,notes,created) VALUES (?,?,?,?,?,?,?)",
-            (emp_id, label, amount, start_m, end_m, str(d.get('notes') or '')[:300], datetime.datetime.now().isoformat()))
+            "INSERT INTO employee_loans (emp_id,label,total_amount,monthly_amount,start_month,end_month,notes,created) VALUES (?,?,?,?,?,?,?,?)",
+            (emp_id, label, total, amount, start_m, end_m, str(d.get('notes') or '')[:300], datetime.datetime.now().isoformat()))
         conn.commit()
         new_id = getattr(cur, 'lastrowid', None) or getattr(conn, 'lastrowid', None)
         conn.close()
@@ -1952,13 +1961,15 @@ def api_employee_loan_detail(loan_id):
         end_m = str(d.get('end_month') or '')[:7]
         try:
             amount = float(d.get('monthly_amount') or 0)
+            total = float(d.get('total_amount') or 0)
         except (TypeError, ValueError):
             amount = 0
-        if amount <= 0 or not start_m or not end_m or end_m < start_m:
+            total = 0
+        if amount <= 0 or total < amount or not start_m or not end_m or end_m < start_m:
             conn.close()
             return jsonify({"success": False, "error": "Invalid amount or months"}), 400
-        conn.execute("UPDATE employee_loans SET label=?, monthly_amount=?, start_month=?, end_month=? WHERE id=?",
-                     ((str(d.get('label') or '').strip() or 'Loan')[:120], amount, start_m, end_m, loan_id))
+        conn.execute("UPDATE employee_loans SET label=?, total_amount=?, monthly_amount=?, start_month=?, end_month=? WHERE id=?",
+                     ((str(d.get('label') or '').strip() or 'Loan')[:120], total, amount, start_m, end_m, loan_id))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
