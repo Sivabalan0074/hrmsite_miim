@@ -1383,6 +1383,40 @@ def mark_guest_sent(gid):
 
 
 # Tracker
+# ── Project-safety: miim_projects is ONE json blob shared by everyone. A client that holds only a
+# partial/stale list (employee/guest filtered view, fresh browser, failed load) must never be able to
+# drop other projects. Projects are removed ONLY when their id is explicitly listed in deleted_ids.
+def _merge_projects_blob(conn, new_value, deleted_ids=None):
+    import json as _j
+    deleted = set(str(i) for i in (deleted_ids or []))
+    try:
+        incoming = _j.loads(new_value) if isinstance(new_value, str) else new_value
+    except Exception:
+        return new_value
+    if not isinstance(incoming, list):
+        return new_value
+    row = conn.execute("SELECT `value` FROM tracker_data WHERE `key`='miim_projects'").fetchone()
+    existing = []
+    if row:
+        try:
+            existing = _j.loads(row['value'] or '[]')
+        except Exception:
+            existing = []
+    if not isinstance(existing, list):
+        existing = []
+    in_ids = set(str(p.get('id')) for p in incoming if isinstance(p, dict))
+    merged = [p for p in incoming if isinstance(p, dict) and str(p.get('id')) not in deleted]
+    for p in existing:
+        if isinstance(p, dict) and str(p.get('id')) not in in_ids and str(p.get('id')) not in deleted:
+            merged.append(p)   # keep it: client did not explicitly delete it
+    # safety backup of the previous value before every overwrite
+    if row and row['value']:
+        now = str(datetime.datetime.now())
+        conn.execute("INSERT INTO tracker_data (`key`,`value`,updated_at) VALUES (?,?,?) "
+                     "ON DUPLICATE KEY UPDATE `value`=?,updated_at=?",
+                     ('miim_projects_backup', row['value'], now, row['value'], now))
+    return _j.dumps(merged)
+
 
 
 @app.route('/api/tracker/<path:key>', methods=['GET'])
@@ -1405,6 +1439,8 @@ def set_tracker(key):
         data = request.json or {}
         value = data.get('value', '')
         conn = _db()
+        if key == 'miim_projects':
+            value = _merge_projects_blob(conn, value, data.get('deleted_ids'))
         conn.execute("INSERT INTO tracker_data (`key`,`value`,updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `value`=?,updated_at=?",
                      (key, value, str(datetime.datetime.now()), value, str(datetime.datetime.now())))
         conn.commit(); conn.close()
@@ -1455,6 +1491,8 @@ def bulk_set_tracker():
         conn = _db()
         now = str(datetime.datetime.now())
         for k, v in items.items():
+            if k == 'miim_projects':
+                v = _merge_projects_blob(conn, v, body.get('deleted_ids'))
             conn.execute(
                 "INSERT INTO tracker_data (`key`,`value`,updated_at) VALUES (?,?,?) "
                 "ON DUPLICATE KEY UPDATE `value`=?,updated_at=?",
