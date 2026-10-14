@@ -1324,14 +1324,15 @@ var _assignedUsername = (_currentUser && _currentUser.username)
   ? _currentUser.username.trim().toLowerCase() : '';
 
 // ── DB Sync helpers ───────────────────────────────────────────
-function _dbSync(key, value, onOk) {
+function _dbSync(key, value, onOk, extra) {
   // Save one key to server DB. onOk() runs only if the server confirmed the save.
   fetch('/api/tracker/' + encodeURIComponent(key), {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ value: typeof value === 'string' ? value : JSON.stringify(value) })
+    body: JSON.stringify(Object.assign({ value: typeof value === 'string' ? value : JSON.stringify(value) }, extra || {}))
   }).then(function(r) {
+    if (r && r.status === 401) { try { showToast('\u26a0\ufe0f Session expired \u2014 please login again. Changes are not saved on server yet.'); } catch(e){} }
     if (r && r.ok && typeof onOk === 'function') onOk();
   }).catch(function() {});
 }
@@ -2154,9 +2155,12 @@ function save() {
   try { localStorage.setItem('miim_projects', val); } catch(e){}
   // mark "not yet on server" until the server confirms – so a failed/slow save is never lost or overwritten
   try { localStorage.setItem('miim_projects_dirty', '1'); } catch(e){}
+  var _delIds = [];
+  try { _delIds = JSON.parse(localStorage.getItem('miim_projects_deleted') || '[]'); } catch(e){}
   _dbSync('miim_projects', val, function() {
     try { if (localStorage.getItem('miim_projects') === val) localStorage.removeItem('miim_projects_dirty'); } catch(e){}
-  });
+    try { localStorage.removeItem('miim_projects_deleted'); } catch(e){}
+  }, { deleted_ids: _delIds });
 }
 
 /* ── STATUS CONFIG ── */
@@ -3899,6 +3903,11 @@ function saveProject() {
 function deleteProject(id) {
   if (!confirm('Delete this project?')) return;
   projects = projects.filter(function(p){ return p.id !== id; });
+  // remember explicit deletion so the server removes ONLY this project
+  try {
+    var _d = JSON.parse(localStorage.getItem('miim_projects_deleted') || '[]');
+    _d.push(id); localStorage.setItem('miim_projects_deleted', JSON.stringify(_d));
+  } catch(e){}
   save(); renderTable();
   showToast('🗑️ Project deleted.');
 }
