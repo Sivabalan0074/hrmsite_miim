@@ -922,8 +922,18 @@ def get_holidays():
             rows = conn.execute("SELECT * FROM holidays WHERE date LIKE ? ORDER BY date", (f"{year}%",)).fetchall()
         else:
             rows = conn.execute("SELECT * FROM holidays ORDER BY date").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            if _hol_blocked(str(d.get('date') or '')[:10], d.get('name')):
+                try:
+                    conn.execute("DELETE FROM holidays WHERE id=?", (d['id'],)); conn.commit()
+                except Exception:
+                    pass
+                continue
+            out.append(d)
         conn.close()
-        return jsonify({"success": True, "holidays": [dict(r) for r in rows]})
+        return jsonify({"success": True, "holidays": out})
     except Exception as ex:
         print(f"[ERROR] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
@@ -934,6 +944,8 @@ def get_holidays():
 def add_holiday():
     try:
         data = request.json or {}
+        if _hol_blocked(str(data.get('date') or '')[:10], data.get('name')):
+            return jsonify({"success": True, "skipped": True}), 201   # Vijayadasami 20-Oct-2026 is a normal working day
         conn = _db()
         conn.execute("INSERT INTO holidays (date,name,type,emoji,`desc`) VALUES (?,?,?,?,?)",
                      (data.get('date'), data.get('name'), data.get('type', 'National'), data.get('emoji', 'ðŸŽ‰'), data.get('desc', '')))
@@ -1083,12 +1095,14 @@ def _remove_vijayadasami_2026(conn):
     - anyone stored as 'holiday' on that date with no check-in -> Absent
     - active employees with no attendance row that day -> Absent (admins excluded)"""
     conn.execute("CREATE TABLE IF NOT EXISTS app_flags (k VARCHAR(100) PRIMARY KEY)")
-    if conn.execute("SELECT 1 FROM app_flags WHERE k=?", ("vijayadasami_2026_removed_v1",)).fetchone():
-        return
     D = "2026-10-20"
+    # always (every start-up): the holiday row must not exist
     for r in conn.execute("SELECT id, name FROM holidays WHERE date=?", (D,)).fetchall():
         if _hol_blocked(D, r['name']):
             conn.execute("DELETE FROM holidays WHERE id=?", (r['id'],))
+    conn.commit()
+    if conn.execute("SELECT 1 FROM app_flags WHERE k=?", ("vijayadasami_2026_removed_v1",)).fetchone():
+        return
     now_str = str(datetime.datetime.now())
     # stored 'holiday' rows with no check-in -> absent (people who actually worked keep their record)
     conn.execute("UPDATE attendance SET status='absent', note='', updated_at=? "
@@ -6928,7 +6942,10 @@ def init_db():
 
     _fix_holidays_2026(conn)
     _fix_christmas_office_holiday(conn)
-    _remove_vijayadasami_2026(conn)
+    try:
+        _remove_vijayadasami_2026(conn)
+    except Exception as _ex:
+        print(f"[DB] Vijayadasami cleanup failed: {_ex}")
 
     # â”€â”€ users table (for landing page login) â”€â”€
     conn.execute(f"""CREATE TABLE IF NOT EXISTS users (
