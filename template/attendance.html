@@ -2440,8 +2440,8 @@ function loadDemo(){
     // V24) — Permission is NOT a separate 2/month quota for them.
     const probUsedThisMonth=perm?0:Math.floor(Math.random()*2);
     const remaining_probation=perm?0:Math.max(0,1-probUsedThisMonth);
-    const pmUsed=perm?Math.floor(Math.random()*2):probUsedThisMonth;
-    const remaining_pm=perm?Math.max(0,2-pmUsed):remaining_probation;
+    const pmUsed=Math.floor(Math.random()*2);
+    const remaining_pm=Math.max(0,2-pmUsed);
     const monthlyData=Array.from({length:nowMonth},(_,mi)=>({
       month:mi+1,
       p:Math.floor(Math.random()*18)+8,
@@ -2453,8 +2453,8 @@ function loadDemo(){
       pm:pmUsed>0&&mi===nowMonth-2?1:0
     }));
     balances[emp.id]={
-      remaining_casual:perm?6:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:perm?2:1,
-      total_casual:6, total_sick:slTotal||12, total_earned:6, total_pm:perm?2:1, total_earned_accrued:elAccrued,
+      remaining_casual:perm?6:0, remaining_sick:perm?12:0, remaining_earned:perm?6:0, remaining_pm:2,
+      total_casual:6, total_sick:slTotal||12, total_earned:6, total_pm:2, total_earned_accrued:elAccrued,
       // Always start at 0 — actual used count comes from miim_approved_leaves only
       used_casual:0, used_sick:0, used_earned:0, used_pm:0,
       probation_quota_month:perm?0:1, probation_used_month:perm?0:0, probation_remaining_month:perm?0:1,
@@ -3127,7 +3127,7 @@ function renderEmployeeDetail(empId){
     const _probRem=b.probation_remaining_month??1;
     const _probUsed=b.probation_used_month??0;
     const _probQuota=b.probation_quota_month??1;
-    balanceHtml=`<div class="lb-nonperm-note">⚠️ ${emp.type} — 1 <b>paid</b> leave day/month, shared across "Monthly Leave" &amp; "Permission" (CL/SL/EL quotas don't apply). Used ${_probUsed}/${_probQuota} this month — ${_probRem} remaining${_probRem<=0?' (any more this month is unpaid / LOP)':''}.</div>`;
+    balanceHtml=`<div class="lb-nonperm-note">⚠️ ${emp.type} — 1 <b>paid</b> leave day/month, under "Monthly Leave" (CL/SL/EL quotas don't apply), plus <b>2 Permissions/month</b> (separate quota). Used ${_probUsed}/${_probQuota} this month — ${_probRem} remaining${_probRem<=0?' (any more this month is unpaid / LOP)':''}.</div>`;
   }
 
   const stLabels={present:'✅ Present',absent:'❌ Absent',off:'🔘 Off Day',cl:'🌴 Casual Leave',sl:'🤒 Sick Leave',el:'⭐ Earned Leave',pm:'🕐 Permission',lop:'🚫 Loss of Pay',half_day:'🌗 Half Day','':'— Not Marked'};
@@ -3504,7 +3504,7 @@ function openLeaveModal(empId, dKey, e, preselect){
     }else{
       const _probRem=b.probation_remaining_month??1;
       const _probUsed=b.probation_used_month??0;
-      balCardsEl.innerHTML=`<div style="background:rgba(234,179,8,0.07);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yellow);margin-bottom:14px;">⚠️ ${emp?.type||''} — 1 <b>paid</b> leave day/month, shared across "Monthly Leave" &amp; "Permission" below (CL/SL/EL quotas don't apply). Used ${_probUsed}/1 this month${_probRem<=0?' — anything more this month is unpaid (LOP)':''}.</div>`;
+      balCardsEl.innerHTML=`<div style="background:rgba(234,179,8,0.07);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yellow);margin-bottom:14px;">⚠️ ${emp?.type||''} — 1 <b>paid</b> leave day/month, under "Monthly Leave" below (CL/SL/EL quotas don't apply), plus <b>2 Permissions/month</b> (separate quota). Used ${_probUsed}/1 this month${_probRem<=0?' — anything more this month is unpaid (LOP)':''}.</div>`;
       balCardsEl.style.display='block';
     }
     balCardsEl.insertAdjacentHTML('beforeend', compoffStripHtml(empId));
@@ -3563,8 +3563,8 @@ function openLeaveModal(empId, dKey, e, preselect){
   ] : [
     {id:'sl',cls:'lt-sl',icon:'🤒',name:'Sick Leave',desc:'Not a separate quota during probation.',bal:0,total:0,used:0,disabled:true,period:'Accrued this year'},
     {id:'el',cls:'lt-el',icon:'⭐',name:'Earned Leave',desc:'Not a separate quota during probation.',bal:0,total:0,used:0,disabled:true,period:_fy2.label},
-    {id:'cl',cls:'lt-cl',icon:'🗓️',name:'Monthly Leave',desc:`1 paid day/month during probation. Shared with Permission — ${_probUsed}/${_probQuota} used.`,bal:_probRem,total:_probQuota,used:_probUsed,disabled:false,period:_curMonthLabel},
-    {id:'pm',cls:'lt-pm',icon:'🕐',name:'Permission',desc:`Part-day (up to 2 hrs). Shares the same 1 day/month quota as Monthly Leave.`,bal:_probRem,total:_probQuota,used:_probUsed,disabled:false,period:_curMonthLabel},
+    {id:'cl',cls:'lt-cl',icon:'🗓️',name:'Monthly Leave',desc:`1 paid day/month during probation. Permission has its own 2/month quota — ${_probUsed}/${_probQuota} used.`,bal:_probRem,total:_probQuota,used:_probUsed,disabled:false,period:_curMonthLabel},
+    {id:'pm',cls:'lt-pm',icon:'🕐',name:'Permission',desc:`Max 2 per month, up to 2 hours each.`,bal:pm,total:2,used:_upm,disabled:false,period:_curMonthLabel},
   ];
 
   // Comp Off — available to every employee type (perm / probation / intern)
@@ -3722,14 +3722,20 @@ function deductLeaveBalance(empId, leaveType){
   if(leaveType==='compoff'){ const c=b.compoff||(b.compoff={earned:0,used:0,remaining:0,earned_dates:[],used_dates:[]}); c.used=(c.used||0)+1; c.remaining=Math.max(0,(c.remaining||0)-1); return; }
   const _emp=employees.find(e=>String(e.id)===String(empId));
   const _perm=isPermanent(_emp?.type||'');
+  if(!_perm && leaveType==='pm'){
+    // Permission has its OWN 2/month quota for probation/intern too (not the 1-day pool)
+    b.used_pm=(b.used_pm||0)+1;
+    b.remaining_pm=Math.max(0,(b.remaining_pm??2)-1);
+    const _nm=new Date().getMonth()+1;
+    if(b.monthly){ let r=b.monthly.find(x=>x.month===_nm); if(!r){r={month:_nm,p:0,a:0,sl:0,cl:0,el:0,pm:0};b.monthly.push(r);} r.pm=(r.pm||0)+1; }
+    return;
+  }
   if(!_perm){
     // Probationary/Intern: CL ("Monthly Leave") and PM ("Permission") both
     // draw from the single shared 1 day/month pool — deduct from that pool
     // regardless of which of the two was picked.
     b.probation_used_month=(b.probation_used_month||0)+1;
     b.probation_remaining_month=Math.max(0,(b.probation_remaining_month??1)-1);
-    b.remaining_pm=b.probation_remaining_month;
-    b.used_pm=(b.used_pm||0)+1;
     // Update monthly history for current month
     const nowM=new Date().getMonth()+1;
     if(b.monthly){
@@ -3770,11 +3776,16 @@ function restoreLeaveBalance(empId, leaveType){
   if(leaveType==='compoff'){ const c=b.compoff||(b.compoff={earned:0,used:0,remaining:0,earned_dates:[],used_dates:[]}); c.used=Math.max(0,(c.used||0)-1); c.remaining=(c.remaining||0)+1; return; }
   const _emp=employees.find(e=>String(e.id)===String(empId));
   const _perm=isPermanent(_emp?.type||'');
+  if(!_perm && leaveType==='pm'){
+    b.used_pm=Math.max(0,(b.used_pm||0)-1);
+    b.remaining_pm=(b.remaining_pm??0)+1;
+    const _nm=new Date().getMonth()+1;
+    if(b.monthly){ const r=b.monthly.find(x=>x.month===_nm); if(r) r.pm=Math.max(0,(r.pm||0)-1); }
+    return;
+  }
   if(!_perm){
     b.probation_used_month=Math.max(0,(b.probation_used_month||0)-1);
     b.probation_remaining_month=(b.probation_remaining_month??0)+1;
-    b.remaining_pm=b.probation_remaining_month;
-    b.used_pm=Math.max(0,(b.used_pm||0)-1);
     const nowM=new Date().getMonth()+1;
     if(b.monthly){
       const mRow=b.monthly.find(r=>r.month===nowM);
