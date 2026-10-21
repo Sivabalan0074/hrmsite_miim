@@ -997,7 +997,6 @@ _HOLIDAYS_2026 = [
     ("2026-09-14", "Vinayagar Chathurthi",    "Religious",  "🐘"),
     ("2026-10-02", "Gandhi Jayanti",          "Government", "🕊️"),
     ("2026-10-19", "Ayudha Pooja",            "National",   "🛠️"),
-    ("2026-10-20", "Vijayadasami",            "National",   "🏹"),
     ("2026-11-08", "Deepavali",               "National",   "🪔"),
     ("2026-12-25", "Christmas",               "Government", "🎄"),
 ]
@@ -1038,9 +1037,18 @@ def _hol_exists(conn, date, name):
             return True
     return False
 
+# Holidays the company does NOT give (never re-added by Google sync / seed)
+_BLOCKED_HOLIDAYS = [("2026-10-20", ("vijaya", "dasami", "dasara", "dussehra", "dussera", "dasera"))]
+
+def _hol_blocked(date, name):
+    low = (name or "").lower()
+    return any(date == bd and any(k in low for k in keys) for (bd, keys) in _BLOCKED_HOLIDAYS)
+
 def _hol_insert_missing(conn, rows):
     added = 0
     for (d, n, t, e) in rows:
+        if _hol_blocked(d, n):
+            continue
         if not _hol_exists(conn, d, n):
             conn.execute("INSERT INTO holidays (date, name, type, emoji, `desc`) VALUES (?,?,?,?,?)", (d, n, t, e, ''))
             added += 1
@@ -1068,6 +1076,38 @@ def _fix_christmas_office_holiday(conn):
     conn.execute("INSERT INTO app_flags (k) VALUES (?)", ("christmas_office_holiday_v1",))
     conn.commit()
     print("[DB] Christmas holiday rows set to Government (office holiday).")
+
+def _remove_vijayadasami_2026(conn):
+    """One-time: Vijayadasami (20-Oct-2026) is NOT a company holiday.
+    - delete it from the holidays table
+    - anyone stored as 'holiday' on that date with no check-in -> Absent
+    - active employees with no attendance row that day -> Absent (admins excluded)"""
+    conn.execute("CREATE TABLE IF NOT EXISTS app_flags (k VARCHAR(100) PRIMARY KEY)")
+    if conn.execute("SELECT 1 FROM app_flags WHERE k=?", ("vijayadasami_2026_removed_v1",)).fetchone():
+        return
+    D = "2026-10-20"
+    for r in conn.execute("SELECT id, name FROM holidays WHERE date=?", (D,)).fetchall():
+        if _hol_blocked(D, r['name']):
+            conn.execute("DELETE FROM holidays WHERE id=?", (r['id'],))
+    now_str = str(datetime.datetime.now())
+    # stored 'holiday' rows with no check-in -> absent (people who actually worked keep their record)
+    conn.execute("UPDATE attendance SET status='absent', note='', updated_at=? "
+                 "WHERE date=? AND status='holiday' AND (checkin IS NULL OR checkin IN ('', '--'))", (now_str, D))
+    # no row at all -> absent (skip admin / superadmin accounts)
+    emps = conn.execute("SELECT id, username, dept, desig FROM employees WHERE status='active'").fetchall()
+    added = 0
+    for e in emps:
+        eid, uname, dept, desig = e['id'], (e['username'] or ''), (e['dept'] or ''), (e['desig'] or '')
+        if uname.lower() in ('superadmin', 'sivabalan.m') or 'admin' in dept.lower() or 'admin' in desig.lower():
+            continue
+        if conn.execute("SELECT 1 FROM attendance WHERE emp_id=? AND date=?", (eid, D)).fetchone():
+            continue
+        conn.execute("INSERT INTO attendance (emp_id,date,checkin,checkout,status,note,marked_by,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                     (eid, D, '--', '--', 'absent', '', 'system', now_str))
+        added += 1
+    conn.execute("INSERT INTO app_flags (k) VALUES (?)", ("vijayadasami_2026_removed_v1",))
+    conn.commit()
+    print(f"[DB] Vijayadasami 20-Oct-2026 removed; {added} employees marked Absent.")
 
 def _fetch_google_india_holidays(year):
     """Public Google Calendar 'Holidays in India' ICS -> [(date,name,type,emoji)]. Raises on failure."""
@@ -6888,6 +6928,7 @@ def init_db():
 
     _fix_holidays_2026(conn)
     _fix_christmas_office_holiday(conn)
+    _remove_vijayadasami_2026(conn)
 
     # â”€â”€ users table (for landing page login) â”€â”€
     conn.execute(f"""CREATE TABLE IF NOT EXISTS users (
