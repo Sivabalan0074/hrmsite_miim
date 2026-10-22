@@ -11287,6 +11287,9 @@ function _renderTeamAtt() {
         Object.keys(cache).forEach(function(dKey) {
           if (dKey.slice(0,7) !== monthPrefix) return;
           var rec = cache[dKey][myEmpId] || cache[dKey][String(myEmpId)];
+          // Server data is the source of truth: cached local status is only a fallback
+          // for days the server returned nothing for (a stale 'absent' must not hide an approved leave).
+          if (myAttMap[dKey] && myAttMap[dKey].status) return;
           if (rec && rec.status) {
             // Map attendance.html status codes → dashboard display status
             var st = rec.status;
