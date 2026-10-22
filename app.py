@@ -2070,46 +2070,66 @@ def api_employee_loan_detail(loan_id):
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+_SS_SCHEMA_READY = False
+
+def _ensure_salary_structures_schema(conn):
+    """Make sure salary_structures exists and has every column, but only touch the
+    schema when something is actually missing, and only once per server process.
+    Running CREATE/ALTER TABLE on every request caused 500s on MySQL (metadata
+    locks / DDL errors) which made the Salary page load blank and saves fail."""
+    global _SS_SCHEMA_READY
+    if _SS_SCHEMA_READY:
+        return
+    wanted = [
+        ('acct_approved_by', 'TEXT'), ('acct_approved_at', 'TEXT'), ('acct_approval_count', 'INTEGER DEFAULT 0'),
+        ('mgmt_approved_by', 'TEXT'), ('mgmt_approved_at', 'TEXT'), ('mgmt_approval_count', 'INTEGER DEFAULT 0'),
+        ('lop', 'REAL DEFAULT 0'), ('loan_emi', 'REAL DEFAULT 0'),
+    ]
+    try:
+        try:
+            cols = _table_columns(conn, 'salary_structures')
+        except Exception:
+            cols = set()
+        if not cols:
+            conn.execute(f"""CREATE TABLE IF NOT EXISTS salary_structures (
+                id INTEGER PRIMARY KEY {_AUTOINC},
+                emp_id INTEGER, period TEXT, department TEXT, designation TEXT,
+                employee_type TEXT, basic REAL DEFAULT 0, hra REAL DEFAULT 0,
+                dearness_allowance REAL DEFAULT 0, medical_allowance REAL DEFAULT 0,
+                lta REAL DEFAULT 0, special_allowance REAL DEFAULT 0,
+                city_compensatory_allowance REAL DEFAULT 0,
+                professional_tax REAL DEFAULT 0, tds REAL DEFAULT 0,
+                existing_advance REAL DEFAULT 0, other_deductions REAL DEFAULT 0,
+                lop REAL DEFAULT 0,
+                total_earnings REAL DEFAULT 0, total_deductions REAL DEFAULT 0,
+                net_pay REAL DEFAULT 0, days_worked INTEGER DEFAULT 0,
+                mode_of_payment TEXT DEFAULT 'Account', pay_date TEXT,
+                notes TEXT, approval_status TEXT, correction_note TEXT,
+                salary_ctc REAL DEFAULT 0, father_name TEXT,
+                acct_approved_by TEXT, acct_approved_at TEXT, acct_approval_count INTEGER DEFAULT 0,
+                mgmt_approved_by TEXT, mgmt_approved_at TEXT, mgmt_approval_count INTEGER DEFAULT 0
+            )""")
+            conn.commit()
+            cols = _table_columns(conn, 'salary_structures')
+        for col, definition in wanted:
+            if col not in cols:
+                try:
+                    conn.execute(f"ALTER TABLE salary_structures ADD COLUMN {col} {definition}")
+                    conn.commit()
+                except Exception as _ae:
+                    print(f"[salary_structures] could not add column {col}: {_ae}")
+        _SS_SCHEMA_READY = True
+    except Exception as _se:
+        print(f"[salary_structures] schema check failed (will retry next request): {_se}")
+
+
 @app.route('/api/salary-structures', methods=['GET', 'POST'])
 @require_auth
 def api_salary_structures():
     try:
         conn = _db()
-        # Ensure table exists
-        conn.execute(f"""CREATE TABLE IF NOT EXISTS salary_structures (
-            id INTEGER PRIMARY KEY {_AUTOINC},
-            emp_id INTEGER, period TEXT, department TEXT, designation TEXT,
-            employee_type TEXT, basic REAL DEFAULT 0, hra REAL DEFAULT 0,
-            dearness_allowance REAL DEFAULT 0, medical_allowance REAL DEFAULT 0,
-            lta REAL DEFAULT 0, special_allowance REAL DEFAULT 0,
-            city_compensatory_allowance REAL DEFAULT 0,
-            professional_tax REAL DEFAULT 0, tds REAL DEFAULT 0,
-            existing_advance REAL DEFAULT 0, other_deductions REAL DEFAULT 0,
-            lop REAL DEFAULT 0,
-            total_earnings REAL DEFAULT 0, total_deductions REAL DEFAULT 0,
-            net_pay REAL DEFAULT 0, days_worked INTEGER DEFAULT 0,
-            mode_of_payment TEXT DEFAULT 'Account', pay_date TEXT,
-            notes TEXT, approval_status TEXT, correction_note TEXT,
-            salary_ctc REAL DEFAULT 0, father_name TEXT,
-            acct_approved_by TEXT, acct_approved_at TEXT, acct_approval_count INTEGER DEFAULT 0,
-            mgmt_approved_by TEXT, mgmt_approved_at TEXT, mgmt_approval_count INTEGER DEFAULT 0
-        )""")
-        # Add approval columns to existing tables (migration)
-        for col, definition in [
-            ('acct_approved_by', 'TEXT'),
-            ('acct_approved_at', 'TEXT'),
-            ('acct_approval_count', 'INTEGER DEFAULT 0'),
-            ('mgmt_approved_by', 'TEXT'),
-            ('mgmt_approved_at', 'TEXT'),
-            ('mgmt_approval_count', 'INTEGER DEFAULT 0'),
-            ('lop', 'REAL DEFAULT 0'),
-            ('loan_emi', 'REAL DEFAULT 0'),
-        ]:
-            try:
-                conn.execute(f"ALTER TABLE salary_structures ADD COLUMN {col} {definition}")
-            except Exception:
-                pass
-        conn.commit()
+        # Schema is created/migrated ONCE (init_db + this helper) - never ALTER TABLE on every request.
+        _ensure_salary_structures_schema(conn)
         if request.method == 'GET':
             emp_id = request.args.get('emp_id')
             if emp_id:
@@ -2155,7 +2175,13 @@ def api_salary_structures():
         conn.close()
         return jsonify({"success": True, "id": new_id}), 201
     except Exception as ex:
-        print(f"[ERROR] {ex}")
+        import traceback as _tb
+        print(f"[ERROR] /api/salary-structures {request.method}: {ex}")
+        _tb.print_exc()
+        try:
+            conn.close()   # don't leak the connection (a leaked open connection holds table locks)
+        except Exception:
+            pass
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
