@@ -1847,6 +1847,8 @@ function getFYInfo(refDate){
 function inFY(y, m, fyStartYear){
   return (y===fyStartYear && m>=4) || (y===fyStartYear+1 && m<=3);
 }
+// One-time purge of stale local attendance cache (old 'absent' values were hiding approved leaves)
+try{ if(localStorage.getItem('miim_att_cache_ver')!=='2'){ localStorage.removeItem('miim_att_cache'); localStorage.setItem('miim_att_cache_ver','2'); } }catch(_){}
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
@@ -2780,6 +2782,7 @@ async function fetchAtt(dKey){
           const lsRec=lsDay[eid];
           if(lsRec&&lsRec.status){
             map[eid]=map[eid]||{status:'',checkin:'',checkout:''};
+            if(map[eid].status) return;   // server is the source of truth - never let a stale cached status override it
             map[eid].status=lsRec.status;
             if(lsRec.checkin)  map[eid].checkin=lsRec.checkin;
             if(lsRec.checkout) map[eid].checkout=lsRec.checkout;
@@ -2879,8 +2882,12 @@ async function fetchAttRange(days){
         Object.keys(recs).forEach(eid=>{
           const rec=recs[eid];
           if(rec&&rec.status){
-            // Only overwrite if currently empty (localStorage data takes priority)
-            if(!attCache[dKey][eid]||!attCache[dKey][eid].status)
+            // Server is the source of truth. A cached/stale local status (e.g. an old 'absent')
+            // must never hide an approved leave. Only keep the local value while the admin has
+            // UNSAVED edits, and even then leave/holiday statuses from the server always win.
+            const _cur=attCache[dKey][eid];
+            const _srvFixed=['cl','sl','el','compoff','lop','holiday','rh'].includes(rec.status);
+            if(!_cur||!_cur.status||_srvFixed||!hasChanges)
               attCache[dKey][eid]=rec;
           }
         });
@@ -4897,7 +4904,8 @@ async function saveAttendance(){
     let apiSt='absent';
     if(s==='present') apiSt='present';
     else if(s==='off') apiSt='absent';
-    else if(['cl','sl','el','pm','compoff'].includes(s)) apiSt='leave';
+    else if(['cl','sl','el','compoff'].includes(s)) apiSt=s;   // keep the real leave code so leave balance/reports stay correct
+    else if(s==='pm') apiSt='leave';
     const noteMap={compoff:'Comp Off',cl:'Casual Leave',sl:'Sick Leave',el:'Earned Leave',pm:'Permission',off:'Off Day'};
     // Send ALL sessions for this employee/day (not just a single
     // checkin/checkout pair) so sessions added via "+ Add" or removed via
