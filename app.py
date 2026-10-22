@@ -4905,6 +4905,69 @@ def get_attendance_range():
         print(f"[API Error] {ex}"); return jsonify({"error": "Internal server error"}), 500
 
 
+
+# ── Approved-leave protection ────────────────────────────────────────────────
+# An approved CL/SL/EL/Comp-off leave must never be silently flipped back to
+# Absent by a later "Save" from a stale attendance screen.
+_LEAVE_NAME_TO_CODE = {
+    'sick leave': 'sl', 'sick': 'sl', 'sl': 'sl',
+    'casual leave': 'cl', 'casual': 'cl', 'cl': 'cl',
+    'earned leave': 'el', 'earned': 'el', 'el': 'el',
+    'paid leave': 'el', 'paid': 'el', 'pl': 'el',
+    'annual leave': 'el', 'annual': 'el',
+    'comp off': 'compoff', 'comp-off': 'compoff', 'compoff': 'compoff', 'comp_off': 'compoff', 'co': 'compoff',
+}
+
+def _approved_leave_for_day(conn, emp_id, date_str):
+    """Return (leave_request_id, code) of an APPROVED full-day leave (not
+    Permission) covering this employee/date, else None."""
+    try:
+        rows = conn.execute(
+            "SELECT id, leave_type FROM leave_requests WHERE emp_id=? AND from_date<=? AND to_date>=? "
+            "AND LOWER(COALESCE(status,'')) IN ('approved','approve') ORDER BY id DESC",
+            (str(emp_id), str(date_str)[:10], str(date_str)[:10])).fetchall()
+        for r in rows:
+            code = _LEAVE_NAME_TO_CODE.get((r['leave_type'] or '').lower().strip())
+            if code:
+                return r['id'], code
+    except Exception as ex:
+        print(f"[_approved_leave_for_day] {ex}")
+    return None
+
+
+def _repair_absent_over_approved_leave(conn):
+    """Idempotent start-up repair: any day covered by an APPROVED leave that is
+    still stored as 'absent' / 'leave' (no punches) is re-synced to the real
+    leave status (cl/sl/el/compoff, or lop when the balance is exhausted)."""
+    now = str(datetime.datetime.now())
+    fixed = 0
+    reqs = conn.execute(
+        "SELECT id, emp_id, leave_type, from_date, to_date FROM leave_requests "
+        "WHERE LOWER(COALESCE(status,'')) IN ('approved','approve')").fetchall()
+    for r in reqs:
+        if not _LEAVE_NAME_TO_CODE.get((r['leave_type'] or '').lower().strip()):
+            continue   # Permission handled separately
+        try:
+            d0 = datetime.datetime.strptime(str(r['from_date'])[:10], '%Y-%m-%d').date()
+            d1 = datetime.datetime.strptime(str(r['to_date'])[:10], '%Y-%m-%d').date()
+        except Exception:
+            continue
+        need, cur, n = False, d0, 0
+        while cur <= d1 and n < 62:
+            rows = conn.execute("SELECT status, checkin, checkout FROM attendance WHERE emp_id=? AND date=?",
+                                (r['emp_id'], str(cur))).fetchall()
+            if rows and all((x['status'] or '').lower() in ('absent', 'leave') and
+                            all(v in (None, '', '--') for v in (x['checkin'], x['checkout'])) for x in rows):
+                need = True
+                break
+            cur += datetime.timedelta(days=1); n += 1
+        if need:
+            ok, _err = _sync_leave_to_attendance(conn, r['id'], now)
+            if ok:
+                fixed += 1
+    return fixed
+
+
 @app.route('/api/attendance/save', methods=['POST'])
 @require_auth
 def save_attendance():
@@ -4931,6 +4994,15 @@ def save_attendance():
             if not sessions:
                 sessions = [{'checkin': '--', 'checkout': '--'}]
 
+            # GUARD: a stale screen (or the "unmarked -> Absent" auto-fill) must not
+            # overwrite a day that has an APPROVED leave. Keep/restore the leave.
+            if str(status).lower() in ('absent', 'off', 'leave', ''):
+                _has_real_punch = any(s.get('checkin') not in (None, '', '--') or s.get('checkout') not in (None, '', '--') for s in sessions)
+                if not _has_real_punch:
+                    _lv = _approved_leave_for_day(conn, emp_id, date)
+                    if _lv:
+                        _sync_leave_to_attendance(conn, _lv[0], now_str)
+                        continue
             # Fully replace every existing attendance row for this
             # employee/date with the sessions sent from the client. This
             # correctly persists sessions added via "+ Add" or removed via
@@ -6999,6 +7071,15 @@ def init_db():
             print(f"[DB] Repaired {_n_pm} legacy P+PM attendance day(s)")
     except Exception as _pm_ex:
         print(f"[DB INIT WARNING] legacy PM repair skipped: {_pm_ex}")
+
+    # -- Approved leave that is still showing Absent -> restore real leave status --
+    try:
+        _n_ab = _repair_absent_over_approved_leave(conn)
+        conn.commit()
+        if _n_ab:
+            print(f"[DB] Restored {_n_ab} approved leave(s) that were showing Absent")
+    except Exception as _ab_ex:
+        print(f"[DB INIT WARNING] absent-over-leave repair skipped: {_ab_ex}")
 
     conn.close()
     print("[DB] Initialized successfully")
