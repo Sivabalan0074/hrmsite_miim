@@ -1693,7 +1693,11 @@ def set_password():
 def get_salary():
     try:
         conn = _db()
-        rows = conn.execute("SELECT * FROM salary_structures").fetchall()
+        _all, _own = _salary_viewer()
+        if _all:
+            rows = conn.execute("SELECT * FROM salary_structures").fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM salary_structures WHERE emp_id=?", (_own,)).fetchall() if _own else []
         conn.close()
         return jsonify([dict(r) for r in rows])
     except Exception as ex:
@@ -2123,6 +2127,20 @@ def _ensure_salary_structures_schema(conn):
         print(f"[salary_structures] schema check failed (will retry next request): {_se}")
 
 
+def _salary_viewer():
+    """Returns (can_see_all, own_emp_pk) from the verified JWT. Plain employees may read ONLY their own
+    salary slips; admin / superadmin / hr / senior_hr (and the accounts team, who maintain salaries) can read all."""
+    try:
+        u = get_current_user() or {}
+    except Exception:
+        u = {}
+    role = str(u.get('role', '') or '').strip().lower().replace(' ', '_')
+    uname = str(u.get('username', '') or '').strip().lower()
+    own = u.get('user_id', u.get('id', u.get('sub', '')))
+    allowed = role in ('admin', 'superadmin', 'hr', 'senior_hr', 'account_manager') or uname in ('superadmin', 'sivabalan.m')
+    return allowed, str(own if own is not None else '')
+
+
 @app.route('/api/salary-structures', methods=['GET', 'POST'])
 @require_auth
 def api_salary_structures():
@@ -2132,6 +2150,13 @@ def api_salary_structures():
         _ensure_salary_structures_schema(conn)
         if request.method == 'GET':
             emp_id = request.args.get('emp_id')
+            _all, _own = _salary_viewer()
+            if not _all:
+                # normal employee: only their OWN slips, whatever emp_id the browser asks for
+                if not _own or (emp_id and str(emp_id) != _own):
+                    conn.close()
+                    return jsonify({"success": False, "error": "You can view only your own salary slip"}), 403
+                emp_id = _own
             if emp_id:
                 rows = conn.execute("SELECT * FROM salary_structures WHERE emp_id=? ORDER BY id DESC", (emp_id,)).fetchall()
             else:
@@ -2659,6 +2684,9 @@ def api_salary_structure_detail(ss_id):  # type: ignore
         if request.method == 'GET':
             row = conn.execute("SELECT * FROM salary_structures WHERE id=?", (ss_id,)).fetchone()
             conn.close()
+            _all, _own = _salary_viewer()
+            if row and not _all and str(dict(row).get('emp_id')) != _own:
+                return jsonify({"success": False, "error": "You can view only your own salary slip"}), 403
             return jsonify({"success": True, "data": dict(row)}) if row else (jsonify({"success": False, "error": "Not found"}), 404)
         if request.method == 'PUT':
             data = request.json or {}
