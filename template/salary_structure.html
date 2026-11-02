@@ -715,6 +715,7 @@
           <div class="sse-field"><label>LTA (₹)</label><input id="sseLTA" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
           <div class="sse-field"><label>Special Allowance* (₹)</label><input id="sseSA" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
           <div class="sse-field"><label>City Compensatory Allow. (₹)</label><input id="sseCCA" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
+          <div class="sse-field"><label>🪔 Diwali Bonus (₹)</label><input id="sseBonus" type="number" min="0" placeholder="0" oninput="sseRecalc()"/></div>
         </div>
         <!-- Dynamic extra earnings rows -->
         <div id="earnExtraRows" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
@@ -1496,6 +1497,7 @@ function renderSSTable(){
                   <div><span style="color:var(--text3)">LTA: </span><b style="color:var(--green);font-family:'JetBrains Mono',monospace">₹${fmtN(s.lta)}</b></div>
                   <div><span style="color:var(--text3)">Special Allow.: </span><b style="color:var(--green);font-family:'JetBrains Mono',monospace">₹${fmtN(s.special_allowance)}</b></div>
                   <div><span style="color:var(--text3)">CCA: </span><b style="color:var(--green);font-family:'JetBrains Mono',monospace">₹${fmtN(s.city_compensatory_allowance)}</b></div>
+                  ${Number(s.diwali_bonus||0)>0?`<div><span style="color:var(--text3)">🪔 Diwali Bonus: </span><b style="color:#fbbf24;font-family:'JetBrains Mono',monospace">₹${fmtN(s.diwali_bonus)}</b></div>`:''}
                   <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
                     <span style="color:var(--text3)">Total Earnings: </span><b style="color:var(--green);font-size:14px;font-family:'JetBrains Mono',monospace">₹${Number(s.total_earnings||0).toLocaleString('en-IN')}</b>
                   </div>
@@ -1628,7 +1630,7 @@ function openSSEntry(empId, period){
   populateSSFilters();
 
   // Reset form
-  ['sseBasic','sseHRA','sseDA','sseMA','sseLTA','sseSA','sseCCA','ssePT','sseTDS','sseAdv','sseOtherDed','sseLOP','sseDaysWorked'].forEach(id=>{document.getElementById(id).value='';});
+  ['sseBasic','sseHRA','sseDA','sseMA','sseLTA','sseSA','sseCCA','sseBonus','ssePT','sseTDS','sseAdv','sseOtherDed','sseLOP','sseDaysWorked'].forEach(id=>{document.getElementById(id).value='';});
   ['sseEmpId','sseDept','sseDesig','sseDOJ','sseDOB','sseFatherName'].forEach(id=>{document.getElementById(id).value='';});
   document.getElementById('sseMOP').value='Account';
   _sseDWIsAuto = false;
@@ -1789,7 +1791,7 @@ var _hlOrig = {};
 var _hlFields = [
   {id:'sseBasic',n:'Basic'},{id:'sseHRA',n:'HRA'},{id:'sseDA',n:'DA'},
   {id:'sseMA',n:'Medical Allow.'},{id:'sseLTA',n:'LTA'},{id:'sseSA',n:'Spec.Allow'},
-  {id:'sseCCA',n:'CCA'},{id:'ssePT',n:'Prof.Tax'},{id:'sseTDS',n:'TDS'},
+  {id:'sseCCA',n:'CCA'},{id:'sseBonus',n:'Diwali Bonus'},{id:'ssePT',n:'Prof.Tax'},{id:'sseTDS',n:'TDS'},
   {id:'sseAdv',n:'Advance'},{id:'sseOtherDed',n:'Other Ded'},{id:'sseLOP',n:'LOP'},
   {id:'sseDaysWorked',n:'Days'},{id:'sseMOP',n:'Pay Mode'},{id:'ssePayDate',n:'Pay Date'}
 ];
@@ -1859,7 +1861,7 @@ function ssePopulateFromExisting(s){
   const setV=(id,v)=>{const el=document.getElementById(id);if(el&&v!=null)el.value=v;};
   setV('sseBasic',s.basic);setV('sseHRA',s.hra);setV('sseDA',s.dearness_allowance);
   setV('sseMA',s.medical_allowance);setV('sseLTA',s.lta);setV('sseSA',s.special_allowance);
-  setV('sseCCA',s.city_compensatory_allowance);setV('ssePT',s.professional_tax);
+  setV('sseCCA',s.city_compensatory_allowance);setV('sseBonus',s.diwali_bonus||'');setV('ssePT',s.professional_tax);
   setV('sseTDS',s.tds);setV('sseAdv',s.existing_advance);setV('sseOtherDed',s.other_deductions);setV('sseLOP',s.lop);setV('sseLoan',s.loan_emi||'');
   // days_worked: use the value already saved on this salary structure (including 0).
   // If it's empty, leave it empty here — openSSEntry() will auto-calc it live from
@@ -2338,7 +2340,7 @@ function _sseRefreshLOPField(){
 
 function sseRecalc(){
   const g=id=>parseFloat(document.getElementById(id).value)||0;
-  const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
+  const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA')+g('sseBonus');
   const extraEarn = typeof getExtraEarnings==='function' ? getExtraEarnings() : 0;
   const earn = baseEarn + extraEarn;   // full month's salary components (gross)
 
@@ -2369,7 +2371,7 @@ async function saveSSEntry(){
   const empId=parseInt(document.getElementById('sseEmpSel').value);
   if(!empId){toast('No employee assigned','error');return;}
   const g=id=>parseFloat(document.getElementById(id).value)||0;
-  const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA');
+  const baseEarn=g('sseBasic')+g('sseHRA')+g('sseDA')+g('sseMA')+g('sseLTA')+g('sseSA')+g('sseCCA')+g('sseBonus');
   const earn = baseEarn + (typeof getExtraEarnings==='function'?getExtraEarnings():0);
   // ── LOP (₹) — derived from Days Worked vs. the real days in this month —
   //    is now folded into Total Deductions (not baked silently into a
@@ -2389,7 +2391,7 @@ async function saveSSEntry(){
     period:document.getElementById('ssePeriod').value+'-01',
     basic:g('sseBasic'),hra:g('sseHRA'),dearness_allowance:g('sseDA'),
     medical_allowance:g('sseMA'),lta:g('sseLTA'),special_allowance:g('sseSA'),
-    city_compensatory_allowance:g('sseCCA'),
+    city_compensatory_allowance:g('sseCCA'),diwali_bonus:g('sseBonus'),
     professional_tax:g('ssePT'),tds:g('sseTDS'),existing_advance:g('sseAdv'),other_deductions:g('sseOtherDed'),lop:lop,loan_emi:g('sseLoan'),
     total_earnings:Math.round(earn),total_deductions:Math.round(ded),net_pay:Math.round(earn-ded),
     days_worked:daysWorkedVal,
@@ -3002,6 +3004,7 @@ function buildSlipHTML(emp, s, period){
             <td>City Compensatory Allowance</td><td>${fmt(s.city_compensatory_allowance)}</td>
             <td></td><td></td>
           </tr>
+          ${Number(s.diwali_bonus||0)>0?`<tr><td>Diwali Bonus</td><td>${fmt(s.diwali_bonus)}</td><td></td><td></td></tr>`:''}
           <tr class="total-row">
             <td>Total Earnings</td><td>${Number(s.total_earnings||0).toLocaleString('en-IN')}</td>
             <td>Total Deductions</td><td>${Number(s.total_deductions||0).toLocaleString('en-IN')}</td>
@@ -3045,6 +3048,7 @@ function printSalarySlip(empId, period){
     lta:         s.lta,
     special:     s.special_allowance || s.special || 0,
     cca:         s.city_compensatory_allowance || s.cca || 0,
+    bonus:       s.diwali_bonus || 0,
     total_earn:  s.total_earnings || s.total_earn || 0,
     pt:          s.professional_tax || s.pt || 0,
     tds:         s.tds,
@@ -3083,6 +3087,7 @@ function printSalarySlipById(ssId){
     lta:         s.lta,
     special:     s.special_allowance || s.special || 0,
     cca:         s.city_compensatory_allowance || s.cca || 0,
+    bonus:       s.diwali_bonus || 0,
     total_earn:  s.total_earnings || s.total_earn || 0,
     pt:          s.professional_tax || s.pt || 0,
     tds:         s.tds,
@@ -3124,6 +3129,7 @@ function printAllSalarySlips(){
       lta:         s.lta,
       special:     s.special_allowance || s.special || 0,
       cca:         s.city_compensatory_allowance || s.cca || 0,
+      bonus:       s.diwali_bonus || 0,
       total_earn:  s.total_earnings || s.total_earn || 0,
       pt:          s.professional_tax || s.pt || 0,
       tds:         s.tds,
