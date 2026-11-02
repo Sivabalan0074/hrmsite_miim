@@ -2088,6 +2088,7 @@ def _ensure_salary_structures_schema(conn):
         ('acct_approved_by', 'TEXT'), ('acct_approved_at', 'TEXT'), ('acct_approval_count', 'INTEGER DEFAULT 0'),
         ('mgmt_approved_by', 'TEXT'), ('mgmt_approved_at', 'TEXT'), ('mgmt_approval_count', 'INTEGER DEFAULT 0'),
         ('lop', 'REAL DEFAULT 0'), ('loan_emi', 'REAL DEFAULT 0'),
+        ('diwali_bonus', 'REAL DEFAULT 0'),
     ]
     try:
         try:
@@ -6759,6 +6760,7 @@ def init_db():
         ('mgmt_approval_count', 'INTEGER DEFAULT 0'),
         ('lop', 'REAL DEFAULT 0'),
         ('loan_emi', 'REAL DEFAULT 0'),
+        ('diwali_bonus', 'REAL DEFAULT 0'),
     ]:
         try:
             conn.execute(f"ALTER TABLE salary_structures ADD COLUMN {_col} {_def}")
@@ -9091,6 +9093,7 @@ def public_salary_summary():
     period = request.args.get('period', '')
     try:
         conn = _db()
+        _ensure_salary_structures_schema(conn)   # guarantees diwali_bonus column exists
         # Join salary_structures with employees
         query = """
             SELECT
@@ -9114,6 +9117,7 @@ def public_salary_summary():
                 s.mode_of_payment,
                 s.approval_status,
                 s.salary_ctc,
+                s.diwali_bonus,
                 e.username,
                 e.user_id,
                 e.dept,
