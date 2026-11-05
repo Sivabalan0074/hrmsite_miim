@@ -1334,6 +1334,82 @@ def reject_holiday_request(req_id):
         return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
+# ── Grace Days ───────────────────────────────────────────────────────────────
+
+GRACE_DAY_ROLES = {'hr', 'senior_hr', 'admin', 'superadmin'}
+
+def _ensure_grace_days_table(conn):
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS grace_days (
+        id INTEGER PRIMARY KEY {_AUTOINC},
+        date TEXT NOT NULL UNIQUE,
+        emoji TEXT DEFAULT '🌧️',
+        reason TEXT DEFAULT '',
+        created_by TEXT DEFAULT 'admin',
+        created_at TEXT DEFAULT ''
+    )""")
+
+@app.route('/api/grace-days', methods=['GET'])
+@require_auth
+def get_grace_days():
+    try:
+        conn = _db()
+        _ensure_grace_days_table(conn)
+        rows = conn.execute("SELECT * FROM grace_days ORDER BY date DESC").fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    except Exception as ex:
+        print(f"[ERROR grace-days GET] {ex}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/grace-days', methods=['POST'])
+@require_auth
+def set_grace_day():
+    try:
+        data = request.json or {}
+        role = (request.headers.get('X-User-Role', '') or '').strip().lower()
+        if role not in GRACE_DAY_ROLES:
+            return jsonify({"success": False, "error": "Only HR/Admin/Superadmin can set a grace day"}), 403
+        date   = (data.get('date') or '').strip()
+        emoji  = (data.get('emoji') or '🌧️').strip()
+        reason = (data.get('reason') or '').strip()
+        caller = (data.get('caller') or role or 'admin').strip()
+        if not date:
+            return jsonify({"success": False, "error": "date is required"}), 400
+        import datetime as _dtt
+        now_str = _dtt.datetime.now().isoformat(timespec='seconds')
+        conn = _db()
+        _ensure_grace_days_table(conn)
+        # Upsert: replace existing record for same date
+        conn.execute(
+            "INSERT INTO grace_days (date, emoji, reason, created_by, created_at) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(date) DO UPDATE SET emoji=excluded.emoji, reason=excluded.reason, created_by=excluded.created_by, created_at=excluded.created_at",
+            (date, emoji, reason, caller, now_str)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as ex:
+        print(f"[ERROR grace-days POST] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+@app.route('/api/grace-days/<int:gid>', methods=['DELETE'])
+@require_auth
+def delete_grace_day(gid):
+    try:
+        role = (request.headers.get('X-User-Role', '') or '').strip().lower()
+        if role not in GRACE_DAY_ROLES:
+            return jsonify({"success": False, "error": "Only HR/Admin/Superadmin can remove a grace day"}), 403
+        conn = _db()
+        _ensure_grace_days_table(conn)
+        conn.execute("DELETE FROM grace_days WHERE id=?", (gid,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as ex:
+        print(f"[ERROR grace-days DELETE] {ex}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
 # Guests
 
 
@@ -7136,6 +7212,17 @@ def init_db():
             print(f"[DB] Restored {_n_ab} approved leave(s) that were showing Absent")
     except Exception as _ab_ex:
         print(f"[DB INIT WARNING] absent-over-leave repair skipped: {_ab_ex}")
+
+    # ── Grace Days table ──────────────────────────────────────────────────────
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS grace_days (
+        id INTEGER PRIMARY KEY {_AUTOINC},
+        date TEXT NOT NULL UNIQUE,
+        emoji TEXT DEFAULT '🌧️',
+        reason TEXT DEFAULT '',
+        created_by TEXT DEFAULT 'admin',
+        created_at TEXT DEFAULT ''
+    )""")
+    conn.commit()
 
     conn.close()
     print("[DB] Initialized successfully")
