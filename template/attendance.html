@@ -1356,6 +1356,7 @@ tr.emp-row td {
     <button class="policy-btn" id="rhTopBtn" onclick="openReligiousModal()" style="display:none;border-color:rgba(168,85,247,.5);color:#c084fc;">🛐 Religious Holiday</button>
     <button class="policy-btn" id="historyBtn" onclick="openHistoryModal()" style="display:none;">📜 Approval History</button>
     <button class="policy-btn" id="corrHistoryBtn" onclick="openCorrHistoryModal()" style="display:none;">🕐 Check-In/Out History</button>
+    <button class="policy-btn" id="graceDayTopBtn" onclick="openGraceDayModal()" style="display:none;border-color:rgba(56,189,248,0.5);color:#38bdf8;">⚡ Grace Day</button>
     <button class="policy-btn" onclick="openPolicy()">📋 Leave Policy V24</button>
     
   </div>
@@ -1768,6 +1769,44 @@ tr.emp-row td {
   </div>
 </div>
 
+<!-- GRACE DAY MODAL -->
+<div class="modal-overlay" id="graceDayModal" onclick="if(event.target===this)closeGraceDayModal()">
+  <div class="corr-modal-box" style="max-width:420px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">⚡ Grace Day</div>
+        <div class="modal-sub">Mark a date as Grace Day — all employees get Full-Day Present regardless of check-in time</div>
+      </div>
+      <div class="modal-close" onclick="closeGraceDayModal()">✕</div>
+    </div>
+    <div class="modal-body">
+      <div class="corr-field" style="margin-bottom:12px;">
+        <label>Date <span style="color:var(--red)">*</span></label>
+        <input type="date" id="gdDate" style="color-scheme:dark;" oninput="gdUpdatePreview()"/>
+      </div>
+      <div class="corr-field" style="margin-bottom:12px;">
+        <label>Reason <span style="color:var(--t3);font-weight:400;">(what happened?)</span></label>
+        <input type="text" id="gdReason" class="note-input" style="width:100%;" placeholder="e.g. Heavy rain, Road block, Server shutdown…" oninput="gdUpdatePreview()"/>
+      </div>
+      <div class="corr-field" style="margin-bottom:12px;">
+        <label>Emoji</label>
+        <div id="gdEmojiList" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+        </div>
+      </div>
+      <div id="gdPreview" style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#7dd3fc;line-height:1.5;min-height:38px;"></div>
+      <!-- Existing grace days list -->
+      <div id="gdExistingWrap" style="margin-bottom:12px;display:none;">
+        <label style="font-size:11px;color:var(--t3);font-weight:600;letter-spacing:.5px;">EXISTING GRACE DAYS</label>
+        <div id="gdExistingList" style="max-height:120px;overflow-y:auto;margin-top:6px;border:1px solid var(--border2);border-radius:8px;background:var(--bg2);padding:4px;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeGraceDayModal()">Cancel</button>
+        <button class="btn-apply" id="gdApplyBtn" onclick="submitGraceDay()">⚡ Set Grace Day</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- POLICY MODAL -->
 <div class="modal-overlay" id="policyModal" onclick="if(event.target===this)closePolicy()">
   <div class="policy-modal-box">
@@ -1853,11 +1892,11 @@ const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DAYS_L=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DEPT_CHIP={Design:'chip-d',Simulation:'chip-s',Manufacturing:'chip-m',HR:'chip-h',Admin:'chip-a'};
 const STATUS_DOT={present:'var(--green)',absent:'var(--red)',off:'var(--t3)',cl:'var(--blue)',sl:'var(--yellow)',el:'var(--purple)',pm:'var(--orange)',lop:'var(--red)',half_day:'#ea580c',holiday:'#14b8a6',rh:'#c084fc',pm_present:'var(--orange)',compoff:'#06b6d4'};
-const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-offp',pending:'gv-pending',holiday:'gv-holiday',rh:'gv-rh',pm_present:'gv-pmpresent',compoff:'gv-compoff'};
+const GV_CLS={present:'gv-p',absent:'gv-a',off:'gv-off',cl:'gv-cl',sl:'gv-sl',el:'gv-el',pm:'gv-pm',lop:'gv-lop',half_day:'gv-offp',pending:'gv-pending',holiday:'gv-holiday',rh:'gv-rh',pm_present:'gv-pmpresent',compoff:'gv-compoff',grace:'gv-p'};
 // Labels: half_day (4-7h worked) shows as "OFF+P", lop (<4h / no checkin) shows
 // as "A" (same visual meaning as a full absent day), pm_present is the
 // combined "Permission + real check-in that day" badge ("P+PM").
-const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'A',half_day:'OFF+P',pending:'?',holiday:'H',rh:'RH',pm_present:'P+PM',compoff:'CO'};
+const GV_LBL={present:'P',absent:'A',off:'—',cl:'CL',sl:'SL',el:'EL',pm:'PM',lop:'A',half_day:'OFF+P',pending:'?',holiday:'H',rh:'RH',pm_present:'P+PM',compoff:'CO',grace:'P'};
 
 // ── Admin-role detection (superadmin / admin designation or dept) ──────────
 // Per business rule: admin-role employees should never show a plain "Absent"
@@ -1950,6 +1989,22 @@ async function loadHolidays(){
 }
 function officeHolidayOn(dKey){ const l=holidayMap[dKey]; return l?(l.find(h=>h.office_leave)||null):null; }
 function holidaysOn(dKey){ return holidayMap[dKey]||[]; }
+
+// ── Grace Days ───────────────────────────────────────────────────────────────
+let graceDayMap = {}; // { "2026-11-05": {id, emoji, reason} }
+async function loadGraceDays(){
+  try{
+    const res = await fetchWithTimeout('/api/grace-days', {headers: getHeaders()}, 6000);
+    const d = await res.json();
+    const map = {};
+    (Array.isArray(d)?d:[]).forEach(g => {
+      const k = String(g.date||'').slice(0,10);
+      if(k) map[k] = {id:g.id, emoji:g.emoji||'⚡', reason:g.reason||''};
+    });
+    graceDayMap = map;
+  }catch(e){ console.warn('grace-days load failed',e); }
+}
+function graceDayOn(dKey){ return graceDayMap[dKey] || null; }
 function hdrHolMark(d){
   // Only OFFICE holidays (National/Government/Company) show on the Attendance page.
   // Religious/Optional holidays live on the Holiday page only.
@@ -1976,6 +2031,11 @@ function gvBadge(st,dKey,rec,style){
     const i=holidayCellInfo(st,dKey,rec);
     return `<span class="gv-badge ${GV_CLS[st]||''} gv-emo" title="${_hEsc(i.title)}" style="${style||''};font-size:13px;">${i.emoji}</span>`;
   }
+  if(st==='grace'){
+    const g=graceDayOn(dKey)||{emoji:'⚡',reason:''};
+    const tip=`P ${g.emoji}${g.reason?' — '+g.reason:''}`;
+    return `<span class="gv-badge gv-p" title="${_hEsc(tip)}" style="${style||''};gap:2px;">P<span style="font-size:11px;">${g.emoji}</span></span>`;
+  }
   return `<span class="gv-badge ${GV_CLS[st]||''}" style="${style||''}">${GV_LBL[st]||'?'}</span>`;
 }
 function holidayRowBadge(st,rec,dKey){
@@ -1992,6 +2052,8 @@ function holidayBannerHtml(dKey){
 
 function effectiveDisplaySt(emp, rawSt, rec, dKey){
   const hasCheckin = !!(rec && (rec.checkin || (rec.entries && rec.entries.some(e=>e && e.in))));
+  // Grace day: HR/Admin declared this date as grace — everyone is Full-Day Present regardless of check-in
+  if(graceDayOn(dKey) && !['rh','holiday','cl','sl','el','lop'].includes(rawSt||'')) return 'grace';
   // Holidays: religious (given per employee) and office holidays (National/Government/Company) for everyone
   if(rawSt==='rh') return 'rh';
   if(rawSt==='holiday') return 'holiday';
@@ -2189,6 +2251,9 @@ function applyRoleUI(){
   // Correction approval badge — admin only
   const corrBadge=document.getElementById('corrBadgeBtn');
   if(corrBadge) corrBadge.style.display='none'; // will be shown by loadPendingCorrections if admin
+  // Grace Day button — HR/Admin/Superadmin only
+  const graceDayBtn=document.getElementById('graceDayTopBtn');
+  if(graceDayBtn) graceDayBtn.style.display=['admin','superadmin','hr','senior_hr'].includes(currentRole)?'inline-flex':'none';
   updatePendingBadge();
   loadPendingHolidayRequests();
 }
@@ -3338,6 +3403,10 @@ function buildDayRow(emp,idx,att,cfg){
       statusBtns=`<div><span style="padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:${leaveBadgeColor[status]};border:1px solid ${leaveBadgeColor[status]}33;">${leaveBadgeMap[status]}</span>${pmTimeHtml}</div>`;
     } else if(holidayActive){
       statusBtns=holidayRowBadge(status,d,dk(viewDate));
+    } else if(status==='grace'){
+      const gd=graceDayOn(dk(viewDate))||{emoji:'⚡',reason:''};
+      const tip=gd.reason?`Grace Day: ${gd.reason}`:'Grace Day — Full Day Present';
+      statusBtns=`<div><span class="qbtn p active" style="cursor:default;gap:2px;" title="${_hEsc(tip)}">P<span style="font-size:11px;">${gd.emoji}</span></span></div>`;
     } else {
       const stLabel=pmPresent?pmLabel:({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
@@ -3363,6 +3432,10 @@ function buildDayRow(emp,idx,att,cfg){
         ? `<button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="removeReligiousHoliday(${emp.id})" title="Remove this religious holiday">✕</button>`
         : (officeHolidayOn(dk(viewDate)) ? '' : `<button class="qbtn off" style="font-size:9px;padding:2px 6px;opacity:.6;" onclick="setStatus(${emp.id},'',event)" title="Clear status">✕</button>`);
       statusBtns=`<div class="status-btns">${holidayRowBadge(status,d,dk(viewDate))}${_clr}</div>`;
+    } else if(status==='grace'){
+      const gd=graceDayOn(dk(viewDate))||{emoji:'⚡',reason:''};
+      const tip=gd.reason?`Grace Day: ${gd.reason}`:'Grace Day — Full Day Present';
+      statusBtns=`<div class="status-btns"><span class="qbtn p active" style="cursor:default;gap:2px;" title="${_hEsc(tip)}">P<span style="font-size:11px;">${gd.emoji}</span></span></div>`;
     } else {
       const stLabel=pmPresent?pmLabel:({present:'P',absent:'A',off:'Off',lop:'A',half_day:'OFF+P'}[status]||status);
       const stClass={present:'p',absent:'a',off:'off',lop:'lop',half_day:'half'}[status]||'off';
@@ -5696,6 +5769,125 @@ const HOLIDAY_DECLARE_ROLES=['hr','senior_hr','admin','superadmin'];
 const HOLIDAY_APPROVE_ROLES=['admin','superadmin'];
 let _holidayApprovalList=[];
 
+// ── Grace Day JS ─────────────────────────────────────────────────────────────
+const GRACE_EMOJIS=[
+  {e:'🌧️',l:'Rain'},    {e:'🌊',l:'Flood'},   {e:'⚡',l:'Shutdown'},
+  {e:'🌪️',l:'Storm'},   {e:'🔧',l:'Repair'},  {e:'🚌',l:'Transport'},
+  {e:'🌫️',l:'Fog'},     {e:'❄️',l:'Cold'},    {e:'🔥',l:'Heat'},
+  {e:'🏥',l:'Medical'},  {e:'⚠️',l:'Alert'},   {e:'🎉',l:'Event'}
+];
+let _gdSelectedEmoji='🌧️';
+
+function openGraceDayModal(){
+  if(!['admin','superadmin','hr','senior_hr'].includes(currentRole)){
+    showToast('error','Not Allowed','Only HR/Admin/Superadmin can set a Grace Day.');return;
+  }
+  // Set date to viewDate
+  const dInput=document.getElementById('gdDate');
+  if(dInput) dInput.value=dk(viewDate);
+  _gdSelectedEmoji='🌧️';
+  // Render emoji picker
+  const el=document.getElementById('gdEmojiList');
+  if(el){
+    el.innerHTML=GRACE_EMOJIS.map(g=>`
+      <div onclick="gdPickEmoji('${g.e}')" id="gdemo_${g.e.codePointAt(0)}"
+        style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:6px 8px;border-radius:8px;border:2px solid ${g.e===_gdSelectedEmoji?'rgba(56,189,248,0.7)':'rgba(255,255,255,0.08)'};background:${g.e===_gdSelectedEmoji?'rgba(56,189,248,0.12)':'transparent'};min-width:48px;transition:all .15s;">
+        <span style="font-size:20px;">${g.e}</span>
+        <span style="font-size:9px;color:var(--t3);">${g.l}</span>
+      </div>`).join('');
+  }
+  // Load existing grace days
+  _gdRenderExisting();
+  gdUpdatePreview();
+  document.getElementById('graceDayModal').classList.add('open');
+}
+
+function closeGraceDayModal(){
+  document.getElementById('graceDayModal').classList.remove('open');
+}
+
+function gdPickEmoji(e){
+  _gdSelectedEmoji=e;
+  // Re-render picker highlights
+  GRACE_EMOJIS.forEach(g=>{
+    const el=document.getElementById('gdemo_'+g.e.codePointAt(0));
+    if(!el) return;
+    const sel=g.e===e;
+    el.style.borderColor=sel?'rgba(56,189,248,0.7)':'rgba(255,255,255,0.08)';
+    el.style.background=sel?'rgba(56,189,248,0.12)':'transparent';
+  });
+  gdUpdatePreview();
+}
+
+function gdUpdatePreview(){
+  const date=document.getElementById('gdDate').value||'';
+  const reason=document.getElementById('gdReason').value.trim();
+  const prev=document.getElementById('gdPreview');
+  if(!prev) return;
+  if(!date){prev.textContent='Select a date to preview';return;}
+  const dateLabel=new Date(date+'T12:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  prev.innerHTML=`<b>${_gdSelectedEmoji} ${dateLabel}</b><br>${reason?reason:'All employees → Full-Day Present regardless of check-in time'}`;
+}
+
+async function _gdRenderExisting(){
+  const wrap=document.getElementById('gdExistingWrap');
+  const list=document.getElementById('gdExistingList');
+  if(!wrap||!list) return;
+  try{
+    const res=await fetchWithTimeout('/api/grace-days',{headers:getHeaders()},5000);
+    const rows=await res.json();
+    if(!Array.isArray(rows)||rows.length===0){wrap.style.display='none';return;}
+    wrap.style.display='';
+    list.innerHTML=rows.map(g=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--border2);font-size:11px;">
+        <span>${g.emoji} <b>${g.date}</b> ${g.reason?'— '+g.reason:''}</span>
+        <button onclick="gdRemove(${g.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0 4px;" title="Remove grace day">✕</button>
+      </div>`).join('');
+  }catch(e){wrap.style.display='none';}
+}
+
+async function gdRemove(id){
+  try{
+    const res=await fetch('/api/grace-days/'+id,{method:'DELETE',headers:getHeaders()});
+    const d=await res.json();
+    if(d.success){
+      // Remove from local map
+      Object.keys(graceDayMap).forEach(k=>{if(graceDayMap[k]&&graceDayMap[k].id===id) delete graceDayMap[k];});
+      showToast('success','Removed','Grace Day removed.');
+      _gdRenderExisting();
+      await render();
+    } else { showToast('error','Error',d.error||'Failed'); }
+  }catch(e){ showToast('error','Error','Could not remove grace day'); }
+}
+
+async function submitGraceDay(){
+  if(!['admin','superadmin','hr','senior_hr'].includes(currentRole)){
+    showToast('error','Not Allowed','Only HR/Admin/Superadmin can set a Grace Day.');return;
+  }
+  const date=document.getElementById('gdDate').value;
+  const reason=document.getElementById('gdReason').value.trim();
+  if(!date){showToast('error','Required','Please select a date.');return;}
+  const btn=document.getElementById('gdApplyBtn');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const res=await fetch('/api/grace-days',{
+      method:'POST',
+      headers:{...getHeaders(),'Content-Type':'application/json'},
+      body:JSON.stringify({date,emoji:_gdSelectedEmoji,reason,caller:currentUserId||currentRole})
+    });
+    const d=await res.json();
+    if(d.success){
+      graceDayMap[date]={id:d.id||-1,emoji:_gdSelectedEmoji,reason};
+      // Reload to get correct id
+      await loadGraceDays();
+      showToast('success','Grace Day Set',`${_gdSelectedEmoji} ${date}${reason?' — '+reason:''}`);
+      closeGraceDayModal();
+      await render();
+    } else { showToast('error','Error',d.error||'Failed'); }
+  }catch(e){ showToast('error','Error','Could not save grace day'); }
+  finally{ if(btn){btn.disabled=false;btn.textContent='⚡ Set Grace Day';} }
+}
+
 function openHolidayReqModal(){
   if(!HOLIDAY_DECLARE_ROLES.includes(currentRole)){
     showToast('error','Not Allowed','Only HR/Admin/Superadmin can declare a holiday.');
@@ -6097,6 +6289,7 @@ async function boot(){
   if(_navigatingAway) return;
 
   try { await loadHolidays(); } catch(e){ console.warn('loadHolidays failed',e); }
+  try { await loadGraceDays(); } catch(e){ console.warn('loadGraceDays failed',e); }
   if(_navigatingAway) return;
 
   // Seed today's attCache slot — must happen BEFORE render()
