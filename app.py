@@ -1338,6 +1338,14 @@ def reject_holiday_request(req_id):
 
 GRACE_DAY_ROLES = {'hr', 'senior_hr', 'admin', 'superadmin'}
 
+import re as _re_gd
+def _gd_enc(t):
+    """MySQL utf8 (3-byte) rejects 4-byte emoji -> store them as &#xHEX; entities."""
+    return ''.join(c if ord(c) <= 0xFFFF else '&#x%X;' % ord(c) for c in (t or ''))
+
+def _gd_dec(t):
+    return _re_gd.sub(r'&#x([0-9A-Fa-f]+);', lambda m: chr(int(m.group(1), 16)), t or '')
+
 def _ensure_grace_days_table(conn):
     conn.execute(f"""CREATE TABLE IF NOT EXISTS grace_days (
         id INTEGER PRIMARY KEY {_AUTOINC},
@@ -1356,7 +1364,13 @@ def get_grace_days():
         _ensure_grace_days_table(conn)
         rows = conn.execute("SELECT * FROM grace_days ORDER BY date DESC").fetchall()
         conn.close()
-        return jsonify([dict(r) for r in rows])
+        out = []
+        for r in rows:
+            d = dict(r)
+            d['emoji'] = _gd_dec(d.get('emoji'))
+            d['reason'] = _gd_dec(d.get('reason'))
+            out.append(d)
+        return jsonify(out)
     except Exception as ex:
         print(f"[ERROR grace-days GET] {ex}")
         return jsonify({"error": "Internal server error"}), 500
@@ -1372,7 +1386,8 @@ def set_grace_day():
         date   = (data.get('date') or '').strip()
         emoji  = (data.get('emoji') or '🌧️').strip()
         reason = (data.get('reason') or '').strip()
-        caller = (data.get('caller') or role or 'admin').strip()
+        caller = str(data.get('caller') or role or 'admin').strip()
+        emoji, reason = _gd_enc(emoji), _gd_enc(reason)
         if not date:
             return jsonify({"success": False, "error": "date is required"}), 400
         import datetime as _dtt
@@ -1398,8 +1413,9 @@ def set_grace_day():
         conn.close()
         return jsonify({"success": True, "id": gid})
     except Exception as ex:
+        import traceback; traceback.print_exc()
         print(f"[ERROR grace-days POST] {ex}")
-        return jsonify({"success": False, "error": "Internal server error"}), 500
+        return jsonify({"success": False, "error": f"Internal server error: {ex}"}), 500
 
 @app.route('/api/grace-days/<int:gid>', methods=['DELETE'])
 @require_auth
