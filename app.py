@@ -1178,11 +1178,11 @@ def sync_google_holidays():
 def _ensure_holiday_requests_table(conn):
     conn.execute(f"""CREATE TABLE IF NOT EXISTS holiday_requests (
         id INTEGER PRIMARY KEY {_AUTOINC},
-        date TEXT NOT NULL,
-        description TEXT DEFAULT '',
-        status TEXT DEFAULT 'pending',
-        requested_by TEXT, requested_at TEXT,
-        reviewed_by TEXT, reviewed_at TEXT,
+        date VARCHAR(20) NOT NULL,
+        description TEXT,
+        status VARCHAR(20) DEFAULT 'pending',
+        requested_by VARCHAR(100), requested_at VARCHAR(40),
+        reviewed_by VARCHAR(100), reviewed_at VARCHAR(40),
         rejected_reason TEXT,
         affected_count INTEGER DEFAULT 0
     )""")
@@ -1341,11 +1341,11 @@ GRACE_DAY_ROLES = {'hr', 'senior_hr', 'admin', 'superadmin'}
 def _ensure_grace_days_table(conn):
     conn.execute(f"""CREATE TABLE IF NOT EXISTS grace_days (
         id INTEGER PRIMARY KEY {_AUTOINC},
-        date TEXT NOT NULL UNIQUE,
-        emoji TEXT DEFAULT '🌧️',
-        reason TEXT DEFAULT '',
-        created_by TEXT DEFAULT 'admin',
-        created_at TEXT DEFAULT ''
+        date VARCHAR(20) NOT NULL UNIQUE,
+        emoji VARCHAR(32),
+        reason TEXT,
+        created_by VARCHAR(100),
+        created_at VARCHAR(40)
     )""")
 
 @app.route('/api/grace-days', methods=['GET'])
@@ -1379,15 +1379,24 @@ def set_grace_day():
         now_str = _dtt.datetime.now().isoformat(timespec='seconds')
         conn = _db()
         _ensure_grace_days_table(conn)
-        # Upsert: replace existing record for same date
-        conn.execute(
-            "INSERT INTO grace_days (date, emoji, reason, created_by, created_at) VALUES (?,?,?,?,?) "
-            "ON CONFLICT(date) DO UPDATE SET emoji=excluded.emoji, reason=excluded.reason, created_by=excluded.created_by, created_at=excluded.created_at",
-            (date, emoji, reason, caller, now_str)
-        )
+        # Upsert (portable: works on both MySQL and SQLite -- no ON CONFLICT)
+        existing = conn.execute("SELECT id FROM grace_days WHERE date=?", (date,)).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE grace_days SET emoji=?, reason=?, created_by=?, created_at=? WHERE date=?",
+                (emoji, reason, caller, now_str, date)
+            )
+            gid = existing['id']
+        else:
+            conn.execute(
+                "INSERT INTO grace_days (date, emoji, reason, created_by, created_at) VALUES (?,?,?,?,?)",
+                (date, emoji, reason, caller, now_str)
+            )
+            _r = conn.execute("SELECT id FROM grace_days WHERE date=?", (date,)).fetchone()
+            gid = _r['id'] if _r else -1
         conn.commit()
         conn.close()
-        return jsonify({"success": True})
+        return jsonify({"success": True, "id": gid})
     except Exception as ex:
         print(f"[ERROR grace-days POST] {ex}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
@@ -4813,6 +4822,15 @@ def attendance_monthly_summary():
             (emp_id, f"{period}-%")
         ).fetchall()
 
+        # Grace Days declared by HR/Admin: everyone is Full-Day Present that date
+        # (unless it is already a holiday / leave / LOP day).
+        try:
+            _ensure_grace_days_table(conn)
+            _grace_dates = {str(g['date'])[:10] for g in conn.execute(
+                "SELECT date FROM grace_days WHERE date LIKE ?", (f"{period}-%",)).fetchall()}
+        except Exception:
+            _grace_dates = set()
+
         # Collapse multi-session days to ONE row per date and apply the
         # 8-hour rule: 'present' with < 8h worked -> half_day (>=4h) / lop (<4h).
         # Exempt: Housekeeping, admin, P+PM days, days with a missing punch.
@@ -4866,7 +4884,13 @@ def attendance_monthly_summary():
                         _mins += (b - a)
                 if _any and not _open and 0 < _mins < 480:
                     _st = 'half_day' if _mins >= 240 else 'lop'
+            if _d in _grace_dates and _st not in ('rh', 'holiday', 'cl', 'sl', 'el', 'lop', 'compoff', 'pm'):
+                _st = 'present'
             _day_rows.append({'date': _d, 'status': _st})
+        # Grace day with no attendance row at all -> still a Present day
+        for _gd in _grace_dates:
+            if _gd not in _by_date:
+                _day_rows.append({'date': _gd, 'status': 'present'})
         rows = _day_rows
 
         # Mid-month joiner: days BEFORE the date of joining are not payable
@@ -7008,11 +7032,11 @@ def init_db():
     # on the company holiday calendar.
     conn.execute(f"""CREATE TABLE IF NOT EXISTS holiday_requests (
         id INTEGER PRIMARY KEY {_AUTOINC},
-        date TEXT NOT NULL,
-        description TEXT DEFAULT '',
-        status TEXT DEFAULT 'pending',
-        requested_by TEXT, requested_at TEXT,
-        reviewed_by TEXT, reviewed_at TEXT,
+        date VARCHAR(20) NOT NULL,
+        description TEXT,
+        status VARCHAR(20) DEFAULT 'pending',
+        requested_by VARCHAR(100), requested_at VARCHAR(40),
+        reviewed_by VARCHAR(100), reviewed_at VARCHAR(40),
         rejected_reason TEXT,
         affected_count INTEGER DEFAULT 0
     )""")
@@ -7216,11 +7240,11 @@ def init_db():
     # ── Grace Days table ──────────────────────────────────────────────────────
     conn.execute(f"""CREATE TABLE IF NOT EXISTS grace_days (
         id INTEGER PRIMARY KEY {_AUTOINC},
-        date TEXT NOT NULL UNIQUE,
-        emoji TEXT DEFAULT '🌧️',
-        reason TEXT DEFAULT '',
-        created_by TEXT DEFAULT 'admin',
-        created_at TEXT DEFAULT ''
+        date VARCHAR(20) NOT NULL UNIQUE,
+        emoji VARCHAR(32),
+        reason TEXT,
+        created_by VARCHAR(100),
+        created_at VARCHAR(40)
     )""")
     conn.commit()
 
