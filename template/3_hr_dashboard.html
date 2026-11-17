@@ -10576,7 +10576,12 @@ async function _loadMyAttendance() {
     if (empId) {
       var r = await fetch('/api/attendance/employee/' + empId + '?from=' + yr + '-01-01&to=' + yr + '-12-31', { headers: { 'X-User-Id': String(empId) } });
       var d = await r.json();
-      records = d.records || [];
+      records = Array.isArray(d) ? d : (d.records || []);
+      // Grace days -> Full-Day Present for everyone
+      var _gm = await _fetchGraceMap();
+      var _am = {}; records.forEach(function(x){ _am[x.date] = x; });
+      _applyGraceToAtt(_am, _gm, String(yr));
+      records = Object.keys(_am).sort().map(function(k){ return _am[k]; });
     }
   } catch(e) {}
 
@@ -10980,7 +10985,7 @@ function _loadQuickStatsForDashboard() {
     empId ? fetch('/api/leave/balance/'+empId,{headers:{'X-User-Id':String(empId)}}).then(function(r){return r.json();}).catch(function(){return{};}) : Promise.resolve({})
   ]).then(function(results) {
     var attData = results[0]; var leaveData = results[1];
-    var records = attData.records || [];
+    var records = Array.isArray(attData) ? attData : (attData.records || []);
     var counts = {present:0,absent:0,leave:0};
     records.forEach(function(r){ var s=r.status||''; if(s==='present'||s==='late') counts.present++; else if(s==='absent') counts.absent++; else if(s==='leave') counts.leave++; });
     var slRem = (leaveData.success && leaveData.balance && leaveData.balance.sl) ? leaveData.balance.sl.remaining : (isPerm ? (nowM + Math.floor(Math.random()*5) - Math.floor(Math.random()*2)) : 0);
@@ -11219,6 +11224,30 @@ function teamAttNav(dir) {
   _renderTeamAtt();
 }
 
+// ── Grace Days (declared in attendance page) -> everyone is Full-Day Present ──
+var _GRACE_SKIP = ['rh','holiday','cl','sl','el','lop','compoff','pm'];
+function _fetchGraceMap() {
+  var u = {}; try { u = JSON.parse(sessionStorage.getItem('miim_user') || '{}'); } catch(e){}
+  var h = {}; if (u.id || u.emp_id) h['X-User-Id'] = String(u.id || u.emp_id);
+  return fetch('/api/grace-days', { headers: h })
+    .then(function(r){ return r.json(); })
+    .then(function(a){
+      var m = {};
+      (Array.isArray(a) ? a : []).forEach(function(g){ if (g && g.date) m[String(g.date).slice(0,10)] = g; });
+      return m;
+    }).catch(function(){ return {}; });
+}
+function _applyGraceToAtt(attMap, graceMap, prefix) {
+  Object.keys(graceMap || {}).forEach(function(k){
+    if (prefix && k.slice(0, prefix.length) !== prefix) return;
+    var r = attMap[k];
+    var st = r ? String(r.status || '').toLowerCase() : '';
+    if (_GRACE_SKIP.indexOf(st) > -1) return;
+    attMap[k] = { date: k, status: 'present', checkin: r ? r.checkin : '', checkout: r ? r.checkout : '',
+                  pm_minutes: 0, _grace: graceMap[k] };
+  });
+}
+
 function _initTeamAtt() {
   var navLbl = document.getElementById('teamAttMonthNavLbl');
   if (navLbl) navLbl.textContent = _MONTH_NAMES[_teamAttMonth] + ' ' + _teamAttYear;
@@ -11259,9 +11288,11 @@ function _renderTeamAtt() {
     myEmpId
       ? fetch('/api/attendance/employee/' + myEmpId + '?from=' + from + '&to=' + to, { headers: { 'X-User-Id': String(myEmpId) } }).then(function(r){ return r.json(); }).catch(function(){ return {}; })
       : Promise.resolve({}),
-    fetch('/api/holidays?year=' + yr, { headers: { 'X-User-Id': String(myEmpId) } }).then(function(r){ return r.json(); }).catch(function(){ return []; })
+    fetch('/api/holidays?year=' + yr, { headers: { 'X-User-Id': String(myEmpId) } }).then(function(r){ return r.json(); }).catch(function(){ return []; }),
+    _fetchGraceMap()
   ]).then(function(results) {
     var attData = results[0];
+    var _graceMap = results[2] || {};
     var holidays = Array.isArray(results[1]) ? results[1] : (results[1].holidays || []);
 
     var myAttMap = {};
@@ -11351,6 +11382,9 @@ function _renderTeamAtt() {
       });
     }
 
+    // Grace Day overrides everything except holiday/leave/LOP (incl. the 8-hour rule above)
+    _applyGraceToAtt(myAttMap, _graceMap, yr + '-' + String(mo).padStart(2,'0'));
+
     var holidaySet = {};
     holidays.forEach(function(h){ if (h.date) holidaySet[h.date] = true; });
 
@@ -11405,6 +11439,8 @@ function _renderTeamAtt() {
       if ((st === 'present' || st === 'late') && rec && Number(rec.pm_minutes) > 0) {
         // Present + approved Permission credit → combined "P+PM" (matches attendance.html)
         cell_bg='rgba(249,115,22,.2)'; cell_fg='#f97316'; cell_lbl='P+PM'; counts.present++; counts.leave++;
+      } else if (st === 'present' && rec && rec._grace) {
+        cell_bg='rgba(56,189,248,.22)'; cell_fg='#38bdf8'; cell_lbl='P'; counts.present++;
       } else if (st === 'present' || st === 'late') {
         cell_bg='rgba(34,197,94,.2)'; cell_fg='#22c55e'; cell_lbl='P'; counts.present++;
       } else if (st === 'absent' && isAdminMe) {
@@ -11450,7 +11486,7 @@ function _renderTeamAtt() {
       var glow = day.isToday ? 'box-shadow:0 0 0 1.5px #f97316;' : '';
       var cellStyleOverride = (cell_lbl==='OFF+P'||cell_lbl==='P+PM') ? 'width:auto;min-width:26px;padding:0 3px;font-size:.5rem;' : '';
       html += '<td style="padding:3px 1px;text-align:center;border-bottom:1px solid #1a1a1a;">'
-           + '<span style="'+CELL+cellStyleOverride+'background:'+cell_bg+';color:'+cell_fg+';'+glow+'">'+cell_lbl+'</span>'
+           + '<span title="'+((rec && rec._grace) ? ('Grace Day ' + (rec._grace.emoji||'\u26a1') + (rec._grace.reason ? ' - ' + String(rec._grace.reason).replace(/"/g,'') : '') + ' (Full-Day Present)') : '')+'" style="'+CELL+cellStyleOverride+'background:'+cell_bg+';color:'+cell_fg+';'+glow+'">'+cell_lbl+'</span>'
            + '</td>';
     });
     html += '</tr></tbody></table>';
